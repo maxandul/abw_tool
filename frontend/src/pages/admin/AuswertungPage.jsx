@@ -172,14 +172,14 @@ export default function AuswertungPage() {
     getGruppen(true).then(({ data }) => {
       if (!data) return;
       setGruppen(data);
-      if (filter.gruppe_ids.length === 0 && data.length > 0) {
+      // Pre-select from URL param
+      const urlId = searchParams.get("gruppe_id") ? parseInt(searchParams.get("gruppe_id")) : null;
+      if (urlId) {
+        const g = data.find(x => x.id === urlId);
+        if (g) setFilter(f => ({ ...f, gruppe_ids: [urlId], datum_von: f.datum_von || g.zeitraum_von, datum_bis: f.datum_bis || g.zeitraum_bis }));
+      } else if (data.length > 0) {
         const first = data[0];
-        setFilter(f => ({
-          ...f,
-          gruppe_ids: [first.id],
-          datum_von: first.zeitraum_von,
-          datum_bis: first.zeitraum_bis,
-        }));
+        setFilter(f => ({ ...f, gruppe_ids: [first.id], datum_von: first.zeitraum_von, datum_bis: first.zeitraum_bis }));
       }
     });
   }, []);
@@ -204,7 +204,7 @@ export default function AuswertungPage() {
     setLp(l.data); setRb(r.data); setAnt(a.data); setKz(k.data);
   }, [buildParams, filter.gruppe_ids.length]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { if (filter.gruppe_ids.length) load(); }, [filter.gruppe_ids.length]);
 
   const toggleGruppe = (id) => {
     setFilter(f => {
@@ -213,25 +213,57 @@ export default function AuswertungPage() {
     });
   };
 
+  const selectGruppeFromDropdown = (id) => {
+    const g = gruppen.find(x => x.id === id);
+    setFilter(f => ({
+      gruppe_ids: [id],
+      datum_von: g?.zeitraum_von || f.datum_von,
+      datum_bis: g?.zeitraum_bis || f.datum_bis,
+    }));
+  };
+
+  // Group Erhebungen by status for display
+  const offene     = gruppen.filter(g => g.aktiv && !g.abgeschlossen);
+  const geschl     = gruppen.filter(g => g.aktiv && g.abgeschlossen);
+  const archiviert = gruppen.filter(g => !g.aktiv);
+
+  const selectedNames = filter.gruppe_ids
+    .map(id => gruppen.find(g => g.id === id)?.name)
+    .filter(Boolean)
+    .join(", ");
+
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <h1 className="text-2xl font-bold text-slate-800">Auswertung</h1>
 
       {/* Filter */}
       <div className="card space-y-4">
-        <h2 className="text-sm font-semibold text-slate-700">Filter</h2>
+        <h2 className="text-sm font-semibold text-slate-700">Erhebungen auswählen</h2>
+
+        {/* Primary dropdown (single-select, sets dates automatically) */}
         <div className="flex flex-wrap gap-4 items-end">
-          <div>
-            <label className="label">Gruppe(n)</label>
-            <div className="flex flex-wrap gap-2">
-              {gruppen.map(g => (
-                <label key={g.id} className="flex items-center gap-1.5 cursor-pointer">
-                  <input type="checkbox" checked={filter.gruppe_ids.includes(g.id)}
-                    onChange={() => toggleGruppe(g.id)} className="rounded" />
-                  <span className="text-sm">{g.name}</span>
-                </label>
-              ))}
-            </div>
+          <div className="flex-1 min-w-[220px]">
+            <label className="label">Erhebung</label>
+            <select className="input"
+              value={filter.gruppe_ids[0] ?? ""}
+              onChange={e => selectGruppeFromDropdown(parseInt(e.target.value))}>
+              <option value="" disabled>Bitte wählen…</option>
+              {offene.length > 0 && (
+                <optgroup label="Offen">
+                  {offene.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </optgroup>
+              )}
+              {geschl.length > 0 && (
+                <optgroup label="Abgeschlossen">
+                  {geschl.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </optgroup>
+              )}
+              {archiviert.length > 0 && (
+                <optgroup label="Archiviert">
+                  {archiviert.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </optgroup>
+              )}
+            </select>
           </div>
           <div>
             <label className="label">Zeitraum von</label>
@@ -243,7 +275,7 @@ export default function AuswertungPage() {
             <input type="date" className="input" value={filter.datum_bis}
               onChange={e => setFilter(f => ({ ...f, datum_bis: e.target.value }))} />
           </div>
-          <button className="btn-primary" onClick={load} disabled={loading}>
+          <button className="btn-primary" onClick={load} disabled={loading || !filter.gruppe_ids.length}>
             {loading ? <Spinner size="sm" /> : "Aktualisieren"}
           </button>
           {lp && (
@@ -252,10 +284,32 @@ export default function AuswertungPage() {
             </a>
           )}
         </div>
+
+        {/* Multi-select for comparison: show all as toggleable chips */}
+        {gruppen.length > 1 && (
+          <div>
+            <p className="text-xs text-slate-500 mb-2">Mehrere Erhebungen zusammenfassen (für Vergleich):</p>
+            <div className="flex flex-wrap gap-2">
+              {gruppen.map(g => (
+                <button key={g.id} type="button"
+                  onClick={() => toggleGruppe(g.id)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                    filter.gruppe_ids.includes(g.id)
+                      ? "bg-brand-600 text-white border-brand-600"
+                      : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"
+                  }`}>
+                  {g.name}
+                  {!g.aktiv && <span className="ml-1 opacity-60">(archiviert)</span>}
+                  {g.aktiv && g.abgeschlossen && <span className="ml-1 opacity-60">(abgeschl.)</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {error && <Alert>{error}</Alert>}
-      {!lp && !loading && <div className="card text-center text-slate-500 py-12">Wähle eine Gruppe und klicke «Aktualisieren».</div>}
+      {!lp && !loading && <div className="card text-center text-slate-500 py-12">Wähle eine Erhebung und klicke «Aktualisieren».</div>}
 
       {kz && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

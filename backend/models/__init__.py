@@ -8,7 +8,7 @@ from .user import User, Rolle
 from .gruppe import Gruppe
 from .gruppen_mitglied import GruppenMitglied
 from .raumtyp import Raumtyp
-from .kategorie import Kategorie
+from .kategorie import Kategorie, Vertraulichkeit, Gruppengroesse
 from .eintrag import Eintrag
 from .einreichung import Einreichung, EinreichungStatus
 
@@ -19,6 +19,8 @@ __all__ = [
     "GruppenMitglied",
     "Raumtyp",
     "Kategorie",
+    "Vertraulichkeit",
+    "Gruppengroesse",
     "Eintrag",
     "Einreichung",
     "EinreichungStatus",

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { fmtDate } from "../../utils/format";
 import {
-  getTeilnehmer, addTeilnehmer, removeTeilnehmer, resetPin, setEinreichungStatus
+  getTeilnehmer, addTeilnehmer, removeTeilnehmer, resetPin, setEinreichungStatus, getGruppe
 } from "../../api/admin";
 import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
@@ -13,6 +13,7 @@ import StatusBadge from "../../components/StatusBadge";
 export default function TeilnehmerPage() {
   const { gruppeId } = useParams();
   const [list, setList]     = useState([]);
+  const [gruppe, setGruppe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState("");
   const [addEmail, setAddEmail] = useState("");
@@ -21,9 +22,10 @@ export default function TeilnehmerPage() {
 
   const load = () => {
     setLoading(true);
-    getTeilnehmer(gruppeId).then(({ data, error: e }) => {
+    Promise.all([getTeilnehmer(gruppeId), getGruppe(gruppeId)]).then(([tn, g]) => {
       setLoading(false);
-      if (e) setError(e); else setList(data);
+      if (tn.error) setError(tn.error); else setList(tn.data);
+      if (g.data) setGruppe(g.data);
     });
   };
   useEffect(load, [gruppeId]);
@@ -59,7 +61,15 @@ export default function TeilnehmerPage() {
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-4">
-      <h1 className="text-2xl font-bold text-slate-800">Teilnehmer</h1>
+      <div className="flex items-baseline gap-3">
+        <h1 className="text-2xl font-bold text-slate-800">Teilnehmer</h1>
+        {gruppe && (
+          <span className="text-base text-slate-500 font-normal">
+            Erhebung: <strong className="text-slate-700">{gruppe.name}</strong>
+            {" · "}{fmtDate(gruppe.zeitraum_von)} – {fmtDate(gruppe.zeitraum_bis)}
+          </span>
+        )}
+      </div>
       {error && <Alert>{error}</Alert>}
 
       {/* Hinzufügen */}

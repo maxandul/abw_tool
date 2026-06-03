@@ -4,7 +4,7 @@ import { getDashboard, abschliessenGruppe, wiederoeffnenGruppe, deleteGruppe } f
 import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
 import ConfirmDialog from "../../components/ConfirmDialog";
-import { fmtDate } from "../../utils/format";
+import { fmtDate, workingDays, fmtMinuten } from "../../utils/format";
 
 const BAR_COLORS = { OFFEN: "bg-slate-300", EINGEREICHT: "bg-brand-500" };
 const BAR_LABELS = { OFFEN: "Offen", EINGEREICHT: "Eingereicht" };
@@ -78,8 +78,12 @@ export default function AdminDashboard() {
       {/* Erhebungs-Karten */}
       <div className="space-y-4">
         {data.gruppen.map(g => {
-          const counts = g.stats.status_counts;
-          const anz    = g.stats.anzahl_teilnehmer;
+          const counts      = g.stats.status_counts;
+          const anz         = g.stats.anzahl_teilnehmer;
+          const tage        = workingDays(g.zeitraum_von, g.zeitraum_bis);
+          const erwartetMin = anz * tage * 8.4 * 60;        // 8.4h per person per working day
+          const erfasstMin  = g.stats.total_minuten_erfasst ?? 0;
+          const pct         = erwartetMin > 0 ? Math.min(100, Math.round((erfasstMin / erwartetMin) * 100)) : 0;
           return (
             <div key={g.id} className="card">
               <div className="flex items-start justify-between mb-3">
@@ -89,7 +93,7 @@ export default function AdminDashboard() {
                     <StatusChip g={g} />
                   </div>
                   <p className="text-xs text-slate-500">
-                    {fmtDate(g.zeitraum_von)} – {fmtDate(g.zeitraum_bis)} · {anz} Teilnehmer
+                    {fmtDate(g.zeitraum_von)} – {fmtDate(g.zeitraum_bis)} · {anz} Teilnehmer · {tage} Arbeitstage
                   </p>
                 </div>
                 <div className="flex gap-2 flex-wrap justify-end">
@@ -115,14 +119,34 @@ export default function AdminDashboard() {
                   )}
                 </div>
               </div>
+              {/* Submission progress */}
               <ProgressBar counts={counts} total={anz} />
-              <div className="flex gap-4 mt-2">
+              <div className="flex gap-4 mt-1.5 mb-3">
                 {["OFFEN", "EINGEREICHT"].map(k => (
                   <span key={k} className="text-xs text-slate-500">
                     {BAR_LABELS[k]}: <strong>{counts[k] ?? 0}</strong>
                   </span>
                 ))}
               </div>
+
+              {/* Time recording progress */}
+              {anz > 0 && (
+                <div>
+                  <div className="flex justify-between items-baseline mb-1">
+                    <span className="text-xs text-slate-500">
+                      Erfasste Zeit: <strong>{fmtMinuten(erfasstMin)}</strong>
+                      <span className="text-slate-400"> / {fmtMinuten(Math.round(erwartetMin))} erwartet</span>
+                    </span>
+                    <span className="text-xs font-semibold text-slate-600">{pct}%</span>
+                  </div>
+                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-brand-400 rounded-full transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}

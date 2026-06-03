@@ -47,6 +47,21 @@ def _validate_gruppe_input(data: dict, partial: bool = False) -> dict:
     return cleaned
 
 
+def _minuten_erfasst(gruppe_id: int) -> int:
+    """Sum all recorded minutes (zeit_bis - zeit_von) for a group."""
+    from datetime import datetime, date as date_type
+    eintraege = Eintrag.query.filter_by(gruppe_id=gruppe_id).all()
+    total = 0
+    for e in eintraege:
+        if e.zeit_von and e.zeit_bis:
+            delta = (
+                datetime.combine(date_type.min, e.zeit_bis)
+                - datetime.combine(date_type.min, e.zeit_von)
+            )
+            total += max(0, int(delta.total_seconds() // 60))
+    return total
+
+
 def gruppe_stats(gruppe: Gruppe) -> dict:
     """Compute participant and submission statistics for a group."""
     member_user_ids = [m.user_id for m in gruppe.mitglieder]
@@ -79,6 +94,7 @@ def gruppe_stats(gruppe: Gruppe) -> dict:
         "anzahl_teilnehmer": anzahl_teilnehmer,
         "status_counts": status_counts,
         "teilnehmer_ohne_eintraege": ohne_eintraege,
+        "total_minuten_erfasst": _minuten_erfasst(gruppe.id),
     }
 
 

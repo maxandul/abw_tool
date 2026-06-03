@@ -7,13 +7,43 @@ import Alert from "../../components/Alert";
 import Modal from "../../components/Modal";
 import ConfirmDialog from "../../components/ConfirmDialog";
 
+const VERTRAULICHKEIT_OPTS = [
+  { value: "",           label: "Nicht klassifiziert" },
+  { value: "OFFEN",      label: "Offen – Externe dürfen zuhören" },
+  { value: "INTERN",     label: "Intern – Nur Kolleginnen/Kollegen" },
+  { value: "VERTRAULICH",label: "Vertraulich – Abgeschlossener Raum nötig" },
+];
+
+const GRUPPENGROESSE_OPTS = [
+  { value: "",      label: "Nicht klassifiziert" },
+  { value: "ALLEIN",label: "Allein (1 Person)" },
+  { value: "KLEIN", label: "Kleine Gruppe (2–5 Personen)" },
+  { value: "MITTEL",label: "Mittlere Gruppe (6–15 Personen)" },
+  { value: "GROSS", label: "Grosse Gruppe (16+ Personen)" },
+];
+
 function KategorieForm({ initial, raumtypen, onSave, onCancel }) {
-  const [form, setForm] = useState(
-    initial ?? { name: "", beschreibung: "", farbe: "#4472C4", raumtyp_id: "", sort_order: 0 }
-  );
+  const [form, setForm] = useState(() => ({
+    name: initial?.name ?? "",
+    beschreibung: initial?.beschreibung ?? "",
+    farbe: initial?.farbe ?? "#4472C4",
+    raumtyp_ids: initial?.raumtyp_ids ?? [],
+    vertraulichkeit: initial?.vertraulichkeit ?? "",
+    gruppengroesse: initial?.gruppengroesse ?? "",
+    sort_order: initial?.sort_order ?? 0,
+  }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  const toggleRaumtyp = (id) => {
+    setForm(f => ({
+      ...f,
+      raumtyp_ids: f.raumtyp_ids.includes(id)
+        ? f.raumtyp_ids.filter(x => x !== id)
+        : [...f.raumtyp_ids, id],
+    }));
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -35,21 +65,48 @@ function KategorieForm({ initial, raumtypen, onSave, onCancel }) {
         <label className="label">Beschreibung</label>
         <textarea className="input min-h-[80px]" value={form.beschreibung ?? ""} onChange={set("beschreibung")} />
       </div>
+      <div>
+        <label className="label">Farbe</label>
+        <div className="flex gap-2 items-center">
+          <input type="color" value={form.farbe ?? "#4472C4"}
+            onChange={e => setForm(f => ({ ...f, farbe: e.target.value }))}
+            className="h-9 w-12 rounded border border-slate-300 p-0.5 cursor-pointer" />
+          <input className="input flex-1" value={form.farbe ?? ""} onChange={set("farbe")} maxLength={7} placeholder="#RRGGBB" />
+        </div>
+      </div>
+      <div>
+        <label className="label">Raumtypen (Mehrfachauswahl)</label>
+        <div className="flex flex-wrap gap-2 mt-1">
+          {raumtypen.filter(r => r.aktiv).map(r => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => toggleRaumtyp(r.id)}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                form.raumtyp_ids.includes(r.id)
+                  ? "bg-brand-600 text-white border-brand-600"
+                  : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"
+              }`}
+            >
+              {r.name}
+            </button>
+          ))}
+          {raumtypen.filter(r => r.aktiv).length === 0 && (
+            <span className="text-xs text-slate-400">Keine aktiven Raumtypen vorhanden.</span>
+          )}
+        </div>
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="label">Farbe</label>
-          <div className="flex gap-2 items-center">
-            <input type="color" value={form.farbe ?? "#4472C4"}
-              onChange={e => setForm(f => ({ ...f, farbe: e.target.value }))}
-              className="h-9 w-12 rounded border border-slate-300 p-0.5 cursor-pointer" />
-            <input className="input flex-1" value={form.farbe ?? ""} onChange={set("farbe")} maxLength={7} placeholder="#RRGGBB" />
-          </div>
+          <label className="label">Vertraulichkeit</label>
+          <select className="input" value={form.vertraulichkeit ?? ""} onChange={set("vertraulichkeit")}>
+            {VERTRAULICHKEIT_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
         </div>
         <div>
-          <label className="label">Raumtyp</label>
-          <select className="input" value={form.raumtyp_id ?? ""} onChange={set("raumtyp_id")}>
-            <option value="">Kein Raumtyp</option>
-            {raumtypen.filter(r => r.aktiv).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          <label className="label">Gruppengrösse</label>
+          <select className="input" value={form.gruppengroesse ?? ""} onChange={set("gruppengroesse")}>
+            {GRUPPENGROESSE_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
       </div>
@@ -122,6 +179,8 @@ export default function KategorienPage() {
               <th className="table-th w-8"></th>
               <th className="table-th">Name</th>
               <th className="table-th">Beschreibung</th>
+              <th className="table-th">Vertraulichkeit</th>
+              <th className="table-th">Gruppe</th>
               <th className="table-th">Raumtyp</th>
               <th className="table-th">Einträge</th>
               <th className="table-th">Status</th>
@@ -135,9 +194,21 @@ export default function KategorienPage() {
                   <span className="inline-block w-5 h-5 rounded" style={{ background: k.farbe ?? "#ccc" }} />
                 </td>
                 <td className="table-td font-medium">{k.name}</td>
-                <td className="table-td text-xs text-slate-500 max-w-[200px] truncate"
+                <td className="table-td text-xs text-slate-500 max-w-[180px] truncate"
                   title={k.beschreibung ?? ""}>{k.beschreibung || "–"}</td>
-                <td className="table-td text-xs text-slate-500">{k.raumtyp_name ?? "–"}</td>
+                <td className="table-td text-xs text-slate-500">
+                  {k.vertraulichkeit
+                    ? { OFFEN: "Offen", INTERN: "Intern", VERTRAULICH: "Vertraulich" }[k.vertraulichkeit] ?? k.vertraulichkeit
+                    : "–"}
+                </td>
+                <td className="table-td text-xs text-slate-500">
+                  {k.gruppengroesse
+                    ? { ALLEIN: "Allein", KLEIN: "Klein", MITTEL: "Mittel", GROSS: "Gross" }[k.gruppengroesse] ?? k.gruppengroesse
+                    : "–"}
+                </td>
+                <td className="table-td text-xs text-slate-500">
+                  {k.raumtyp_namen?.length > 0 ? k.raumtyp_namen.join(", ") : "–"}
+                </td>
                 <td className="table-td">{k.anzahl_eintraege}</td>
                 <td className="table-td">
                   <span className={`badge ${k.aktiv ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>

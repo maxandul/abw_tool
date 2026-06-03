@@ -20,8 +20,9 @@ import KategorienPage from "./pages/admin/KategorienPage";
 import RaumtypenPage  from "./pages/admin/RaumtypenPage";
 import AuswertungPage from "./pages/admin/AuswertungPage";
 
-import TnDashboard from "./pages/teilnehmer/TnDashboard";
-import Kalender    from "./pages/teilnehmer/Kalender";
+import TnMain       from "./pages/teilnehmer/TnMain";
+import HilfePageTn  from "./pages/teilnehmer/HilfePageTn";
+import HilfePageAdmin from "./pages/admin/HilfePageAdmin";
 
 function Root() {
   const { user } = useAuth();
@@ -63,10 +64,12 @@ export default function App() {
               <Route path="/admin/kategorien"  element={<RequireAdmin><KategorienPage /></RequireAdmin>} />
               <Route path="/admin/raumtypen"   element={<RequireAdmin><RaumtypenPage /></RequireAdmin>} />
               <Route path="/admin/auswertung"  element={<RequireAdmin><AuswertungPage /></RequireAdmin>} />
+              <Route path="/admin/hilfe"       element={<RequireAdmin><HilfePageAdmin /></RequireAdmin>} />
 
               {/* Teilnehmer */}
-              <Route path="/tn/dashboard"      element={<RequireTeilnehmer><TnDashboard /></RequireTeilnehmer>} />
-              <Route path="/tn/kalender"       element={<RequireTeilnehmer><Kalender /></RequireTeilnehmer>} />
+              <Route path="/tn/dashboard"      element={<RequireTeilnehmer><TnMain /></RequireTeilnehmer>} />
+              <Route path="/tn/kalender"       element={<Navigate to="/tn/dashboard" replace />} />
+              <Route path="/tn/hilfe"          element={<RequireTeilnehmer><HilfePageTn /></RequireTeilnehmer>} />
 
               <Route path="*"                  element={<Navigate to="/" replace />} />
             </Routes>

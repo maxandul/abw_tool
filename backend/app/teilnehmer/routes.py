@@ -212,6 +212,25 @@ def entsperren():
 # Dashboard
 # ---------------------------------------------------------------------------
 
+@teilnehmer_bp.route("/meine-gruppen", methods=["GET"])
+@login_required
+def get_meine_gruppen():
+    """Return all groups the current participant belongs to (including closed)."""
+    user = auth_service.current_user()
+    gruppen = [
+        {
+            "id": m.gruppe.id,
+            "name": m.gruppe.name,
+            "zeitraum_von": m.gruppe.zeitraum_von.isoformat() if m.gruppe.zeitraum_von else None,
+            "zeitraum_bis": m.gruppe.zeitraum_bis.isoformat() if m.gruppe.zeitraum_bis else None,
+            "aktiv": m.gruppe.aktiv,
+            "abgeschlossen": m.gruppe.abgeschlossen,
+        }
+        for m in user.mitgliedschaften
+    ]
+    return ok(gruppen)
+
+
 @teilnehmer_bp.route("/dashboard", methods=["GET"])
 @login_required
 def get_dashboard():

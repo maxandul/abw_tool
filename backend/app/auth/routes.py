@@ -106,4 +106,9 @@ def pin_aendern():
     user.pin_hash = auth_service.hash_pin(neuer_pin)
     user.pin_temporaer = False
     db.session.commit()
-    return ok({"message": "PIN wurde geändert."})
+
+    gruppen = [
+        {"id": m.gruppe.id, "name": m.gruppe.name, "aktiv": m.gruppe.aktiv}
+        for m in user.mitgliedschaften
+    ]
+    return ok({"message": "PIN wurde geändert.", "user": user.to_dict(), "gruppen": gruppen})

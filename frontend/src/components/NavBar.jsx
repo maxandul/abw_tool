@@ -26,12 +26,13 @@ export default function NavBar() {
             <NavLink to="/admin/gruppen"   className={linkCls}>Erhebungen</NavLink>
             <NavLink to="/admin/kategorien" className={linkCls}>Kategorien</NavLink>
             <NavLink to="/admin/raumtypen"  className={linkCls}>Raumtypen</NavLink>
-            {gruppeId && <NavLink to="/admin/auswertung" className={linkCls}>Auswertung</NavLink>}
+            <NavLink to="/admin/auswertung" className={linkCls}>Auswertung</NavLink>
+            <NavLink to="/admin/hilfe"      className={linkCls}>Hilfe</NavLink>
           </>
         ) : (
           <>
-            <NavLink to="/tn/dashboard"  className={linkCls}>Übersicht</NavLink>
-            <NavLink to="/tn/kalender"   className={linkCls}>Kalender</NavLink>
+            <NavLink to="/tn/dashboard" className={linkCls}>Übersicht</NavLink>
+            <NavLink to="/tn/hilfe"     className={linkCls}>Hilfe</NavLink>
           </>
         )}
 

@@ -24,11 +24,13 @@ def _validate(data: dict, partial: bool = False) -> dict:
 
 
 def _kategorie_count(raumtyp_id: int, nur_aktiv: bool = False) -> int:
-    """Count categories linked to a room type."""
-    query = Kategorie.query.filter_by(raumtyp_id=raumtyp_id)
+    """Count categories linked to a room type via the M2M association."""
+    raumtyp = db.session.get(Raumtyp, raumtyp_id)
+    if raumtyp is None:
+        return 0
     if nur_aktiv:
-        query = query.filter_by(aktiv=True)
-    return query.count()
+        return sum(1 for k in raumtyp.kategorien if k.aktiv)
+    return len(raumtyp.kategorien)
 
 
 def list_raumtypen(nur_aktiv: bool = False) -> list[dict]:
@@ -74,9 +76,7 @@ def set_aktiv(raumtyp_id: int, aktiv: bool) -> Raumtyp:
         raise ValidationError("Raumtyp nicht gefunden.")
 
     if not aktiv:
-        betroffene = Kategorie.query.filter_by(
-            raumtyp_id=raumtyp_id, aktiv=True
-        ).all()
+        betroffene = [k for k in raumtyp.kategorien if k.aktiv]
         if betroffene:
             namen = ", ".join(k.name for k in betroffene)
             raise ValidationError(

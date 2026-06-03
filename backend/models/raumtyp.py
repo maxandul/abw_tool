@@ -14,7 +14,12 @@ class Raumtyp(db.Model):
     aktiv = db.Column(db.Boolean, nullable=False, default=True)
     sort_order = db.Column(db.Integer, nullable=False, default=0)
 
-    kategorien = db.relationship("Kategorie", back_populates="raumtyp")
+    kategorien = db.relationship(
+        "Kategorie",
+        secondary="kategorie_raumtyp",
+        back_populates="raumtypen",
+        lazy="select",
+    )
 
     def to_dict(self) -> dict:
         """Return a JSON-serialisable representation of the room type."""

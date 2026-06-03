@@ -18,11 +18,26 @@ export default function PinAendernPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const { error: err } = await pinAendern(form);
+    const { data, error: err } = await pinAendern(form);
     setLoading(false);
     if (err) { setError(err); return; }
-    if (user?.rolle === "ADMIN") { navigate("/admin/dashboard"); return; }
-    navigate("/gruppen-auswahl", { state: { gruppen: [] } });
+
+    if (user?.rolle === "ADMIN") {
+      navigate("/admin/dashboard");
+      return;
+    }
+
+    // For participants: auto-select their group if they only belong to one.
+    const gruppen = (data?.gruppen || []).filter(g => g.aktiv);
+    if (gruppen.length === 1) {
+      chooseGruppe(gruppen[0].id);
+      navigate("/tn/dashboard");
+    } else if (gruppen.length > 1) {
+      navigate("/gruppen-auswahl", { state: { gruppen } });
+    } else {
+      // No active group yet — show a friendly message
+      navigate("/login");
+    }
   };
 
   return (
@@ -33,14 +48,16 @@ export default function PinAendernPage() {
           Dein PIN wurde zurückgesetzt. Bitte wähle jetzt einen neuen PIN.
         </p>
         {error && <div className="mb-4"><Alert>{error}</Alert></div>}
-        <form onSubmit={submit} className="space-y-4">
+        <form onSubmit={submit} autoComplete="off" className="space-y-4">
           <div>
             <label className="label">Neuer PIN</label>
-            <input className="input" type="password" value={form.neuer_pin} onChange={set("neuer_pin")} required placeholder="mind. 4 Zeichen" />
+            <input className="input" type="password" autoComplete="new-password"
+              value={form.neuer_pin} onChange={set("neuer_pin")} required />
           </div>
           <div>
             <label className="label">PIN bestätigen</label>
-            <input className="input" type="password" value={form.bestaetigung} onChange={set("bestaetigung")} required />
+            <input className="input" type="password" autoComplete="new-password"
+              value={form.bestaetigung} onChange={set("bestaetigung")} required />
           </div>
           <button className="btn-primary w-full" type="submit" disabled={loading}>
             {loading ? <Spinner size="sm" /> : "PIN speichern"}
