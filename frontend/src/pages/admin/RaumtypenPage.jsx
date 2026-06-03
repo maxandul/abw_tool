@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getRaumtypen, createRaumtyp, updateRaumtyp, deleteRaumtyp } from "../../api/admin";
+import { getRaumtypen, createRaumtyp, updateRaumtyp, deleteRaumtyp, reactivateRaumtyp } from "../../api/admin";
 import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
 import Modal from "../../components/Modal";
@@ -58,6 +58,10 @@ export default function RaumtypenPage() {
     setConfirm(null); load();
   };
 
+  const handleReactivate = async (id) => {
+    await reactivateRaumtyp(id); load();
+  };
+
   if (loading) return <div className="flex justify-center mt-12"><Spinner size="lg" /></div>;
 
   return (
@@ -92,9 +96,12 @@ export default function RaumtypenPage() {
                 <td className="table-td">
                   <div className="flex gap-2">
                     <button className="btn-ghost text-xs" onClick={() => setModal({ id: r.id, raumtyp: r })}>Bearbeiten</button>
-                    {r.aktiv && (
+                    {r.aktiv ? (
                       <button className="btn-ghost text-xs text-red-600"
                         onClick={() => setConfirm({ id: r.id, name: r.name })}>Deaktivieren</button>
+                    ) : (
+                      <button className="btn-ghost text-xs text-green-700"
+                        onClick={() => handleReactivate(r.id)}>Reaktivieren</button>
                     )}
                   </div>
                 </td>

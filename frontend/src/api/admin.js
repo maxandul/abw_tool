@@ -10,6 +10,8 @@ export const getGruppe          = (id)    => get(`/api/admin/gruppen/${id}`);
 export const createGruppe       = (body)  => post("/api/admin/gruppen", body);
 export const updateGruppe       = (id, b) => put(`/api/admin/gruppen/${id}`, b);
 export const deleteGruppe       = (id)    => del(`/api/admin/gruppen/${id}`);
+export const abschliessenGruppe = (id)    => post(`/api/admin/gruppen/${id}/abschliessen`, {});
+export const wiederoeffnenGruppe= (id)    => post(`/api/admin/gruppen/${id}/wiederoeffnen`, {});
 export const regenerateToken    = (id)    => post(`/api/admin/gruppen/${id}/neuer-token`);
 
 // Teilnehmer
@@ -26,12 +28,14 @@ export const createKategorie    = (body)       => post("/api/admin/kategorien", 
 export const updateKategorie    = (id, b, m)   =>
   put(`/api/admin/kategorien/${id}?modus=${m ?? "ueberschreiben"}`, b);
 export const deleteKategorie    = (id)         => del(`/api/admin/kategorien/${id}`);
+export const reactivateKategorie = (id)        => post(`/api/admin/kategorien/${id}/reaktivieren`, {});
 
 // Raumtypen
 export const getRaumtypen       = ()       => get("/api/admin/raumtypen");
 export const createRaumtyp      = (body)   => post("/api/admin/raumtypen", body);
 export const updateRaumtyp      = (id, b)  => put(`/api/admin/raumtypen/${id}`, b);
 export const deleteRaumtyp      = (id)     => del(`/api/admin/raumtypen/${id}`);
+export const reactivateRaumtyp  = (id)     => post(`/api/admin/raumtypen/${id}/reaktivieren`, {});
 
 // Auswertung
 export const getLastprofil  = (p) => get(`/api/auswertung/lastprofil?${p}`);

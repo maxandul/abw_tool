@@ -114,6 +114,9 @@ def post_eintrag():
     gruppe_id = body.get("gruppe_id")
     if not gruppe_id:
         return err("gruppe_id fehlt.", 400)
+    gruppe = Gruppe.query.get(int(gruppe_id))
+    if gruppe and gruppe.abgeschlossen:
+        return err("Diese Erhebung ist abgeschlossen. Es können keine Einträge mehr erfasst werden.", 403)
     try:
         eintrag = eintrag_service.create_eintrag(user.id, int(gruppe_id), body)
         return ok(eintrag.to_dict(), 201)

@@ -53,14 +53,16 @@ export default function LoginPage() {
         <h1 className="text-xl font-bold text-brand-600 mb-1">Tätigkeitserhebung</h1>
         <p className="text-sm text-slate-500 mb-6">Bitte melde dich an</p>
         {error && <div className="mb-4"><Alert>{error}</Alert></div>}
-        <form onSubmit={submit} className="space-y-4">
+        <form onSubmit={submit} autoComplete="off" className="space-y-4">
           <div>
             <label className="label">E-Mail-Adresse</label>
-            <input className="input" type="email" autoFocus value={form.email} onChange={set("email")} required />
+            <input className="input" type="email" autoFocus autoComplete="off"
+              value={form.email} onChange={set("email")} required />
           </div>
           <div>
             <label className="label">PIN</label>
-            <input className="input" type="password" value={form.pin} onChange={set("pin")} required />
+            <input className="input" type="password" autoComplete="current-password"
+              value={form.pin} onChange={set("pin")} required />
           </div>
           <button className="btn-primary w-full" type="submit" disabled={loading}>
             {loading ? <Spinner size="sm" /> : "Anmelden"}

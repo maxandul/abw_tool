@@ -22,7 +22,7 @@
     @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-600;
   }
   .btn-ghost {
-    @apply btn text-slate-600 hover:bg-slate-100 focus:ring-slate-400;
+    @apply btn text-slate-600 border border-slate-300 hover:bg-slate-100 focus:ring-slate-400;
   }
   .input {
     @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-600 disabled:bg-slate-50;

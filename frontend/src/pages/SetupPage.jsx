@@ -28,18 +28,21 @@ export default function SetupPage() {
         <h1 className="text-xl font-bold text-brand-600 mb-1">Tätigkeitserhebung</h1>
         <p className="text-sm text-slate-500 mb-6">Erstmalige Einrichtung – Admin-Account anlegen</p>
         {error && <div className="mb-4"><Alert>{error}</Alert></div>}
-        <form onSubmit={submit} className="space-y-4">
+        <form onSubmit={submit} autoComplete="off" className="space-y-4">
           <div>
             <label className="label">E-Mail-Adresse</label>
-            <input className="input" type="email" value={form.email} onChange={set("email")} required />
+            <input className="input" type="email" autoComplete="off"
+              value={form.email} onChange={set("email")} required />
           </div>
           <div>
             <label className="label">PIN wählen</label>
-            <input className="input" type="password" value={form.pin} onChange={set("pin")} required placeholder="mind. 4 Zeichen" />
+            <input className="input" type="password" autoComplete="new-password"
+              value={form.pin} onChange={set("pin")} required />
           </div>
           <div>
             <label className="label">PIN bestätigen</label>
-            <input className="input" type="password" value={form.pin_bestaetigung} onChange={set("pin_bestaetigung")} required />
+            <input className="input" type="password" autoComplete="new-password"
+              value={form.pin_bestaetigung} onChange={set("pin_bestaetigung")} required />
           </div>
           <button className="btn-primary w-full" type="submit" disabled={loading}>
             {loading ? <Spinner size="sm" /> : "Admin-Account anlegen"}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { fmtDate } from "../../utils/format";
 import {
   getTeilnehmer, addTeilnehmer, removeTeilnehmer, resetPin, setEinreichungStatus
 } from "../../api/admin";
@@ -101,7 +102,7 @@ export default function TeilnehmerPage() {
                 </td>
                 <td className="table-td"><StatusBadge status={tn.status} /></td>
                 <td className="table-td">{tn.anzahl_eintraege}</td>
-                <td className="table-td text-xs text-slate-500">{tn.letzter_eintrag ?? "–"}</td>
+                <td className="table-td text-xs text-slate-500">{fmtDate(tn.letzter_eintrag)}</td>
                 <td className="table-td">
                   <div className="flex gap-2 flex-wrap">
                     <button className="btn-ghost text-xs" onClick={() => setConfirm({ type: "pin", id: tn.user_id, email: tn.email })}>

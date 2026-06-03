@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  getKategorien, getRaumtypen, createKategorie, updateKategorie, deleteKategorie
+  getKategorien, getRaumtypen, createKategorie, updateKategorie, deleteKategorie, reactivateKategorie
 } from "../../api/admin";
 import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
@@ -101,6 +101,10 @@ export default function KategorienPage() {
     await deleteKategorie(id); setConfirm(null); load();
   };
 
+  const handleReactivate = async (id) => {
+    await reactivateKategorie(id); load();
+  };
+
   if (loading) return <div className="flex justify-center mt-12"><Spinner size="lg" /></div>;
 
   return (
@@ -117,6 +121,7 @@ export default function KategorienPage() {
             <tr>
               <th className="table-th w-8"></th>
               <th className="table-th">Name</th>
+              <th className="table-th">Beschreibung</th>
               <th className="table-th">Raumtyp</th>
               <th className="table-th">Einträge</th>
               <th className="table-th">Status</th>
@@ -130,6 +135,8 @@ export default function KategorienPage() {
                   <span className="inline-block w-5 h-5 rounded" style={{ background: k.farbe ?? "#ccc" }} />
                 </td>
                 <td className="table-td font-medium">{k.name}</td>
+                <td className="table-td text-xs text-slate-500 max-w-[200px] truncate"
+                  title={k.beschreibung ?? ""}>{k.beschreibung || "–"}</td>
                 <td className="table-td text-xs text-slate-500">{k.raumtyp_name ?? "–"}</td>
                 <td className="table-td">{k.anzahl_eintraege}</td>
                 <td className="table-td">
@@ -141,10 +148,15 @@ export default function KategorienPage() {
                   <div className="flex gap-2">
                     <button className="btn-ghost text-xs"
                       onClick={() => setModal({ id: k.id, kategorie: k })}>Bearbeiten</button>
-                    {k.aktiv && (
+                    {k.aktiv ? (
                       <button className="btn-ghost text-xs text-red-600"
                         onClick={() => setConfirm({ id: k.id, name: k.name, count: k.anzahl_eintraege })}>
                         Deaktivieren
+                      </button>
+                    ) : (
+                      <button className="btn-ghost text-xs text-green-700"
+                        onClick={() => handleReactivate(k.id)}>
+                        Reaktivieren
                       </button>
                     )}
                   </div>
@@ -162,15 +174,22 @@ export default function KategorienPage() {
       )}
       {modal?.id && !modal.modus && (
         <Modal title="Kategorie bearbeiten" onClose={() => setModal(null)}>
-          <div className="space-y-4">
-            <p className="text-sm text-slate-600">
-              Bestehende Einträge verweisen auf diese Kategorie. Möchtest du sie überschreiben oder eine neue erstellen?
-            </p>
-            <div className="flex gap-3">
-              <button className="btn-secondary flex-1" onClick={() => setModal(m => ({ ...m, modus: "ueberschreiben" }))}>Überschreiben</button>
-              <button className="btn-secondary flex-1" onClick={() => setModal(m => ({ ...m, modus: "neu" }))}>Neue Kategorie</button>
+          {modal.kategorie.anzahl_eintraege > 0 ? (
+            <div className="space-y-4">
+              <p className="text-sm text-slate-600">
+                Diese Kategorie wurde in <strong>{modal.kategorie.anzahl_eintraege} Einträgen</strong> bereits verwendet.
+                Möchtest du sie überschreiben (bestehende Einträge werden aktualisiert) oder eine neue Kategorie erstellen?
+              </p>
+              <div className="flex gap-3">
+                <button className="btn-secondary flex-1" onClick={() => setModal(m => ({ ...m, modus: "ueberschreiben" }))}>Überschreiben</button>
+                <button className="btn-secondary flex-1" onClick={() => setModal(m => ({ ...m, modus: "neu" }))}>Neue Kategorie</button>
+              </div>
             </div>
-          </div>
+          ) : (
+            // No entries yet → skip the choice, go straight to edit
+            <KategorieForm initial={modal.kategorie} raumtypen={raumtypen}
+              onSave={handleUpdate(modal.id, "ueberschreiben")} onCancel={() => setModal(null)} />
+          )}
         </Modal>
       )}
       {modal?.id && modal.modus && (

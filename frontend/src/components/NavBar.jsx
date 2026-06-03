@@ -23,7 +23,7 @@ export default function NavBar() {
         {isAdmin ? (
           <>
             <NavLink to="/admin/dashboard" className={linkCls}>Dashboard</NavLink>
-            <NavLink to="/admin/gruppen"   className={linkCls}>Gruppen</NavLink>
+            <NavLink to="/admin/gruppen"   className={linkCls}>Erhebungen</NavLink>
             <NavLink to="/admin/kategorien" className={linkCls}>Kategorien</NavLink>
             <NavLink to="/admin/raumtypen"  className={linkCls}>Raumtypen</NavLink>
             {gruppeId && <NavLink to="/admin/auswertung" className={linkCls}>Auswertung</NavLink>}

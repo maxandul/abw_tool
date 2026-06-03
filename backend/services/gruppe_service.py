@@ -126,16 +126,40 @@ def regenerate_token(gruppe_id: int) -> Gruppe:
     return gruppe
 
 
-def deactivate_gruppe(gruppe_id: int) -> Gruppe:
-    """Soft-delete a group (data is retained and remains analysable)."""
+def abschliessen_gruppe(gruppe_id: int) -> Gruppe:
+    """Mark a group as closed: participants can no longer enter data."""
     gruppe = get_gruppe(gruppe_id)
+    if not gruppe.aktiv:
+        raise ValidationError("Archivierte Erhebungen können nicht abgeschlossen werden.")
+    gruppe.abgeschlossen = True
+    db.session.commit()
+    return gruppe
+
+
+def wiederoeffnen_gruppe(gruppe_id: int) -> Gruppe:
+    """Re-open a closed group so participants can enter data again."""
+    gruppe = get_gruppe(gruppe_id)
+    if not gruppe.aktiv:
+        raise ValidationError("Archivierte Erhebungen können nicht wieder geöffnet werden.")
+    gruppe.abgeschlossen = False
+    db.session.commit()
+    return gruppe
+
+
+def deactivate_gruppe(gruppe_id: int) -> Gruppe:
+    """Archive a group (only allowed when abgeschlossen=True). Data is retained."""
+    gruppe = get_gruppe(gruppe_id)
+    if not gruppe.abgeschlossen:
+        raise ValidationError(
+            "Eine Erhebung kann nur archiviert werden, wenn sie zuerst abgeschlossen wurde."
+        )
     gruppe.aktiv = False
     db.session.commit()
     return gruppe
 
 
 def dashboard() -> dict:
-    """Aggregate dashboard data across all active groups."""
+    """Aggregate dashboard data across all non-archived groups (offen + abgeschlossen)."""
     gruppen = Gruppe.query.filter_by(aktiv=True).order_by(Gruppe.name).all()
     gruppen_data = [{**g.to_dict(), "stats": gruppe_stats(g)} for g in gruppen]
 

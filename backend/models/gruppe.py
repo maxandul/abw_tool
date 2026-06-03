@@ -27,6 +27,7 @@ class Gruppe(db.Model):
         db.String(64), unique=True, nullable=False, default=generate_token
     )
     aktiv = db.Column(db.Boolean, nullable=False, default=True)
+    abgeschlossen = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
 
     mitglieder = db.relationship(
@@ -43,5 +44,6 @@ class Gruppe(db.Model):
             "sharing_ratio": self.sharing_ratio,
             "registrierung_link_token": self.registrierung_link_token,
             "aktiv": self.aktiv,
+            "abgeschlossen": self.abgeschlossen,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

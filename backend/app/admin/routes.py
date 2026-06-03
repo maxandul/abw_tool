@@ -78,15 +78,37 @@ def neuer_token(gruppe_id: int):
         return err(str(exc), 404)
 
 
+@admin_bp.route("/gruppen/<int:gruppe_id>/abschliessen", methods=["POST"])
+@admin_required
+def abschliessen_gruppe(gruppe_id: int):
+    """Close a group so participants can no longer enter data."""
+    try:
+        g = gruppe_service.abschliessen_gruppe(gruppe_id)
+        return ok(g.to_dict())
+    except ValidationError as exc:
+        return err(str(exc), 400)
+
+
+@admin_bp.route("/gruppen/<int:gruppe_id>/wiederoeffnen", methods=["POST"])
+@admin_required
+def wiederoeffnen_gruppe(gruppe_id: int):
+    """Re-open a closed group."""
+    try:
+        g = gruppe_service.wiederoeffnen_gruppe(gruppe_id)
+        return ok(g.to_dict())
+    except ValidationError as exc:
+        return err(str(exc), 400)
+
+
 @admin_bp.route("/gruppen/<int:gruppe_id>", methods=["DELETE"])
 @admin_required
 def delete_gruppe(gruppe_id: int):
-    """Soft-delete (deactivate) a group."""
+    """Archive a group (only allowed when abgeschlossen=True). Data is retained."""
     try:
         gruppe_service.deactivate_gruppe(gruppe_id)
-        return ok({"message": "Gruppe wurde deaktiviert."})
+        return ok({"message": "Erhebung wurde archiviert."})
     except ValidationError as exc:
-        return err(str(exc), 404)
+        return err(str(exc), 400)
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +227,17 @@ def delete_kategorie(kategorie_id: int):
         return err(str(exc), 400)
 
 
+@admin_bp.route("/kategorien/<int:kategorie_id>/reaktivieren", methods=["POST"])
+@admin_required
+def reaktivieren_kategorie(kategorie_id: int):
+    """Reactivate a previously deactivated category."""
+    try:
+        k = kategorie_service.set_aktiv(kategorie_id, True)
+        return ok({"message": f"Kategorie '{k.name}' wurde reaktiviert."})
+    except ValidationError as exc:
+        return err(str(exc), 400)
+
+
 # ---------------------------------------------------------------------------
 # Raumtypen
 # ---------------------------------------------------------------------------
@@ -247,5 +280,16 @@ def delete_raumtyp(raumtyp_id: int):
     try:
         r = raumtyp_service.set_aktiv(raumtyp_id, False)
         return ok({"message": f"Raumtyp '{r.name}' wurde deaktiviert."})
+    except ValidationError as exc:
+        return err(str(exc), 400)
+
+
+@admin_bp.route("/raumtypen/<int:raumtyp_id>/reaktivieren", methods=["POST"])
+@admin_required
+def reaktivieren_raumtyp(raumtyp_id: int):
+    """Reactivate a previously deactivated room type."""
+    try:
+        r = raumtyp_service.set_aktiv(raumtyp_id, True)
+        return ok({"message": f"Raumtyp '{r.name}' wurde reaktiviert."})
     except ValidationError as exc:
         return err(str(exc), 400)
