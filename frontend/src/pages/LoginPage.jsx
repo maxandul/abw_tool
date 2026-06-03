@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { login } from "../api/auth";
+import { login, setupStatus } from "../api/auth";
 import { useAuth } from "../context/AuthContext";
 import Alert from "../components/Alert";
 import Spinner from "../components/Spinner";
@@ -13,6 +13,13 @@ export default function LoginPage() {
   const [error, setError] = useState("");
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  // If no admin exists yet, redirect to setup automatically.
+  useEffect(() => {
+    setupStatus().then(({ data }) => {
+      if (data && !data.admin_exists) navigate("/setup", { replace: true });
+    });
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();
