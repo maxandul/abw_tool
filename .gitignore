@@ -1,0 +1,28 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Secrets
+.env
+
+# Datenbank
+*.db
+backend/data/*.db
+
+# Backups
+backup/
+
+# Node / Frontend
+node_modules/
+frontend/dist/
+
+# WICHTIG: backend/static/ wird eingecheckt (React Build), daher NICHT ignorieren
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
