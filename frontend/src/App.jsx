@@ -74,6 +74,9 @@ export default function App() {
               <Route path="*"                  element={<Navigate to="/" replace />} />
             </Routes>
           </main>
+          <footer className="bg-slate-50 border-t border-slate-200 text-xs text-slate-400 text-center py-3 px-4 shrink-0">
+            HR Entwicklung &amp; Projekte · Volkswirtschaftsdirektion · {new Date().getFullYear()}
+          </footer>
         </div>
       </AuthProvider>
     </BrowserRouter>

@@ -88,7 +88,8 @@ def _primary_raumtyp_id(kategorie) -> int | None:
 
 def _load_eintraege(gruppe_ids: list[int], datum_von: date, datum_bis: date,
                     raumtyp_id: int | None = None,
-                    wochentage: list[int] | None = None) -> list[Eintrag]:
+                    wochentage: list[int] | None = None,
+                    kategorie_ids: list[int] | None = None) -> list[Eintrag]:
     """Load all entries matching the given filters."""
     query = (
         db.session.query(Eintrag)
@@ -103,11 +104,14 @@ def _load_eintraege(gruppe_ids: list[int], datum_von: date, datum_bis: date,
         eintraege = [e for e in eintraege if e.datum.weekday() in wochentage]
 
     if raumtyp_id is not None:
-        # Filter entries whose category's primary room type matches
         eintraege = [
             e for e in eintraege
             if _primary_raumtyp_id(e.kategorie) == raumtyp_id
         ]
+
+    if kategorie_ids is not None:
+        k_set = set(kategorie_ids)
+        eintraege = [e for e in eintraege if e.kategorie_id in k_set]
 
     return eintraege
 
@@ -117,63 +121,83 @@ def _load_eintraege(gruppe_ids: list[int], datum_von: date, datum_bis: date,
 # ---------------------------------------------------------------------------
 
 def berechne_lastprofil(gruppe_ids: list[int], datum_von: date, datum_bis: date,
-                         raumtyp_id: int | None = None,
-                         wochentage: list[int] | None = None) -> dict:
-    """Calculate per-slot (weekday × 15-min) mean/min/max occupancy.
+                         wochentage: list[int] | None = None,
+                         kategorie_ids: list[int] | None = None) -> dict:
+    """Two-mode heatmap calculation.
 
-    Returns data suitable for the heatmap visualisation.
+    Requires non-empty kategorie_ids; returns empty when omitted.
+
+    Mittelwert: per (weekday, slot) and per participant, compute the fraction
+    of their active weeks where they had a booking in the selected categories.
+    Average this fraction across all participants with any entries.
+    Scale: 0.0 – 1.0.
+
+    Maximum: per (weekday, slot), count distinct participants who had at least
+    one matching booking across all their weeks.  A participant counts ≤ 1 even
+    if they booked the slot in multiple weeks or with different categories.
+    Scale: 0 – n_participants.
     """
-    eintraege = _load_eintraege(gruppe_ids, datum_von, datum_bis, raumtyp_id, wochentage)
+    if not kategorie_ids:
+        return {"slots": []}
 
-    # Map: (wochentag, slot_minuten, kw) → count of persons
-    KW_TAG_SLOT: dict[tuple, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    raumtyp_ids_set: set[int | None] = set()
+    # Entries matching selected categories
+    kat_eintraege = _load_eintraege(
+        gruppe_ids, datum_von, datum_bis,
+        wochentage=wochentage, kategorie_ids=kategorie_ids,
+    )
+    # All entries – used to determine active weeks per participant
+    alle_eintraege = _load_eintraege(gruppe_ids, datum_von, datum_bis, wochentage=wochentage)
 
-    for e in eintraege:
+    alle_user_ids: set[int] = {e.user_id for e in alle_eintraege}
+
+    # Per participant: ISO weeks in which they recorded anything
+    tn_wochen: dict[int, set[str]] = defaultdict(set)
+    for e in alle_eintraege:
+        tn_wochen[e.user_id].add(_iso_kw(e.datum))
+
+    # Per participant per (wt, slot_offset) per kategorie_id: weeks with a booking
+    # tn_slot_kat_match[uid][(wt, off)][kat_id] = set of kw
+    tn_slot_kat_match: dict = defaultdict(lambda: defaultdict(lambda: defaultdict(set)))
+    # Per (wt, slot_offset): participants who ever matched (for maximum)
+    slot_tn: dict[tuple, set] = defaultdict(set)
+
+    for e in kat_eintraege:
         wt = e.datum.weekday()
         kw = _iso_kw(e.datum)
         von_min = time_to_minutes(e.zeit_von)
         bis_min = time_to_minutes(e.zeit_bis)
-        rt_id = _primary_raumtyp_id(e.kategorie)
-        raumtyp_ids_set.add(rt_id)
-
-        # Mark every 15-min slot that this entry covers.
         slot = von_min
         while slot < bis_min:
             if TAG_START_MINUTEN <= slot < TAG_END_MINUTEN:
-                KW_TAG_SLOT[(wt, slot - TAG_START_MINUTEN, rt_id)][kw] += 1
+                off = slot - TAG_START_MINUTEN
+                tn_slot_kat_match[e.user_id][(wt, off)][e.kategorie_id].add(kw)
+                slot_tn[(wt, off)].add(e.user_id)
             slot += SLOT_MINUTES
 
-    # Aggregate per (wochentag, slot_offset, raumtyp_id)
     aggregiert = []
-    for (wt, slot_offset, rt_id), kw_counts in KW_TAG_SLOT.items():
-        werte = list(kw_counts.values())
+    for (wt, off), uid_set in slot_tn.items():
+        maximum = len(uid_set)
+
+        # Mittelwert: sum of (category_matching_weeks / total_weeks) per participant
+        # across all selected categories → Ø persons at this slot per week.
+        total = 0.0
+        for uid in alle_user_ids:
+            wochen = tn_wochen.get(uid)
+            if not wochen:
+                continue
+            n = len(wochen)
+            kat_map = tn_slot_kat_match[uid].get((wt, off), {})
+            for kat_id in kategorie_ids:
+                total += len(kat_map.get(kat_id, set())) / n
+
         aggregiert.append({
             "wochentag": wt,
-            "slot_start_minuten": slot_offset,
-            "raumtyp_id": rt_id,
-            "mittelwert": round(sum(werte) / len(werte), 2),
-            "maximum": max(werte),
-            "minimum": min(werte),
-            "anzahl_wochen": len(werte),
+            "slot_start_minuten": off,
+            "mittelwert": round(total, 3),
+            "maximum": maximum,
         })
 
-    raumtypen = []
-    for rt_id in raumtyp_ids_set:
-        if rt_id is None:
-            continue
-        rt = db.session.get(Raumtyp, rt_id)
-        if rt:
-            first_farbe = next(
-                (k.farbe for k in rt.kategorien if k.farbe), "#3B82F6"
-            )
-            raumtypen.append({
-                "id": rt.id,
-                "name": rt.name,
-                "farbe": first_farbe,
-            })
-
-    return {"slots": aggregiert, "raumtypen": raumtypen}
+    return {"slots": aggregiert}
 
 
 # ---------------------------------------------------------------------------
@@ -181,39 +205,53 @@ def berechne_lastprofil(gruppe_ids: list[int], datum_von: date, datum_bis: date,
 # ---------------------------------------------------------------------------
 
 def berechne_raumbedarf(gruppe_ids: list[int], datum_von: date, datum_bis: date) -> dict:
-    """Calculate recommended number of spaces per room type."""
+    """Recommend number of spaces per room type.
+
+    Uses the same distinct-participant approach as the new Lastprofil maximum:
+    per (weekday, slot_offset) count the distinct participants who ever had a
+    booking in the given room type at that slot across the whole survey period.
+    avg_nutzung = mean of these per-slot counts.
+    peak_nutzung = maximum per-slot count.
+    """
     gruppen = _get_gruppen(gruppe_ids)
     sharing_ratio = _gewichtete_sharing_ratio(gruppen)
     eintraege = _load_eintraege(gruppe_ids, datum_von, datum_bis)
 
-    # Build mapping raumtyp_id → list of per-(kw, wt, slot) counts.
-    kein_raum_namen = {
+    kein_raum_ids = {
         rt.id for rt in Raumtyp.query.all() if rt.name == "Kein Raum nötig"
     }
 
-    # Per raumtyp: map (kw, wt, slot) → count
-    rt_kw_slot: dict[int | None, dict[tuple, int]] = defaultdict(lambda: defaultdict(int))
+    # Per room type, per (wt, slot_offset): set of distinct participants
+    rt_slot_tn: dict[int, dict[tuple, set]] = defaultdict(lambda: defaultdict(set))
 
     for e in eintraege:
         rt_id = _primary_raumtyp_id(e.kategorie)
-        kw = _iso_kw(e.datum)
+        if rt_id is None:
+            continue
         wt = e.datum.weekday()
         von_min = time_to_minutes(e.zeit_von)
         bis_min = time_to_minutes(e.zeit_bis)
         slot = von_min
         while slot < bis_min:
             if TAG_START_MINUTEN <= slot < TAG_END_MINUTEN:
-                rt_kw_slot[rt_id][(kw, wt, slot - TAG_START_MINUTEN)] += 1
+                rt_slot_tn[rt_id][(wt, slot - TAG_START_MINUTEN)].add(e.user_id)
             slot += SLOT_MINUTES
 
-    raumtypen_result = []
+    # Anwesend = all room types except "Kein Raum nötig"
+    anwesend_slot_tn: dict[tuple, set] = defaultdict(set)
+    for rt_id, slot_map in rt_slot_tn.items():
+        if rt_id not in kein_raum_ids:
+            for sk, uid_set in slot_map.items():
+                anwesend_slot_tn[sk].update(uid_set)
+
     all_raumtypen = Raumtyp.query.filter_by(aktiv=True).order_by(Raumtyp.sort_order).all()
+    raumtypen_result = []
 
     for rt in all_raumtypen:
-        slot_counts = rt_kw_slot.get(rt.id, {})
-        werte = list(slot_counts.values())
-        avg_nutzung = round(sum(werte) / len(werte), 2) if werte else 0.0
-        peak_nutzung = max(werte) if werte else 0
+        slot_map = rt_slot_tn.get(rt.id, {})
+        counts = [len(uid_set) for uid_set in slot_map.values()]
+        avg_nutzung = round(sum(counts) / len(counts), 2) if counts else 0.0
+        peak_nutzung = max(counts) if counts else 0
         einheiten_avg = math.ceil(avg_nutzung / sharing_ratio) if avg_nutzung > 0 else 0
         einheiten_peak = math.ceil(peak_nutzung / sharing_ratio) if peak_nutzung > 0 else 0
 
@@ -224,23 +262,17 @@ def berechne_raumbedarf(gruppe_ids: list[int], datum_von: date, datum_bis: date)
             "peak_nutzung": peak_nutzung,
             "einheiten_avg": einheiten_avg,
             "einheiten_peak": einheiten_peak,
-            "kein_raum": rt.id in kein_raum_namen,
+            "kein_raum": rt.id in kein_raum_ids,
         })
 
-    # Additional row: total presence (all room types except "Kein Raum nötig").
-    anwesend_slots = defaultdict(int)
-    for rt_id, slots in rt_kw_slot.items():
-        if rt_id not in kein_raum_namen and rt_id is not None:
-            for key, cnt in slots.items():
-                anwesend_slots[key] += cnt
-    anw_werte = list(anwesend_slots.values())
+    anw_counts = [len(uid_set) for uid_set in anwesend_slot_tn.values()]
 
     return {
         "sharing_ratio": sharing_ratio,
         "raumtypen": raumtypen_result,
         "anwesend_total": {
-            "avg_nutzung": round(sum(anw_werte) / len(anw_werte), 2) if anw_werte else 0.0,
-            "peak_nutzung": max(anw_werte) if anw_werte else 0,
+            "avg_nutzung": round(sum(anw_counts) / len(anw_counts), 2) if anw_counts else 0.0,
+            "peak_nutzung": max(anw_counts) if anw_counts else 0,
         },
     }
 
@@ -275,11 +307,13 @@ def berechne_anteile(gruppe_ids: list[int], datum_von: date, datum_bis: date,
             return "Kommunikative Tätigkeiten"
         return "Abwesenheit & Sonstiges"
 
+    kat_minuten: dict[int | None, float] = defaultdict(float)
     gesamt_minuten = 0.0
     for e in eintraege:
         dauer = time_to_minutes(e.zeit_bis) - time_to_minutes(e.zeit_von)
         rt_id = _primary_raumtyp_id(e.kategorie)
         rt_minuten[rt_id] += dauer
+        kat_minuten[e.kategorie_id] += dauer
         gesamt_minuten += dauer
 
         so = e.kategorie.sort_order if e.kategorie else 17
@@ -299,6 +333,21 @@ def berechne_anteile(gruppe_ids: list[int], datum_von: date, datum_bis: date,
             "anteil_prozent": anteil,
         })
 
+    all_kategorien = Kategorie.query.filter_by(aktiv=True).order_by(Kategorie.sort_order).all()
+    kategorie_anteile = []
+    for kat in all_kategorien:
+        minuten = kat_minuten.get(kat.id, 0.0)
+        if minuten == 0:
+            continue
+        stunden = round(minuten / 60, 1)
+        anteil = round(minuten / gesamt_minuten * 100, 1) if gesamt_minuten else 0.0
+        kategorie_anteile.append({
+            "id": kat.id,
+            "name": kat.name,
+            "stunden": stunden,
+            "anteil_prozent": anteil,
+        })
+
     # Weekday bar chart.
     wochentag_daten = []
     for wt in range(5):
@@ -309,6 +358,7 @@ def berechne_anteile(gruppe_ids: list[int], datum_von: date, datum_bis: date,
 
     return {
         "raumtyp_anteile": raumtyp_anteile,
+        "kategorie_anteile": kategorie_anteile,
         "hauptgruppen_wochentag": wochentag_daten,
         "gesamt_stunden": round(gesamt_minuten / 60, 1),
     }

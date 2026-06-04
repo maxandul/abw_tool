@@ -166,10 +166,11 @@ function useDragSelect(readonly, onSelect) {
     if (readonly || e.button !== 0) return;
     if (e.target.closest("[data-block]")) return;
     e.preventDefault();
+    const ds = dateStr(day);            // store as string for comparison
     const y = getY(e, gridEl);
-    drag.current = { day, gridEl, startY: y };
+    drag.current = { dayStr: ds, gridEl, startY: y };
     const von = snapMin(yToMinutes(y));
-    setSelection({ day, vonMin: von, bisMin: Math.min(von + SLOT_MIN, HOUR_END * 60) });
+    setSelection({ day: ds, vonMin: von, bisMin: Math.min(von + SLOT_MIN, HOUR_END * 60) });
   };
 
   const onMouseMove = (e) => {
@@ -179,7 +180,7 @@ function useDragSelect(readonly, onSelect) {
     const curMin   = yToMinutes(y);
     const vonMin = snapMin(Math.min(startMin, curMin));
     const bisMin = snapMin(Math.max(startMin, curMin)) + SLOT_MIN;
-    setSelection({ day: drag.current.day, vonMin, bisMin: Math.min(bisMin, HOUR_END * 60) });
+    setSelection({ day: drag.current.dayStr, vonMin, bisMin: Math.min(bisMin, HOUR_END * 60) });
   };
 
   const onMouseUp = () => {
@@ -188,7 +189,7 @@ function useDragSelect(readonly, onSelect) {
     drag.current = null;
     setSelection(null);
     if (sel.bisMin - sel.vonMin >= SLOT_MIN) {
-      onSelect({ datum: dateStr(sel.day), zeitVon: fmtTime(sel.vonMin), zeitBis: fmtTime(sel.bisMin) });
+      onSelect({ datum: sel.day, zeitVon: fmtTime(sel.vonMin), zeitBis: fmtTime(sel.bisMin) });
     }
   };
 

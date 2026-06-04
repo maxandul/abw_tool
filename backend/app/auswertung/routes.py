@@ -35,11 +35,13 @@ def _parse_filter(args):
 @auswertung_bp.route("/lastprofil", methods=["GET"])
 @admin_required
 def get_lastprofil():
-    """Heatmap data: per-slot mean/min/max occupancy."""
+    """Heatmap data: per-slot mean/max occupancy (requires kategorie_ids)."""
     try:
-        gruppe_ids, datum_von, datum_bis, raumtyp_id, wochentage, _ = _parse_filter(request.args)
+        gruppe_ids, datum_von, datum_bis, _, wochentage, _ = _parse_filter(request.args)
+        kat_raw = request.args.get("kategorie_ids")
+        kategorie_ids = parse_int_list(kat_raw) if kat_raw else None
         data = auswertung_service.berechne_lastprofil(
-            gruppe_ids, datum_von, datum_bis, raumtyp_id, wochentage
+            gruppe_ids, datum_von, datum_bis, wochentage, kategorie_ids
         )
         return ok(data)
     except ValidationError as exc:

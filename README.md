@@ -11,36 +11,90 @@ Web-Applikation zur Erhebung von Tätigkeitsprofilen im Rahmen einer arbeitsplat
 
 ## Voraussetzungen
 
-- Python 3.x (auf dem Server-Laptop bereits via IT-Softwarecenter installiert)
+- **Python 3.11+** (auf dem Server-Laptop via IT-Softwarecenter installieren)
 - Node.js / npm (nur auf dem Entwickler-Laptop für den Frontend-Build nötig)
 
 ---
 
 ## Erstmaliges Setup auf dem Server-Laptop
 
-1. Repository in den Netzwerkordner klonen:
-   ```
-   git clone <repo-url>
-   ```
-2. `.env` Datei im Projektordner anlegen (Vorlage: `.env.example`).
-3. `setup.bat` einmalig ausführen – legt das Virtual Environment an, installiert die Dependencies und wendet die Datenbank-Migrationen an.
-4. `START_SERVER.bat` ausführen – der Browser öffnet sich automatisch.
-5. Beim ersten Start auf `/setup` den ersten Admin-Account anlegen.
+### 1. Repository klonen
 
-> **Wichtig:** `START_SERVER.bat` darf nur auf dem dedizierten Server-Laptop ausgeführt werden. Laufen zwei Instanzen gleichzeitig, kann es zu Datenbankfehlern kommen.
+```
+git clone <repo-url>
+cd abw_tool
+```
+
+### 2. `.env`-Datei anlegen
+
+```
+copy .env.example .env
+```
+
+Die Datei mit einem Texteditor öffnen und `SECRET_KEY` auf eine zufällige Zeichenkette setzen
+(z. B. `meinGeheimesPasswort2026!`). Diese Zeichenkette sichert die Login-Sessions.
+Ohne `.env`-Datei läuft die Applikation trotzdem, verwendet aber einen unsicheren Standard-Key.
+
+```
+SECRET_KEY=hierIhrGeheimesPasswort
+DATABASE_URL=sqlite:///backend/data/taetigkeitserhebung.db
+FLASK_ENV=production
+FLASK_DEBUG=0
+```
+
+> **Hinweis:** Die Datenbank-Datei wird beim ersten Start automatisch unter `backend/data/` angelegt. Es ist kein manuelles Vorbereiten nötig.
+
+### 3. `setup.bat` ausführen
+
+Legt das Python-Virtual-Environment an, installiert alle Dependencies und wendet die Datenbank-Migrationen an.
+
+```
+setup.bat
+```
+
+> Das Script setzt den Swisscom-Proxy (`gateway.swisscom.zscloud.net:9400`). Falls pip trotzdem keine Pakete laden kann, VPN-Verbindung prüfen.
+
+### 4. `START_SERVER.bat` ausführen
+
+Der Browser öffnet sich automatisch auf `http://localhost:5000`.
+
+```
+START_SERVER.bat
+```
+
+### 5. Ersten Admin-Account anlegen
+
+Beim allerersten Start erscheint die Seite `/setup`. Dort den Admin-Account einrichten.
+
+> **Wichtig:** `START_SERVER.bat` darf nur auf dem **einen** dedizierten Server-Laptop laufen. Zwei gleichzeitige Instanzen können die Datenbank beschädigen.
 
 ---
 
 ## Zugriff
 
-- Server-Laptop: `http://localhost:5000`
-- Andere im Netzwerk / via VPN: `http://192.168.x.x:5000` (IP wird beim Start angezeigt)
+| Gerät | URL |
+|---|---|
+| Server-Laptop | `http://localhost:5000` |
+| Andere Geräte im Netzwerk / VPN | `http://<IP-des-Laptops>:5000` |
+
+Die aktuelle IP-Adresse des Server-Laptops wird beim Start von `START_SERVER.bat` in der Konsole angezeigt.
 
 ---
 
-## Entwicklung (privater Laptop)
+## Updates einspielen (bei laufender Erhebung)
 
-Backend:
+1. Server stoppen (Konsolenfenster schliessen).
+2. `git pull` im Projektordner ausführen.
+3. Bei neuen Python-Paketen: `setup.bat` erneut ausführen.
+4. `START_SERVER.bat` ausführen.
+
+Datenbankmigrationen laufen beim Start automatisch (`flask db upgrade` in `run.py`).
+
+---
+
+## Entwicklung (privater Entwickler-Laptop)
+
+**Backend:**
 ```
 python -m venv venv
 venv\Scripts\activate.bat
@@ -48,31 +102,22 @@ pip install -r requirements.txt
 python backend\run.py
 ```
 
-Frontend:
+**Frontend (Dev-Server mit Hot-Reload):**
 ```
 cd frontend
 npm install
 npm run dev
 ```
 
-Nach Frontend-Änderungen den produktiven Build erzeugen und nach `backend/static/` kopieren:
+**Nach Frontend-Änderungen – produktiven Build erzeugen:**
 ```
 build.bat
 ```
-
----
-
-## Updates einspielen (bei laufender Erhebung)
-
-1. Server stoppen (Konsolenfenster schliessen).
-2. `git pull` im Projektordner.
-3. Bei neuen Python-Dependencies: `setup.bat` erneut ausführen.
-4. `START_SERVER.bat` ausführen.
-
-Datenbankänderungen werden ausschliesslich über Flask-Migrate verwaltet (`flask db migrate` / `flask db upgrade`). `flask db upgrade` läuft beim Setup automatisch.
+Kopiert `frontend/dist/` nach `backend/static/`.
 
 ---
 
 ## Backup
 
-`backup.bat` kopiert die aktuelle Datenbankdatei mit Zeitstempel in den Ordner `backup/`. Empfehlung: täglich ausführen oder via Windows Task Scheduler automatisieren.
+`backup.bat` kopiert die aktuelle Datenbankdatei mit Zeitstempel in den Ordner `backup/`.
+Empfehlung: täglich ausführen oder via Windows Task Scheduler automatisieren.

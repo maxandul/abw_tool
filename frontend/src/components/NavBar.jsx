@@ -15,7 +15,7 @@ export default function NavBar() {
 
   // Session expired or not logged in: show minimal bar with login button
   if (!user) return (
-    <nav className="bg-brand-600 text-white shadow">
+    <nav className="bg-brand-600 text-white shadow sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 flex items-center h-14 gap-2">
         <span className="font-semibold text-white mr-4 shrink-0">Tätigkeitserhebung</span>
         <div className="ml-auto">
@@ -28,7 +28,7 @@ export default function NavBar() {
   const isAdmin = user.rolle === "ADMIN";
 
   return (
-    <nav className="bg-brand-600 text-white shadow">
+    <nav className="bg-brand-600 text-white shadow sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 flex items-center h-14 gap-2">
         <span className="font-semibold text-white mr-4 shrink-0">Tätigkeitserhebung</span>
 

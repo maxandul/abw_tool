@@ -10,14 +10,17 @@ const BAR_COLORS = { OFFEN: "bg-slate-300", EINGEREICHT: "bg-brand-500" };
 const BAR_LABELS = { OFFEN: "Offen", EINGEREICHT: "Eingereicht" };
 
 function ProgressBar({ counts, total }) {
-  if (!total) return <div className="h-2 bg-slate-100 rounded-full" />;
+  if (!total) return <div className="h-1.5 bg-slate-100 rounded-full" />;
+  const eingereicht = counts?.EINGEREICHT ?? 0;
+  const offen       = counts?.OFFEN       ?? 0;
+  const einPct  = Math.min(100, (eingereicht / total) * 100);
+  const offPct  = Math.min(100, (offen       / total) * 100);
   return (
-    <div className="flex h-2 rounded-full overflow-hidden gap-px">
-      {["OFFEN", "EINGEREICHT"].map(k => counts[k] > 0 && (
-        <div key={k} className={`${BAR_COLORS[k]} transition-all`}
-          style={{ width: `${(counts[k] / total) * 100}%` }}
-          title={`${BAR_LABELS[k]}: ${counts[k]}`} />
-      ))}
+    <div className="h-1.5 rounded-full overflow-hidden flex bg-slate-100">
+      <div className="h-full bg-brand-600 transition-all shrink-0"
+        style={{ width: `${einPct}%` }} title={`Eingereicht: ${eingereicht}`} />
+      <div className="h-full bg-slate-300 transition-all shrink-0"
+        style={{ width: `${offPct}%` }} title={`Offen: ${offen}`} />
     </div>
   );
 }
@@ -141,7 +144,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-brand-400 rounded-full transition-all"
+                      className="h-full bg-brand-500 rounded-full transition-all"
                       style={{ width: `${pct}%` }}
                     />
                   </div>
