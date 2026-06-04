@@ -78,6 +78,14 @@ def _gewichtete_sharing_ratio(gruppen: list[Gruppe]) -> float:
 # Load entries
 # ---------------------------------------------------------------------------
 
+def _primary_raumtyp_id(kategorie) -> int | None:
+    """Return the first raumtyp id for a category (M2M), or None."""
+    if not kategorie:
+        return None
+    rts = kategorie.raumtypen
+    return rts[0].id if rts else None
+
+
 def _load_eintraege(gruppe_ids: list[int], datum_von: date, datum_bis: date,
                     raumtyp_id: int | None = None,
                     wochentage: list[int] | None = None) -> list[Eintrag]:
@@ -88,10 +96,6 @@ def _load_eintraege(gruppe_ids: list[int], datum_von: date, datum_bis: date,
         .filter(Eintrag.datum >= datum_von)
         .filter(Eintrag.datum <= datum_bis)
     )
-    if wochentage is not None:
-        # Filter by weekday – Python weekday: 0=Mo … 4=Fr.
-        # SQLite stores date as text (YYYY-MM-DD); use in-app filter.
-        pass  # Applied in-Python below.
 
     eintraege = query.all()
 
@@ -99,11 +103,11 @@ def _load_eintraege(gruppe_ids: list[int], datum_von: date, datum_bis: date,
         eintraege = [e for e in eintraege if e.datum.weekday() in wochentage]
 
     if raumtyp_id is not None:
-        kategorie_ids = {
-            k.id
-            for k in Kategorie.query.filter_by(raumtyp_id=raumtyp_id, aktiv=True).all()
-        }
-        eintraege = [e for e in eintraege if e.kategorie_id in kategorie_ids]
+        # Filter entries whose category's primary room type matches
+        eintraege = [
+            e for e in eintraege
+            if _primary_raumtyp_id(e.kategorie) == raumtyp_id
+        ]
 
     return eintraege
 
@@ -130,14 +134,14 @@ def berechne_lastprofil(gruppe_ids: list[int], datum_von: date, datum_bis: date,
         kw = _iso_kw(e.datum)
         von_min = time_to_minutes(e.zeit_von)
         bis_min = time_to_minutes(e.zeit_bis)
-        raumtyp_ids_set.add(e.kategorie.raumtyp_id if e.kategorie else None)
+        rt_id = _primary_raumtyp_id(e.kategorie)
+        raumtyp_ids_set.add(rt_id)
 
         # Mark every 15-min slot that this entry covers.
         slot = von_min
         while slot < bis_min:
             if TAG_START_MINUTEN <= slot < TAG_END_MINUTEN:
-                KW_TAG_SLOT[(wt, slot - TAG_START_MINUTEN, e.kategorie.raumtyp_id
-                             if e.kategorie else None)][kw] += 1
+                KW_TAG_SLOT[(wt, slot - TAG_START_MINUTEN, rt_id)][kw] += 1
             slot += SLOT_MINUTES
 
     # Aggregate per (wochentag, slot_offset, raumtyp_id)
@@ -191,7 +195,7 @@ def berechne_raumbedarf(gruppe_ids: list[int], datum_von: date, datum_bis: date)
     rt_kw_slot: dict[int | None, dict[tuple, int]] = defaultdict(lambda: defaultdict(int))
 
     for e in eintraege:
-        rt_id = e.kategorie.raumtyp_id if e.kategorie else None
+        rt_id = _primary_raumtyp_id(e.kategorie)
         kw = _iso_kw(e.datum)
         wt = e.datum.weekday()
         von_min = time_to_minutes(e.zeit_von)
@@ -274,7 +278,7 @@ def berechne_anteile(gruppe_ids: list[int], datum_von: date, datum_bis: date,
     gesamt_minuten = 0.0
     for e in eintraege:
         dauer = time_to_minutes(e.zeit_bis) - time_to_minutes(e.zeit_von)
-        rt_id = e.kategorie.raumtyp_id if e.kategorie else None
+        rt_id = _primary_raumtyp_id(e.kategorie)
         rt_minuten[rt_id] += dauer
         gesamt_minuten += dauer
 
@@ -330,7 +334,7 @@ def berechne_kennzahlen(gruppe_ids: list[int], datum_von: date, datum_bis: date)
     for e in eintraege:
         dauer = time_to_minutes(e.zeit_bis) - time_to_minutes(e.zeit_von)
         total_min += dauer
-        rt_id = e.kategorie.raumtyp_id if e.kategorie else None
+        rt_id = _primary_raumtyp_id(e.kategorie)
         so = e.kategorie.sort_order if e.kategorie else 17
         if rt_id not in kein_raum_ids:
             anwesend_min += dauer
@@ -342,7 +346,7 @@ def berechne_kennzahlen(gruppe_ids: list[int], datum_von: date, datum_bis: date)
     # Average simultaneous occupancy (anwesend).
     slot_counts: dict[tuple, int] = defaultdict(int)
     for e in eintraege:
-        rt_id = e.kategorie.raumtyp_id if e.kategorie else None
+        rt_id = _primary_raumtyp_id(e.kategorie)
         if rt_id in kein_raum_ids:
             continue
         kw = _iso_kw(e.datum)

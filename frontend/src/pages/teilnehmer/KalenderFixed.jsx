@@ -370,7 +370,7 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
   const [hoverSlot, setHoverSlot] = useState(null);
 
   const load = useCallback(async () => {
-    if (!gId) return;
+    if (!gId || !zeitraumVon || !zeitraumBis) return;
     setLoading(true);
     const [eRes, kRes, eiRes] = await Promise.all([
       getEintraege(gId, zeitraumVon, zeitraumBis),

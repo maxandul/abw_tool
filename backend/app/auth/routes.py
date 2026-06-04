@@ -59,6 +59,9 @@ def login():
             "id": m.gruppe.id,
             "name": m.gruppe.name,
             "aktiv": m.gruppe.aktiv,
+            "abgeschlossen": m.gruppe.abgeschlossen,
+            "zeitraum_von": m.gruppe.zeitraum_von.isoformat() if m.gruppe.zeitraum_von else None,
+            "zeitraum_bis": m.gruppe.zeitraum_bis.isoformat() if m.gruppe.zeitraum_bis else None,
         }
         for m in user.mitgliedschaften
     ]
@@ -108,7 +111,14 @@ def pin_aendern():
     db.session.commit()
 
     gruppen = [
-        {"id": m.gruppe.id, "name": m.gruppe.name, "aktiv": m.gruppe.aktiv}
+        {
+            "id": m.gruppe.id,
+            "name": m.gruppe.name,
+            "aktiv": m.gruppe.aktiv,
+            "abgeschlossen": m.gruppe.abgeschlossen,
+            "zeitraum_von": m.gruppe.zeitraum_von.isoformat() if m.gruppe.zeitraum_von else None,
+            "zeitraum_bis": m.gruppe.zeitraum_bis.isoformat() if m.gruppe.zeitraum_bis else None,
+        }
         for m in user.mitgliedschaften
     ]
     return ok({"message": "PIN wurde geändert.", "user": user.to_dict(), "gruppen": gruppen})
