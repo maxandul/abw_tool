@@ -18,10 +18,9 @@ export function RequireAdmin({ children }) {
 }
 
 export function RequireTeilnehmer({ children }) {
-  const { user, gruppeId } = useAuth();
+  const { user } = useAuth();
   if (user === undefined) return <div className="flex justify-center mt-20"><Spinner size="lg" /></div>;
   if (!user) return <Navigate to="/login" replace />;
   if (user.rolle === "ADMIN") return <Navigate to="/admin/dashboard" replace />;
-  if (!gruppeId) return <Navigate to="/gruppen-auswahl" replace />;
   return children;
 }

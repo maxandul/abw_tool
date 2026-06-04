@@ -55,7 +55,7 @@ export default function App() {
               <Route path="/login"             element={<LoginPage />} />
               <Route path="/registrierung/:token" element={<RegistrierungPage />} />
               <Route path="/pin-aendern"       element={<RequireAuth><PinAendernPage /></RequireAuth>} />
-              <Route path="/gruppen-auswahl"   element={<RequireAuth><GruppenAuswahlPage /></RequireAuth>} />
+              <Route path="/gruppen-auswahl"   element={<Navigate to="/tn/dashboard" replace />} />
 
               {/* Admin */}
               <Route path="/admin/dashboard"   element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
