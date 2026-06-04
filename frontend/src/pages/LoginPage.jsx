@@ -6,7 +6,7 @@ import Alert from "../components/Alert";
 import Spinner from "../components/Spinner";
 
 export default function LoginPage() {
-  const { setUser, chooseGruppe } = useAuth();
+  const { setUser, chooseGruppe, setMeineGruppen } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: "", pin: "" });
   const [loading, setLoading] = useState(false);
@@ -38,13 +38,10 @@ export default function LoginPage() {
       return;
     }
 
-    const gruppen = (data.gruppen || []).filter(g => g.aktiv);
-    if (gruppen.length === 1) {
-      chooseGruppe(gruppen[0].id);
-      navigate("/tn/dashboard");
-    } else {
-      navigate("/gruppen-auswahl", { state: { gruppen } });
-    }
+    const gruppen = (data.gruppen || []).filter(g => g.aktiv || g.abgeschlossen);
+    setMeineGruppen(gruppen);
+    // Always go to /tn/dashboard – TnMain handles the tab selection
+    navigate("/tn/dashboard");
   };
 
   return (

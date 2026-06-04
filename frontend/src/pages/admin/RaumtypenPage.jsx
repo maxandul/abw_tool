@@ -71,7 +71,7 @@ export default function RaumtypenPage() {
         <button className="btn-primary" onClick={() => setModal("create")}>+ Raumtyp anlegen</button>
       </div>
       {error && <Alert>{error}</Alert>}
-      <div className="card overflow-hidden p-0">
+      <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>

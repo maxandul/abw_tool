@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getMeineGruppen, getDashboard, getLuecken, einreichen, entsperren } from "../../api/teilnehmer";
 import { useAuth } from "../../context/AuthContext";
 import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
 import StatusBadge from "../../components/StatusBadge";
 import Modal from "../../components/Modal";
-import Kalender from "./Kalender";
+import KalenderFixed from "./KalenderFixed";
 import { fmtDate } from "../../utils/format";
 
 // ── Dashboard-Kachel pro Erhebung ────────────────────────────────────────────
@@ -49,9 +50,9 @@ function ErhebungKachel({ gruppe, onKalender }) {
   if (!dash) return <div className="card"><Alert>{err}</Alert></div>;
 
   const { status, gesamt_stunden, tage_mit_eintraegen, arbeitstage_gesamt, kategorien } = dash;
-  const offen      = gruppe.aktiv && !gruppe.abgeschlossen;
-  const kannEinreichen = offen && (status === "OFFEN" || status === "IN_BEARBEITUNG");
-  const kannEntsperre  = offen && status === "EINGEREICHT";
+  const offen           = gruppe.aktiv && !gruppe.abgeschlossen;
+  const kannEinreichen  = offen && (status === "OFFEN" || status === "IN_BEARBEITUNG");
+  const kannEntsperre   = offen && status === "EINGEREICHT";
   const maxMin = Math.max(1, ...(kategorien || []).map(k => k.minuten));
 
   return (
@@ -75,7 +76,6 @@ function ErhebungKachel({ gruppe, onKalender }) {
         <span>Tage: <strong>{tage_mit_eintraegen}/{arbeitstage_gesamt}</strong></span>
       </div>
 
-      {/* Kategorie-Balken */}
       {(kategorien || []).length > 0 && (
         <div className="space-y-1.5">
           {kategorien.sort((a, b) => b.minuten - a.minuten).slice(0, 5).map(k => (
@@ -94,16 +94,10 @@ function ErhebungKachel({ gruppe, onKalender }) {
       )}
 
       <div className="flex gap-2 pt-1">
-        {offen && (
-          <button className="btn-secondary text-sm flex-1" onClick={() => onKalender(gruppe)}>
-            Tätigkeit erfassen
-          </button>
-        )}
-        {!offen && (
-          <button className="btn-ghost text-sm flex-1" onClick={() => onKalender(gruppe)}>
-            Einträge ansehen
-          </button>
-        )}
+        <button className={`${offen ? "btn-secondary" : "btn-ghost"} text-sm flex-1`}
+          onClick={() => onKalender(gruppe)}>
+          {offen ? "Tätigkeit erfassen" : "Einträge ansehen"}
+        </button>
         {kannEinreichen && (
           <button className="btn-primary text-sm flex-1" onClick={handleEinreichenStart}>Einreichen</button>
         )}
@@ -121,11 +115,7 @@ function ErhebungKachel({ gruppe, onKalender }) {
             </tr></thead>
             <tbody className="divide-y divide-slate-100">
               {luecken.map((l, i) => (
-                <tr key={i}>
-                  <td className="table-td">{l.tag}</td>
-                  <td className="table-td">{fmtDate(l.datum)}</td>
-                  <td className="table-td">{l.luecke}</td>
-                </tr>
+                <tr key={i}><td className="table-td">{l.tag}</td><td className="table-td">{fmtDate(l.datum)}</td><td className="table-td">{l.luecke}</td></tr>
               ))}
             </tbody>
           </table>
@@ -152,71 +142,65 @@ function ErhebungKachel({ gruppe, onKalender }) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function TnMain() {
+  const { meineGruppen: ctxGruppen, setMeineGruppen } = useAuth();
   const [gruppen, setGruppen] = useState(null);
-  const [activeTab, setActiveTab] = useState("dashboard");
   const [error, setError] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabId = searchParams.get("tab") ? parseInt(searchParams.get("tab")) : null;
 
   useEffect(() => {
-    getMeineGruppen().then(({ data, error: e }) => {
-      if (e) setError(e);
-      else setGruppen(data ?? []);
-    });
+    // Use cached groups from context if available, else fetch
+    if (ctxGruppen && ctxGruppen.length > 0) {
+      setGruppen(ctxGruppen);
+    } else {
+      getMeineGruppen().then(({ data, error: e }) => {
+        if (e) setError(e);
+        else {
+          setGruppen(data ?? []);
+          setMeineGruppen(data ?? []);
+        }
+      });
+    }
   }, []);
 
+  // Keep gruppen in sync with context
+  useEffect(() => {
+    if (ctxGruppen && ctxGruppen.length > 0 && gruppen === null) {
+      setGruppen(ctxGruppen);
+    }
+  }, [ctxGruppen]);
+
   if (!gruppen) return <div className="flex justify-center mt-20"><Spinner size="lg" /></div>;
-  if (error) return <div className="max-w-xl mx-auto p-6"><Alert>{error}</Alert></div>;
+  if (error)   return <div className="max-w-xl mx-auto p-6"><Alert>{error}</Alert></div>;
 
-  const tabCls = (id) =>
-    `px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-      activeTab === id
-        ? "border-brand-600 text-brand-700"
-        : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
-    }`;
+  const activeGruppe = tabId ? gruppen.find(g => g.id === tabId) : null;
 
-  const activeGruppe = gruppen.find(g => g.id === activeTab);
+  // "Tätigkeit erfassen" from dashboard kachel → switch to that Erhebung tab
+  const handleKalender = (g) => setSearchParams({ tab: g.id });
 
-  return (
-    <div className="min-h-screen">
-      {/* Tab bar */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-5xl mx-auto px-4 flex gap-0 overflow-x-auto">
-          <button className={tabCls("dashboard")} onClick={() => setActiveTab("dashboard")}>
-            Dashboard
-          </button>
-          {gruppen.map(g => (
-            <button key={g.id} className={tabCls(g.id)} onClick={() => setActiveTab(g.id)}>
-              {g.name}
-              {g.abgeschlossen && <span className="ml-1.5 text-xs text-amber-600">(abgeschl.)</span>}
-              {!g.aktiv && <span className="ml-1.5 text-xs text-slate-400">(archiviert)</span>}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Tab content */}
-      {activeTab === "dashboard" && (
-        <div className="max-w-3xl mx-auto p-6 space-y-4">
-          <h1 className="text-2xl font-bold text-slate-800">Meine Erhebungen</h1>
-          {gruppen.length === 0 && (
-            <div className="card text-center text-slate-500 py-12">
-              Du bist noch keiner Erhebung zugeordnet. Bitte wende dich an den Administrator.
-            </div>
-          )}
-          {gruppen.map(g => (
-            <ErhebungKachel key={g.id} gruppe={g}
-              onKalender={(g) => setActiveTab(g.id)} />
-          ))}
+  // Dashboard view
+  if (!activeGruppe) return (
+    <div className="max-w-3xl mx-auto p-6 space-y-4">
+      <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
+      {gruppen.length === 0 && (
+        <div className="card text-center text-slate-500 py-12">
+          Du bist noch keiner Erhebung zugeordnet. Bitte wende dich an den Administrator.
         </div>
       )}
-
-      {activeGruppe && (
-        <Kalender
-          gruppeId={activeGruppe.id}
-          zeitraumVon={activeGruppe.zeitraum_von}
-          zeitraumBis={activeGruppe.zeitraum_bis}
-          abgeschlossen={activeGruppe.abgeschlossen || !activeGruppe.aktiv}
-        />
-      )}
+      {gruppen.map(g => (
+        <ErhebungKachel key={g.id} gruppe={g} onKalender={handleKalender} />
+      ))}
     </div>
+  );
+
+  // Kalender for specific Erhebung
+  return (
+    <KalenderFixed
+      gruppeId={activeGruppe.id}
+      zeitraumVon={activeGruppe.zeitraum_von}
+      zeitraumBis={activeGruppe.zeitraum_bis}
+      abgeschlossen={activeGruppe.abgeschlossen || !activeGruppe.aktiv}
+      gruppeName={activeGruppe.name}
+    />
   );
 }

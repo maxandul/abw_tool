@@ -155,7 +155,7 @@ export default function GruppenPage() {
 
       {error && <Alert>{error}</Alert>}
 
-      <div className="card overflow-hidden p-0">
+      <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
@@ -193,12 +193,6 @@ export default function GruppenPage() {
                     )}
                     <Link to={`/admin/gruppen/${g.id}/teilnehmer`} className="btn-ghost text-xs">Teilnehmer</Link>
                     <Link to={`/admin/auswertung?gruppe_id=${g.id}`} className="btn-ghost text-xs">Auswertung</Link>
-                    {g.aktiv && !g.abgeschlossen && (
-                      <button className="btn-ghost text-xs text-amber-700"
-                        onClick={() => setConfirm({ type: "token", id: g.id, name: g.name })}>
-                        Link zurücksetzen
-                      </button>
-                    )}
                     {g.aktiv && !g.abgeschlossen && (
                       <button className="btn-ghost text-xs text-amber-700"
                         onClick={() => setConfirm({ type: "abschliessen", id: g.id, name: g.name })}>
@@ -265,16 +259,6 @@ export default function GruppenPage() {
           confirmLabel="Archivieren"
           confirmClass="btn-danger"
           onConfirm={() => handleDeactivate(confirm.id)}
-          onCancel={() => setConfirm(null)}
-        />
-      )}
-      {confirm?.type === "token" && (
-        <ConfirmDialog
-          title="Einladungslink zurücksetzen"
-          message={`Der bisherige Einladungslink für «${confirm.name}» wird ungültig. Alle noch nicht registrierten Teilnehmenden benötigen den neuen Link. Fortfahren?`}
-          confirmLabel="Link zurücksetzen"
-          confirmClass="btn-primary"
-          onConfirm={() => handleNewToken(confirm.id)}
           onCancel={() => setConfirm(null)}
         />
       )}

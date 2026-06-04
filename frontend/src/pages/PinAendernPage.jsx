@@ -6,7 +6,7 @@ import Alert from "../components/Alert";
 import Spinner from "../components/Spinner";
 
 export default function PinAendernPage() {
-  const { user, chooseGruppe } = useAuth();
+  const { user, chooseGruppe, setMeineGruppen } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ neuer_pin: "", bestaetigung: "" });
   const [loading, setLoading] = useState(false);
@@ -27,17 +27,9 @@ export default function PinAendernPage() {
       return;
     }
 
-    // For participants: auto-select their group if they only belong to one.
-    const gruppen = (data?.gruppen || []).filter(g => g.aktiv);
-    if (gruppen.length === 1) {
-      chooseGruppe(gruppen[0].id);
-      navigate("/tn/dashboard");
-    } else if (gruppen.length > 1) {
-      navigate("/gruppen-auswahl", { state: { gruppen } });
-    } else {
-      // No active group yet — show a friendly message
-      navigate("/login");
-    }
+    const gruppen = (data?.gruppen || []);
+    setMeineGruppen(gruppen);
+    navigate("/tn/dashboard");
   };
 
   return (

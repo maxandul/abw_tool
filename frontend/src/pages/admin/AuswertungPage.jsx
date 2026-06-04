@@ -156,44 +156,37 @@ function Anteile({ data }) {
 export default function AuswertungPage() {
   const [searchParams] = useSearchParams();
   const [gruppen, setGruppen] = useState([]);
-  const [filter, setFilter] = useState({
-    gruppe_ids: searchParams.get("gruppe_id") ? [parseInt(searchParams.get("gruppe_id"))] : [],
-    datum_von: "", datum_bis: "",
-  });
+  const [gruppeIds, setGruppeIds] = useState(
+    searchParams.get("gruppe_id") ? [parseInt(searchParams.get("gruppe_id"))] : []
+  );
   const [anzeige, setAnzeige] = useState("mittelwert");
-  const [lp, setLp]     = useState(null);
-  const [rb, setRb]     = useState(null);
-  const [ant, setAnt]   = useState(null);
-  const [kz, setKz]     = useState(null);
+  const [lp, setLp]   = useState(null);
+  const [rb, setRb]   = useState(null);
+  const [ant, setAnt] = useState(null);
+  const [kz, setKz]   = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError]     = useState("");
 
   useEffect(() => {
     getGruppen(true).then(({ data }) => {
       if (!data) return;
       setGruppen(data);
-      // Pre-select from URL param
       const urlId = searchParams.get("gruppe_id") ? parseInt(searchParams.get("gruppe_id")) : null;
-      if (urlId) {
-        const g = data.find(x => x.id === urlId);
-        if (g) setFilter(f => ({ ...f, gruppe_ids: [urlId], datum_von: f.datum_von || g.zeitraum_von, datum_bis: f.datum_bis || g.zeitraum_bis }));
-      } else if (data.length > 0) {
-        const first = data[0];
-        setFilter(f => ({ ...f, gruppe_ids: [first.id], datum_von: first.zeitraum_von, datum_bis: first.zeitraum_bis }));
+      if (urlId && data.find(x => x.id === urlId)) {
+        setGruppeIds([urlId]);
+      } else if (!gruppeIds.length && data.length > 0) {
+        setGruppeIds([data[0].id]);
       }
     });
   }, []);
 
-  const buildParams = useCallback(() => {
-    const ids = filter.gruppe_ids.join(",");
-    let p = `gruppe_ids=${ids}`;
-    if (filter.datum_von) p += `&datum_von=${filter.datum_von}`;
-    if (filter.datum_bis) p += `&datum_bis=${filter.datum_bis}`;
-    return p;
-  }, [filter]);
+  const buildParams = useCallback(() =>
+    `gruppe_ids=${gruppeIds.join(",")}`,
+    [gruppeIds]
+  );
 
   const load = useCallback(async () => {
-    if (!filter.gruppe_ids.length) return;
+    if (!gruppeIds.length) return;
     setError(""); setLoading(true);
     const p = buildParams();
     const [l, r, a, k] = await Promise.all([
@@ -202,50 +195,31 @@ export default function AuswertungPage() {
     setLoading(false);
     if (l.error) { setError(l.error); return; }
     setLp(l.data); setRb(r.data); setAnt(a.data); setKz(k.data);
-  }, [buildParams, filter.gruppe_ids.length]);
+  }, [buildParams]);
 
-  useEffect(() => { if (filter.gruppe_ids.length) load(); }, [filter.gruppe_ids.length]);
+  useEffect(() => { if (gruppeIds.length) load(); }, [gruppeIds.length, gruppeIds.join(",")]);
 
   const toggleGruppe = (id) => {
-    setFilter(f => {
-      const ids = f.gruppe_ids.includes(id) ? f.gruppe_ids.filter(x => x !== id) : [...f.gruppe_ids, id];
-      return { ...f, gruppe_ids: ids };
-    });
+    setGruppeIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
   };
 
-  const selectGruppeFromDropdown = (id) => {
-    const g = gruppen.find(x => x.id === id);
-    setFilter(f => ({
-      gruppe_ids: [id],
-      datum_von: g?.zeitraum_von || f.datum_von,
-      datum_bis: g?.zeitraum_bis || f.datum_bis,
-    }));
-  };
+  const selectGruppeFromDropdown = (id) => setGruppeIds([id]);
 
-  // Group Erhebungen by status for display
   const offene     = gruppen.filter(g => g.aktiv && !g.abgeschlossen);
   const geschl     = gruppen.filter(g => g.aktiv && g.abgeschlossen);
   const archiviert = gruppen.filter(g => !g.aktiv);
-
-  const selectedNames = filter.gruppe_ids
-    .map(id => gruppen.find(g => g.id === id)?.name)
-    .filter(Boolean)
-    .join(", ");
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <h1 className="text-2xl font-bold text-slate-800">Auswertung</h1>
 
-      {/* Filter */}
+      {/* Erhebungsauswahl */}
       <div className="card space-y-4">
-        <h2 className="text-sm font-semibold text-slate-700">Erhebungen auswählen</h2>
-
-        {/* Primary dropdown (single-select, sets dates automatically) */}
         <div className="flex flex-wrap gap-4 items-end">
           <div className="flex-1 min-w-[220px]">
             <label className="label">Erhebung</label>
             <select className="input"
-              value={filter.gruppe_ids[0] ?? ""}
+              value={gruppeIds[0] ?? ""}
               onChange={e => selectGruppeFromDropdown(parseInt(e.target.value))}>
               <option value="" disabled>Bitte wählen…</option>
               {offene.length > 0 && (
@@ -265,36 +239,22 @@ export default function AuswertungPage() {
               )}
             </select>
           </div>
-          <div>
-            <label className="label">Zeitraum von</label>
-            <input type="date" className="input" value={filter.datum_von}
-              onChange={e => setFilter(f => ({ ...f, datum_von: e.target.value }))} />
-          </div>
-          <div>
-            <label className="label">Zeitraum bis</label>
-            <input type="date" className="input" value={filter.datum_bis}
-              onChange={e => setFilter(f => ({ ...f, datum_bis: e.target.value }))} />
-          </div>
-          <button className="btn-primary" onClick={load} disabled={loading || !filter.gruppe_ids.length}>
-            {loading ? <Spinner size="sm" /> : "Aktualisieren"}
-          </button>
           {lp && (
             <a href={getExportUrl(buildParams())} download className="btn-secondary">
               Exportieren (HTML)
             </a>
           )}
+          {loading && <Spinner size="sm" />}
         </div>
 
-        {/* Multi-select for comparison: show all as toggleable chips */}
         {gruppen.length > 1 && (
           <div>
-            <p className="text-xs text-slate-500 mb-2">Mehrere Erhebungen zusammenfassen (für Vergleich):</p>
+            <p className="text-xs text-slate-500 mb-2">Mehrere Erhebungen zusammenfassen:</p>
             <div className="flex flex-wrap gap-2">
               {gruppen.map(g => (
-                <button key={g.id} type="button"
-                  onClick={() => toggleGruppe(g.id)}
+                <button key={g.id} type="button" onClick={() => toggleGruppe(g.id)}
                   className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                    filter.gruppe_ids.includes(g.id)
+                    gruppeIds.includes(g.id)
                       ? "bg-brand-600 text-white border-brand-600"
                       : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"
                   }`}>
@@ -309,7 +269,7 @@ export default function AuswertungPage() {
       </div>
 
       {error && <Alert>{error}</Alert>}
-      {!lp && !loading && <div className="card text-center text-slate-500 py-12">Wähle eine Erhebung und klicke «Aktualisieren».</div>}
+      {!lp && !loading && <div className="card text-center text-slate-500 py-12">Wähle eine Erhebung aus.</div>}
 
       {kz && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

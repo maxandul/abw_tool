@@ -1,19 +1,31 @@
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function NavBar() {
-  const { user, gruppeId, logout } = useAuth();
+  const { user, logout, meineGruppen } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const handleLogout = async () => { await logout(); navigate("/login"); };
-
-  if (!user) return null;
-  const isAdmin = user.rolle === "ADMIN";
 
   const linkCls = ({ isActive }) =>
     `px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
       isActive ? "bg-white/20 text-white" : "text-white/80 hover:text-white hover:bg-white/10"
     }`;
+
+  // Session expired or not logged in: show minimal bar with login button
+  if (!user) return (
+    <nav className="bg-brand-600 text-white shadow">
+      <div className="max-w-7xl mx-auto px-4 flex items-center h-14 gap-2">
+        <span className="font-semibold text-white mr-4 shrink-0">Tätigkeitserhebung</span>
+        <div className="ml-auto">
+          <NavLink to="/login" className="btn-ghost text-white/80 hover:text-white text-sm border-white/30">Anmelden</NavLink>
+        </div>
+      </div>
+    </nav>
+  );
+
+  const isAdmin = user.rolle === "ADMIN";
 
   return (
     <nav className="bg-brand-600 text-white shadow">
@@ -31,8 +43,28 @@ export default function NavBar() {
           </>
         ) : (
           <>
-            <NavLink to="/tn/dashboard" className={linkCls}>Übersicht</NavLink>
-            <NavLink to="/tn/hilfe"     className={linkCls}>Hilfe</NavLink>
+            {/* Dashboard = /tn/dashboard ohne tab-param */}
+            <NavLink to="/tn/dashboard"
+              className={() => {
+                const active = !searchParams.get("tab");
+                return `px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  active ? "bg-white/20 text-white" : "text-white/80 hover:text-white hover:bg-white/10"}`;
+              }}>
+              Dashboard
+            </NavLink>
+            {/* One tab per Erhebung */}
+            {meineGruppen.map(g => (
+              <NavLink key={g.id}
+                to={`/tn/dashboard?tab=${g.id}`}
+                className={() => {
+                  const active = searchParams.get("tab") === String(g.id);
+                  return `px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    active ? "bg-white/20 text-white" : "text-white/80 hover:text-white hover:bg-white/10"}`;
+                }}>
+                {g.name}
+              </NavLink>
+            ))}
+            <NavLink to="/tn/hilfe" className={linkCls}>Hilfe</NavLink>
           </>
         )}
 

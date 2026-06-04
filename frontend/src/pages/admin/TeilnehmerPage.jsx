@@ -92,7 +92,7 @@ export default function TeilnehmerPage() {
       </div>
 
       {/* Tabelle */}
-      <div className="card overflow-hidden p-0">
+      <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
