@@ -71,14 +71,14 @@ def seed_default_data() -> None:
         raumtyp_by_name = {r.name: r for r in Raumtyp.query.all()}
         for sort_order, name, farbe, raumtyp_name, beschreibung in KATEGORIEN:
             raumtyp = raumtyp_by_name.get(raumtyp_name)
-            db.session.add(
-                Kategorie(
-                    name=name,
-                    farbe=farbe,
-                    beschreibung=beschreibung,
-                    raumtyp_id=raumtyp.id if raumtyp else None,
-                    sort_order=sort_order,
-                )
+            k = Kategorie(
+                name=name,
+                farbe=farbe,
+                beschreibung=beschreibung,
+                sort_order=sort_order,
             )
+            if raumtyp:
+                k.raumtypen.append(raumtyp)
+            db.session.add(k)
 
     db.session.commit()

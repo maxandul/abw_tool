@@ -278,10 +278,18 @@ function WeekGrid({ weekStart, periodStart, periodEnd, eintraege, readonly, kate
             const selH   = sel ? minutesToY(sel.bisMin) - selTop : 0;
             const selDur = sel ? sel.bisMin - sel.vonMin : 0;
             return (
-              <div key={d}
-                className={`border-r border-slate-100 last:border-0 relative ${inPeriod && !readonly ? "cursor-crosshair" : "cursor-default"}`}
+                <div key={d}
+                className={`border-r border-slate-100 last:border-0 relative cursor-default`}
                 style={{ height: GRID_H, background: !inPeriod ? "#f8fafc" : undefined }}
-                onMouseDown={(e) => inPeriod && onDayMouseDown(e, d, gridRef.current)}>
+                onMouseDown={(e) => inPeriod && onDayMouseDown(e, d, gridRef.current)}
+                onMouseMove={(e) => {
+                  if (!inPeriod || readonly) return;
+                  const rect = gridRef.current?.getBoundingClientRect();
+                  if (!rect) return;
+                  const y = e.clientY - rect.top + gridRef.current.scrollTop;
+                  onHoverSlot({ day: ds, min: snapMin(yToMinutes(y)) });
+                }}
+                onMouseLeave={() => onHoverSlot(null)}>
                 {/* Hour / quarter lines */}
                 {Array.from({ length: HOURS }, (_, i) => (
                   <div key={i} className="absolute w-full border-t border-slate-100" style={{ top: i * (SLOTS / HOURS) * ROW_H }} />
@@ -293,22 +301,34 @@ function WeekGrid({ weekStart, periodStart, periodEnd, eintraege, readonly, kate
                 {!inPeriod && (
                   <div className="absolute inset-0 bg-slate-100/60 pointer-events-none" />
                 )}
-                {/* Hover highlight */}
+                {/* Hover: single slot highlight */}
                 {inPeriod && !readonly && hoverSlot?.day === ds && !selection && (
-                  <div className="absolute inset-x-0 pointer-events-none"
-                    style={{ top: minutesToY(hoverSlot.min), height: ROW_H, background: "rgba(99,102,241,0.08)" }} />
+                  <div className="absolute inset-x-px pointer-events-none rounded-sm"
+                    style={{ top: minutesToY(hoverSlot.min) + 1, height: ROW_H - 1, background: "rgba(99,102,241,0.15)" }} />
                 )}
-                {/* Drag selection */}
-                {sel && (
-                  <div className="absolute left-0.5 right-0.5 rounded pointer-events-none z-20 flex items-center justify-center"
-                    style={{ top: selTop, height: Math.max(selH, ROW_H), background: "rgba(99,102,241,0.22)", border: "1.5px dashed #6366f1" }}>
-                    {selDur >= SLOT_MIN && (
-                      <span className="text-indigo-700 font-semibold bg-white/80 px-1 rounded text-xs">
-                        {fmtTime(sel.vonMin)}–{fmtTime(sel.bisMin)} ({selDur}min)
-                      </span>
-                    )}
-                  </div>
-                )}
+                {/* Drag selection: individual slot blocks */}
+                {sel && (() => {
+                  const blocks = [];
+                  for (let m = sel.vonMin; m < sel.bisMin; m += SLOT_MIN) {
+                    blocks.push(
+                      <div key={m} className="absolute inset-x-px pointer-events-none rounded-sm z-20"
+                        style={{ top: minutesToY(m) + 1, height: ROW_H - 1, background: "rgba(99,102,241,0.35)" }} />
+                    );
+                  }
+                  // Time label at top of selection
+                  if (selDur >= SLOT_MIN) {
+                    blocks.push(
+                      <div key="label" className="absolute left-0.5 right-0.5 pointer-events-none z-30 flex justify-center"
+                        style={{ top: selTop - 1 }}>
+                        <span className="text-indigo-700 font-semibold bg-white/95 border border-indigo-200 px-1.5 py-px rounded shadow-sm"
+                          style={{ fontSize: "0.6rem", whiteSpace: "nowrap" }}>
+                          {fmtTime(sel.vonMin)}–{fmtTime(sel.bisMin)} · {selDur}min
+                        </span>
+                      </div>
+                    );
+                  }
+                  return blocks;
+                })()}
                 {/* Entries */}
                 {dayBlocks(d)}
               </div>

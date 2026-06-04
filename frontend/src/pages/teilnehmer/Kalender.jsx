@@ -457,10 +457,9 @@ export default function Kalender({ gruppeId: gruppeIdProp, zeitraumVon, zeitraum
                 const ds = dateStr(d);
                 const sel = selection?.day === ds ? selection : null;
                 const selTop = sel ? minutesToY(sel.vonMin) : 0;
-                const selH   = sel ? minutesToY(sel.bisMin) - selTop : 0;
                 const selDur = sel ? sel.bisMin - sel.vonMin : 0;
                 return (
-                  <div key={d} className={`border-r border-slate-100 last:border-0 relative cursor-crosshair`}
+                  <div key={d} className="border-r border-slate-100 last:border-0 relative cursor-default"
                     style={{ height: GRID_H }}
                     onMouseDown={(e) => onMouseDown(e, d)}
                     onMouseMove={(e) => handleGridMouseMove(e, d)}
@@ -472,22 +471,33 @@ export default function Kalender({ gruppeId: gruppeIdProp, zeitraumVon, zeitraum
                     {Array.from({ length: SLOTS }, (_, i) => i % 4 !== 0 && (
                       <div key={i} className="absolute w-full border-t border-slate-50" style={{ top: i * ROW_H }} />
                     ))}
-                    {/* Hover column highlight */}
+                    {/* Hover: single slot highlight */}
                     {!readonly && hoverSlot?.day === ds && !selection && (
-                      <div className="absolute inset-x-0 pointer-events-none"
-                        style={{ top: minutesToY(hoverSlot.min), height: ROW_H, background: "rgba(99,102,241,0.08)" }} />
+                      <div className="absolute inset-x-px pointer-events-none rounded-sm"
+                        style={{ top: minutesToY(hoverSlot.min) + 1, height: ROW_H - 1, background: "rgba(99,102,241,0.15)" }} />
                     )}
-                    {/* Drag selection overlay */}
-                    {sel && (
-                      <div className="absolute left-0.5 right-0.5 rounded pointer-events-none z-20 flex items-center justify-center"
-                        style={{ top: selTop, height: Math.max(selH, ROW_H), background: "rgba(99,102,241,0.25)", border: "1.5px dashed #6366f1" }}>
-                        {selDur >= SLOT_MIN && (
-                          <span className="text-indigo-700 font-semibold bg-white/80 px-1 rounded text-xs">
-                            {fmtTime(sel.vonMin)}–{fmtTime(sel.bisMin)} ({selDur}min)
-                          </span>
-                        )}
-                      </div>
-                    )}
+                    {/* Drag selection: individual blocks + label */}
+                    {sel && (() => {
+                      const blocks = [];
+                      for (let m = sel.vonMin; m < sel.bisMin; m += SLOT_MIN) {
+                        blocks.push(
+                          <div key={m} className="absolute inset-x-px pointer-events-none rounded-sm z-20"
+                            style={{ top: minutesToY(m) + 1, height: ROW_H - 1, background: "rgba(99,102,241,0.35)" }} />
+                        );
+                      }
+                      if (selDur >= SLOT_MIN) {
+                        blocks.push(
+                          <div key="label" className="absolute left-0.5 right-0.5 pointer-events-none z-30 flex justify-center"
+                            style={{ top: selTop - 1 }}>
+                            <span className="text-indigo-700 font-semibold bg-white/95 border border-indigo-200 px-1.5 py-px rounded shadow-sm"
+                              style={{ fontSize: "0.6rem", whiteSpace: "nowrap" }}>
+                              {fmtTime(sel.vonMin)}–{fmtTime(sel.bisMin)} · {selDur}min
+                            </span>
+                          </div>
+                        );
+                      }
+                      return blocks;
+                    })()}
                     {/* Entries */}
                     {dayBlocks(d)}
                   </div>
