@@ -29,10 +29,11 @@ export default function HilfePageAdmin() {
         <P>Unter <em>Erhebungen</em> kannst du Erhebungen erstellen, bearbeiten und deren Lebenszyklus steuern:</P>
         <ul className="list-disc list-inside space-y-1 pl-2">
           <Li><strong>Neue Erhebung:</strong> Name, Zeitraum (von/bis), Sharing-Ratio und optionaler Standort-Hinweis.</Li>
-          <Li><strong>Einladungslink kopieren:</strong> Einmaligen Registrierungslink für Teilnehmer erzeugen und teilen.</Li>
+          <Li><strong>Einladungslink kopieren:</strong> Erzeugt einen einmaligen Registrierungslink. Dieser Link ist nur für die <strong>Erstregistrierung</strong> gültig – jede Person kann ihn nur einmal verwenden.</Li>
           <Li><strong>Abschliessen / Wieder öffnen:</strong> Steuert, ob Teilnehmer noch Einträge erfassen können.</Li>
           <Li><strong>Archivieren:</strong> Erhebung für immer deaktivieren (nur wenn abgeschlossen). Erfordert Bestätigung.</Li>
         </ul>
+        <P>Für den täglichen Login der Teilnehmenden gilt: Den <strong>Login-Link</strong> (<code className="text-xs bg-slate-100 px-1 rounded">http://SERVERNAME:5000</code>) per E-Mail oder Teams kommunizieren – nicht den Einladungslink. Wer an mehreren Erhebungen teilnimmt, kann manuell unter <em>Teilnehmer</em> hinzugefügt werden (kein neuer Registrierungslink nötig).</P>
       </Section>
 
       <Section title="Teilnehmer verwalten">

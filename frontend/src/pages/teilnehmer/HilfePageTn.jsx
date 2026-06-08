@@ -59,6 +59,11 @@ export default function HilfePageTn() {
         <P><strong>Was passiert nach dem Abschluss?</strong> Wenn die Erhebung vom Administrator abgeschlossen wird, können keine neuen Einträge mehr gemacht werden. Du siehst deine Einträge noch als Archiv.</P>
         <P><strong>Ich habe meinen PIN vergessen.</strong> Bitte wende dich an den Administrator, der deinen PIN zurücksetzen kann.</P>
         <P><strong>Welche Zeitspannen soll ich erfassen?</strong> Erfasse alle Tätigkeiten, für die es eine Kategorie gibt – also alle im Raster aufgeführten Tätigkeitstypen. Zeiträume ohne passende Kategorie (z. B. Pausen) musst du nicht zwingend eintragen.</P>
+        <P><strong>Welchen Link soll ich verwenden?</strong> Du hast zwei verschiedene Links erhalten:</P>
+        <ul className="list-disc list-inside space-y-1 pl-2">
+          <Li><strong>Einladungslink</strong> (z. B. <code className="text-xs bg-slate-100 px-1 rounded">/registrierung/…</code>) – nur einmalig zur Erstregistrierung verwenden. Danach ist dieser Link für dich ungültig.</Li>
+          <Li><strong>Login-Link</strong> (z. B. <code className="text-xs bg-slate-100 px-1 rounded">http://SERVERNAME:5000</code>) – diesen Link verwendest du für jeden weiteren Zugriff. Lesezeichen setzen empfohlen.</Li>
+        </ul>
       </Section>
 
       {admins.length > 0 && (
