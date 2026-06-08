@@ -11,3 +11,6 @@ echo Lokaler Zugriff: http://localhost:5000
 echo.
 start http://localhost:5000
 python backend\run.py
+echo.
+echo === Server beendet (Exit-Code: %ERRORLEVEL%) ===
+pause
