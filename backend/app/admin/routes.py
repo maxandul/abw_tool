@@ -2,9 +2,11 @@
 
 from flask import Blueprint, request
 
-from app.helpers import admin_required, err, ok
+from app.helpers import admin_required, err, login_required, ok
 from app.utils import ValidationError
-from services import gruppe_service, kategorie_service, raumtyp_service
+from extensions import db
+from models import Rolle, User
+from services import auth_service, gruppe_service, kategorie_service, raumtyp_service
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 
@@ -293,3 +295,74 @@ def reaktivieren_raumtyp(raumtyp_id: int):
         return ok({"message": f"Raumtyp '{r.name}' wurde reaktiviert."})
     except ValidationError as exc:
         return err(str(exc), 400)
+
+
+# ---------------------------------------------------------------------------
+# Admin-Verwaltung
+# ---------------------------------------------------------------------------
+
+@admin_bp.route("/admins", methods=["GET"])
+@admin_required
+def get_admins():
+    """List all admin accounts."""
+    admins = User.query.filter_by(rolle=Rolle.ADMIN).order_by(User.created_at).all()
+    return ok([u.to_dict() for u in admins])
+
+
+@admin_bp.route("/admins", methods=["POST"])
+@admin_required
+def post_admin():
+    """Create a new admin with a temporary PIN."""
+    body = request.get_json(silent=True) or {}
+    email = (body.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        return err("Bitte eine gültige E-Mail-Adresse angeben.", 400)
+    if User.query.filter_by(email=email).first():
+        return err("Diese E-Mail-Adresse ist bereits registriert.", 409)
+
+    temp_pin = auth_service.generate_temp_pin()
+    user = User(
+        email=email,
+        pin_hash=auth_service.hash_pin(temp_pin),
+        rolle=Rolle.ADMIN,
+        aktiv=True,
+        pin_temporaer=True,
+    )
+    db.session.add(user)
+    db.session.commit()
+    return ok({"user": user.to_dict(), "temp_pin": temp_pin}, 201)
+
+
+@admin_bp.route("/admins/<int:user_id>/pin-reset", methods=["POST"])
+@admin_required
+def reset_admin_pin(user_id: int):
+    """Reset an admin's PIN to a new temporary PIN."""
+    user = db.session.get(User, user_id)
+    if user is None or user.rolle != Rolle.ADMIN:
+        return err("Admin nicht gefunden.", 404)
+
+    temp_pin = auth_service.generate_temp_pin()
+    user.pin_hash = auth_service.hash_pin(temp_pin)
+    user.pin_temporaer = True
+    db.session.commit()
+    return ok({"temp_pin": temp_pin})
+
+
+@admin_bp.route("/admins/<int:user_id>", methods=["DELETE"])
+@admin_required
+def delete_admin(user_id: int):
+    """Delete an admin account. Cannot delete own account or last admin."""
+    current = auth_service.current_user()
+    if current and current.id == user_id:
+        return err("Du kannst deinen eigenen Account nicht löschen.", 400)
+
+    user = db.session.get(User, user_id)
+    if user is None or user.rolle != Rolle.ADMIN:
+        return err("Admin nicht gefunden.", 404)
+
+    if User.query.filter_by(rolle=Rolle.ADMIN).count() <= 1:
+        return err("Der letzte Admin-Account kann nicht gelöscht werden.", 400)
+
+    db.session.delete(user)
+    db.session.commit()
+    return ok({"message": "Admin gelöscht."})

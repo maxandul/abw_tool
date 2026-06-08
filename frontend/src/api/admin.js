@@ -37,6 +37,12 @@ export const updateRaumtyp      = (id, b)  => put(`/api/admin/raumtypen/${id}`, 
 export const deleteRaumtyp      = (id)     => del(`/api/admin/raumtypen/${id}`);
 export const reactivateRaumtyp  = (id)     => post(`/api/admin/raumtypen/${id}/reaktivieren`, {});
 
+// Admin-Verwaltung
+export const getAdmins       = ()       => get("/api/admin/admins");
+export const createAdmin     = (body)   => post("/api/admin/admins", body);
+export const resetAdminPin   = (id)     => post(`/api/admin/admins/${id}/pin-reset`, {});
+export const deleteAdmin     = (id)     => del(`/api/admin/admins/${id}`);
+
 // Auswertung
 export const getLastprofil  = (p) => get(`/api/auswertung/lastprofil?${p}`);
 export const getRaumbedarf  = (p) => get(`/api/auswertung/raumbedarf?${p}`);

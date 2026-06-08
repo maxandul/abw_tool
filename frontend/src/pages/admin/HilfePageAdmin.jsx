@@ -30,7 +30,6 @@ export default function HilfePageAdmin() {
         <ul className="list-disc list-inside space-y-1 pl-2">
           <Li><strong>Neue Erhebung:</strong> Name, Zeitraum (von/bis), Sharing-Ratio und optionaler Standort-Hinweis.</Li>
           <Li><strong>Einladungslink kopieren:</strong> Einmaligen Registrierungslink für Teilnehmer erzeugen und teilen.</Li>
-          <Li><strong>Link zurücksetzen:</strong> Alten Link ungültig machen und neuen generieren.</Li>
           <Li><strong>Abschliessen / Wieder öffnen:</strong> Steuert, ob Teilnehmer noch Einträge erfassen können.</Li>
           <Li><strong>Archivieren:</strong> Erhebung für immer deaktivieren (nur wenn abgeschlossen). Erfordert Bestätigung.</Li>
         </ul>
@@ -63,6 +62,15 @@ export default function HilfePageAdmin() {
       <Section title="Auswertung">
         <P>Wähle eine oder mehrere Erhebungen aus dem Dropdown. Der aktive Vergleichsmodus ermöglicht das Überlagern mehrerer Erhebungen per Chip-Auswahl.</P>
         <P>Die Auswertung zeigt Zeitanteile pro Kategorie sowie tagesweise Verteilungen. Abgeschlossene und offene Erhebungen können verglichen werden.</P>
+      </Section>
+
+      <Section title="Administratoren verwalten">
+        <P>Unter <em>Admins</em> siehst du alle bestehenden Admin-Accounts und kannst neue anlegen oder PINs zurücksetzen.</P>
+        <ul className="list-disc list-inside space-y-1 pl-2">
+          <Li><strong>Neuer Admin:</strong> E-Mail-Adresse eingeben – ein temporärer PIN wird generiert und einmalig angezeigt. Die Person gibt ihn beim ersten Login ein und wählt danach einen eigenen PIN.</Li>
+          <Li><strong>PIN zurücksetzen:</strong> Generiert einen neuen temporären PIN, der der Person manuell mitgeteilt werden muss.</Li>
+          <Li><strong>Löschen:</strong> Entfernt einen Admin-Account (nicht möglich für den eigenen Account oder den letzten verbleibenden Admin).</Li>
+        </ul>
       </Section>
     </div>
   );

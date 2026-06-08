@@ -4,6 +4,7 @@ from flask import Blueprint, request
 
 from app.helpers import err, login_required, ok
 from extensions import db
+from models import Rolle, User
 from services import auth_service
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
@@ -87,6 +88,14 @@ def me():
     """Return the currently logged-in user, or null."""
     user = auth_service.current_user()
     return ok({"user": user.to_dict() if user else None})
+
+
+@auth_bp.route("/kontakt", methods=["GET"])
+@login_required
+def kontakt():
+    """Return admin email addresses for the contact section in the help page."""
+    admins = User.query.filter_by(rolle=Rolle.ADMIN, aktiv=True).order_by(User.email).all()
+    return ok({"admins": [u.email for u in admins]})
 
 
 @auth_bp.route("/pin-aendern", methods=["POST"])

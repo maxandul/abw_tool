@@ -1,4 +1,15 @@
+import { useEffect, useState } from "react";
+import { getKontakt } from "../../api/auth";
+
 export default function HilfePageTn() {
+  const [admins, setAdmins] = useState([]);
+
+  useEffect(() => {
+    getKontakt().then(({ data }) => {
+      if (data?.admins) setAdmins(data.admins);
+    });
+  }, []);
+
   const Section = ({ title, children }) => (
     <section className="card space-y-3">
       <h2 className="text-base font-semibold text-slate-800">{title}</h2>
@@ -26,12 +37,11 @@ export default function HilfePageTn() {
       </Section>
 
       <Section title="Kalender – Einträge erfassen">
-        <P>Im Kalender erfasst du deine Tätigkeiten tag- und stundenweise:</P>
+        <P>Im Kalender sind alle Kalenderwochen des Erhebungszeitraums fest untereinander dargestellt. Tage ausserhalb des Erhebungszeitraums sind ausgegraut und nicht bearbeitbar.</P>
         <ul className="list-disc list-inside space-y-1 pl-2">
           <Li><strong>Klicken und Ziehen:</strong> Halte die Maustaste auf einem freien Zeitslot gedrückt und ziehe nach unten, um eine Zeitspanne auszuwählen. Der blaue Bereich zeigt dir Startzeit, Endzeit und Dauer.</Li>
           <Li><strong>Kategorie wählen:</strong> Im erscheinenden Formular wählst du die passende Tätigkeitskategorie. Kategorien sind nach Vertraulichkeit gruppiert.</Li>
           <Li><strong>Eintrag bearbeiten / löschen:</strong> Klicke auf einen bestehenden farbigen Block, um ihn zu bearbeiten oder zu löschen.</Li>
-          <Li><strong>Navigation:</strong> Mit «Zurück» und «Vor» wechselst du wochenweise. Die Navigation ist auf den Zeitraum der Erhebung beschränkt.</Li>
         </ul>
       </Section>
 
@@ -48,8 +58,24 @@ export default function HilfePageTn() {
         <P><strong>Was ist eine Erhebung?</strong> Eine Erhebung ist ein definierter Zeitraum, in dem du deine Tätigkeiten erfasst. Du kannst mehreren Erhebungen zugeordnet sein.</P>
         <P><strong>Was passiert nach dem Abschluss?</strong> Wenn die Erhebung vom Administrator abgeschlossen wird, können keine neuen Einträge mehr gemacht werden. Du siehst deine Einträge noch als Archiv.</P>
         <P><strong>Ich habe meinen PIN vergessen.</strong> Bitte wende dich an den Administrator, der deinen PIN zurücksetzen kann.</P>
-        <P><strong>Welche Zeitspannen soll ich erfassen?</strong> Erfasse alle Tätigkeiten während der Arbeitszeit – auch Pausen, Reisen oder administrative Aufgaben – lückenlos im 15-Minuten-Raster.</P>
+        <P><strong>Welche Zeitspannen soll ich erfassen?</strong> Erfasse alle Tätigkeiten, für die es eine Kategorie gibt – also alle im Raster aufgeführten Tätigkeitstypen. Zeiträume ohne passende Kategorie (z. B. Pausen) musst du nicht zwingend eintragen.</P>
       </Section>
+
+      {admins.length > 0 && (
+        <Section title="Kontakt">
+          <P>Bei Fragen oder Problemen wende dich an die zuständigen Administratoren:</P>
+          <ul className="space-y-1 pl-2">
+            {admins.map(email => (
+              <li key={email} className="text-sm">
+                <a href={`mailto:${email}`}
+                  className="text-brand-600 hover:underline font-medium">
+                  {email}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
     </div>
   );
 }

@@ -23,6 +23,7 @@ import AuswertungPage from "./pages/admin/AuswertungPage";
 import TnMain       from "./pages/teilnehmer/TnMain";
 import HilfePageTn  from "./pages/teilnehmer/HilfePageTn";
 import HilfePageAdmin from "./pages/admin/HilfePageAdmin";
+import AdminsPage     from "./pages/admin/AdminsPage";
 
 function Root() {
   const { user } = useAuth();
@@ -64,6 +65,7 @@ export default function App() {
               <Route path="/admin/kategorien"  element={<RequireAdmin><KategorienPage /></RequireAdmin>} />
               <Route path="/admin/raumtypen"   element={<RequireAdmin><RaumtypenPage /></RequireAdmin>} />
               <Route path="/admin/auswertung"  element={<RequireAdmin><AuswertungPage /></RequireAdmin>} />
+              <Route path="/admin/admins"      element={<RequireAdmin><AdminsPage /></RequireAdmin>} />
               <Route path="/admin/hilfe"       element={<RequireAdmin><HilfePageAdmin /></RequireAdmin>} />
 
               {/* Teilnehmer */}
