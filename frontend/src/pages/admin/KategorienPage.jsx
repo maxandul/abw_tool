@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   getKategorien, getRaumtypen, createKategorie, updateKategorie, deleteKategorie, reactivateKategorie
 } from "../../api/admin";
@@ -132,6 +132,25 @@ export default function KategorienPage() {
   const [modal, setModal]           = useState(null);
   const [confirm, setConfirm]       = useState(null);
 
+  const scrollRef = useRef(null);
+  const drag = useRef({ active: false, startX: 0, scrollLeft: 0 });
+
+  const onDragStart = (e) => {
+    if (e.button !== 0) return;
+    drag.current = { active: true, startX: e.clientX, scrollLeft: scrollRef.current.scrollLeft };
+    scrollRef.current.style.cursor = "grabbing";
+  };
+  const onDragMove = (e) => {
+    if (!drag.current.active) return;
+    e.preventDefault();
+    const dx = e.clientX - drag.current.startX;
+    scrollRef.current.scrollLeft = drag.current.scrollLeft - dx;
+  };
+  const onDragEnd = () => {
+    drag.current.active = false;
+    if (scrollRef.current) scrollRef.current.style.cursor = "";
+  };
+
   const load = () => {
     setLoading(true);
     Promise.all([getKategorien(), getRaumtypen()]).then(([k, r]) => {
@@ -172,13 +191,15 @@ export default function KategorienPage() {
       </div>
       {error && <Alert>{error}</Alert>}
 
-      <div className="card overflow-x-auto p-0">
+      <div className="card overflow-x-auto p-0 select-none" ref={scrollRef}
+        onMouseDown={onDragStart} onMouseMove={onDragMove}
+        onMouseUp={onDragEnd} onMouseLeave={onDragEnd}>
         <table className="w-full">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th className="table-th w-8"></th>
-              <th className="table-th">Name</th>
-              <th className="table-th">Beschreibung</th>
+              <th className="table-th w-10 sticky left-0 z-20 bg-slate-50 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-slate-200"></th>
+              <th className="table-th sticky left-10 z-20 bg-slate-50 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-slate-200">Name</th>
+              <th className="table-th min-w-[220px]">Beschreibung</th>
               <th className="table-th">Vertraulichkeit</th>
               <th className="table-th">Gruppe</th>
               <th className="table-th">Raumtyp</th>
@@ -190,12 +211,12 @@ export default function KategorienPage() {
           <tbody className="divide-y divide-slate-100">
             {kategorien.map(k => (
               <tr key={k.id} className={!k.aktiv ? "opacity-50" : ""}>
-                <td className="table-td">
+                <td className="table-td sticky left-0 z-10 bg-white">
                   <span className="inline-block w-5 h-5 rounded" style={{ background: k.farbe ?? "#ccc" }} />
                 </td>
-                <td className="table-td font-medium">{k.name}</td>
-                <td className="table-td text-xs text-slate-500 max-w-[180px] truncate"
-                  title={k.beschreibung ?? ""}>{k.beschreibung || "–"}</td>
+                <td className="table-td font-medium sticky left-10 z-10 bg-white border-r border-slate-100">{k.name}</td>
+                <td className="table-td text-xs text-slate-500 whitespace-normal min-w-[220px]">
+                  {k.beschreibung || "–"}</td>
                 <td className="table-td text-xs text-slate-500">
                   {k.vertraulichkeit
                     ? { OFFEN: "Offen", INTERN: "Intern", VERTRAULICH: "Vertraulich" }[k.vertraulichkeit] ?? k.vertraulichkeit

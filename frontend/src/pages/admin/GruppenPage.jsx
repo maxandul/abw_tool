@@ -108,7 +108,20 @@ export default function GruppenPage() {
 
   const copyLink = (token) => {
     const url = `${window.location.origin}/registrierung/${token}`;
-    navigator.clipboard.writeText(url);
+    const doFallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      ta.style.cssText = "position:fixed;opacity:0;top:0;left:0";
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    };
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).catch(doFallback);
+    } else {
+      doFallback();
+    }
     setCopiedId(token);
     setTimeout(() => setCopiedId(null), 2000);
   };
