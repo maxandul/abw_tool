@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { fmtDate } from "../../utils/format";
 import { CSV_TEMPLATE, downloadCsv, parseTeilnehmerCsv } from "../../utils/csv";
 import { TEILNEHMER_TEMP_PIN } from "../../constants";
@@ -331,6 +331,12 @@ export default function TeilnehmerPage() {
                 <td className="table-td">{tn.anzahl_eintraege}</td>
                 <td className="table-td">
                   <div className="flex gap-2 flex-wrap">
+                    <Link
+                      className="btn-ghost text-xs text-brand-600"
+                      to={`/admin/gruppen/${gruppeId}/teilnehmer/${tn.user_id}/eintraege`}
+                    >
+                      Einträge
+                    </Link>
                     <button
                       className="btn-ghost text-xs"
                       onClick={() =>

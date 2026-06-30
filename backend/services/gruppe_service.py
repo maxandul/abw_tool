@@ -120,6 +120,11 @@ def gruppe_stats(gruppe: Gruppe) -> dict:
     member_user_ids = [m.user_id for m in gruppe.mitglieder]
     anzahl_teilnehmer = len(member_user_ids)
 
+    # Sum of employment levels expressed in full-time equivalents (e.g. 80% = 0.8).
+    # Used for expected-hours/completeness metrics so part-time staff are not
+    # counted as full-time. Defaults to 100% when unset.
+    fte_summe = sum((m.beschaeftigungsgrad or 100.0) for m in gruppe.mitglieder) / 100.0
+
     status_counts = {s.value: 0 for s in EinreichungStatus}
     einreichungen = {
         e.user_id: e.status
@@ -145,6 +150,7 @@ def gruppe_stats(gruppe: Gruppe) -> dict:
 
     return {
         "anzahl_teilnehmer": anzahl_teilnehmer,
+        "fte_summe": round(fte_summe, 2),
         "status_counts": status_counts,
         "teilnehmer_ohne_eintraege": ohne_eintraege,
         "total_minuten_erfasst": _minuten_erfasst(gruppe.id),

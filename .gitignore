@@ -12,6 +12,9 @@ __pycache__/
 *.db
 backend/data/*.db
 
+# Logs
+*.log
+
 # Backups
 backup/
 

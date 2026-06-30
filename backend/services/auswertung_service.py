@@ -9,14 +9,34 @@ from app.utils import ValidationError, time_to_minutes
 from constants import (
     ARBEITSTAGE,
     SLOT_MINUTES,
+    SOLL_STUNDEN_PRO_TAG,
     TAG_START_MINUTEN,
     TAG_END_MINUTEN,
+    VOLLSTAENDIGKEIT_SCHWELLE,
 )
 from extensions import db
 from models import Eintrag, Gruppe, GruppenMitglied, Kategorie, Taetigkeitsgruppe
+from models.einreichung import Einreichung, EinreichungStatus
 from models.kategorie import TAETIGKEITSGRUPPE_LABELS
 
 TeilnehmerFilter = dict[str, list]
+
+# A participant counts as "eingereicht" (included in analysis) when their
+# submission is in one of these states. IN_BEARBEITUNG/OFFEN are excluded:
+# their data is incomplete or being edited and would distort the analysis.
+EINGEREICHT_STATUS = (
+    EinreichungStatus.EINGEREICHT,
+    EinreichungStatus.ABGESCHLOSSEN,
+)
+
+
+def _eingereichte_paare(gruppe_ids: list[int]) -> set[tuple[int, int]]:
+    """Return the set of (gruppe_id, user_id) pairs that have submitted."""
+    rows = Einreichung.query.filter(
+        Einreichung.gruppe_id.in_(gruppe_ids),
+        Einreichung.status.in_(EINGEREICHT_STATUS),
+    ).all()
+    return {(r.gruppe_id, r.user_id) for r in rows}
 
 
 def _teilnehmer_filter_active(flt: TeilnehmerFilter | None) -> bool:
@@ -57,6 +77,46 @@ def _eintrag_matches_teilnehmer_filter(
     ):
         return False
     return True
+
+
+def _mitglied_matches_teilnehmer_filter(
+    mitglied: GruppenMitglied, flt: TeilnehmerFilter | None
+) -> bool:
+    if not _teilnehmer_filter_active(flt):
+        return True
+    if flt.get("funktionen") and (mitglied.funktion or "") not in flt["funktionen"]:
+        return False
+    if flt.get("organisationseinheiten") and (
+        mitglied.organisationseinheit or ""
+    ) not in flt["organisationseinheiten"]:
+        return False
+    if flt.get("beschaeftigungsgrade") and (
+        mitglied.beschaeftigungsgrad not in flt["beschaeftigungsgrade"]
+    ):
+        return False
+    return True
+
+
+def _mitglied_name(mitglied: GruppenMitglied) -> str:
+    name = " ".join(p for p in (mitglied.vorname, mitglied.nachname) if p).strip()
+    if name:
+        return name
+    if mitglied.user and mitglied.user.email:
+        return mitglied.user.email
+    return f"Teilnehmer {mitglied.user_id}"
+
+
+def _zaehle_arbeitstage(
+    datum_von: date, datum_bis: date, wochentage: list[int] | None
+) -> int:
+    tage = set(wochentage) if wochentage else set(ARBEITSTAGE)
+    anzahl = 0
+    d = datum_von
+    while d <= datum_bis:
+        if d.weekday() in tage:
+            anzahl += 1
+        d += timedelta(days=1)
+    return anzahl
 
 
 def get_teilnehmer_filter_optionen(gruppe_ids: list[int]) -> dict:
@@ -134,6 +194,10 @@ def _load_eintraege(
         .filter(Eintrag.datum <= datum_bis)
     )
     eintraege = query.all()
+
+    # Only entries from participants who have submitted are part of the analysis.
+    eingereicht = _eingereichte_paare(gruppe_ids)
+    eintraege = [e for e in eintraege if (e.gruppe_id, e.user_id) in eingereicht]
 
     lookup = (
         _membership_lookup(gruppe_ids)
@@ -420,4 +484,188 @@ def berechne_kennzahlen(
         "stille_arbeit": round(stille_min / total_min * 100, 1) if total_min else 0.0,
         "kommunikative_arbeit": round(kommunikativ_min / total_min * 100, 1) if total_min else 0.0,
         "avg_anwesende": avg_anwesende,
+    }
+
+
+def berechne_sample(
+    gruppe_ids: list[int],
+    datum_von: date,
+    datum_bis: date,
+    wochentage: list[int] | None = None,
+    teilnehmer_filter: TeilnehmerFilter | None = None,
+) -> dict:
+    """Describe the (optionally filtered) data sample behind the analysis.
+
+    Only participants who have submitted ("eingereicht") are part of the
+    analysis. Returns how many of the eligible participants submitted, the FTE
+    sum and completeness of the submitted ones, plus those below the threshold.
+    """
+    gruppen = _get_gruppen(gruppe_ids)
+    flt = teilnehmer_filter or None
+
+    alle_mitglieder = GruppenMitglied.query.filter(
+        GruppenMitglied.gruppe_id.in_(gruppe_ids)
+    ).all()
+    sample_mitglieder = [
+        m for m in alle_mitglieder if _mitglied_matches_teilnehmer_filter(m, flt)
+    ]
+
+    eingereicht_paare = _eingereichte_paare(gruppe_ids)
+    eingereicht_mitglieder = [
+        m for m in sample_mitglieder
+        if (m.gruppe_id, m.user_id) in eingereicht_paare
+    ]
+
+    eintraege = _load_eintraege(
+        gruppe_ids, datum_von, datum_bis,
+        wochentage=wochentage, teilnehmer_filter=flt,
+    )
+    erfasst_pro_mitglied: dict[tuple[int, int], float] = defaultdict(float)
+    for e in eintraege:
+        erfasst_pro_mitglied[(e.gruppe_id, e.user_id)] += (
+            time_to_minutes(e.zeit_bis) - time_to_minutes(e.zeit_von)
+        )
+
+    arbeitstage = _zaehle_arbeitstage(datum_von, datum_bis, wochentage)
+    tagessoll_min = SOLL_STUNDEN_PRO_TAG * 60
+
+    fte_summe = 0.0
+    erfasste_minuten = 0.0
+    erwartete_minuten = 0.0
+    unter_schwelle = []
+
+    # FTE / completeness / threshold checks only consider submitted participants.
+    for m in eingereicht_mitglieder:
+        grad = (m.beschaeftigungsgrad or 100.0) / 100.0
+        fte_summe += grad
+        soll = arbeitstage * tagessoll_min * grad
+        ist = erfasst_pro_mitglied.get((m.gruppe_id, m.user_id), 0.0)
+        erwartete_minuten += soll
+        erfasste_minuten += ist
+        if soll > 0:
+            quote = ist / soll
+            if quote < VOLLSTAENDIGKEIT_SCHWELLE:
+                unter_schwelle.append({
+                    "user_id": m.user_id,
+                    "gruppe_id": m.gruppe_id,
+                    "name": _mitglied_name(m),
+                    "beschaeftigungsgrad": m.beschaeftigungsgrad,
+                    "vollstaendigkeit_prozent": round(quote * 100, 1),
+                })
+
+    unter_schwelle.sort(key=lambda r: r["vollstaendigkeit_prozent"])
+
+    vollstaendigkeit = (
+        round(erfasste_minuten / erwartete_minuten * 100, 1)
+        if erwartete_minuten
+        else 0.0
+    )
+
+    return {
+        "teilnehmer_im_sample": len(sample_mitglieder),
+        "eingereicht": len(eingereicht_mitglieder),
+        "nicht_eingereicht": len(sample_mitglieder) - len(eingereicht_mitglieder),
+        "fte_summe": round(fte_summe, 2),
+        "arbeitstage": arbeitstage,
+        "anzahl_gruppen": len(gruppen),
+        "zeitraum_von": datum_von.isoformat(),
+        "zeitraum_bis": datum_bis.isoformat(),
+        "erfasste_stunden": round(erfasste_minuten / 60, 1),
+        "erwartete_stunden": round(erwartete_minuten / 60, 1),
+        "vollstaendigkeit_prozent": vollstaendigkeit,
+        "schwelle_prozent": round(VOLLSTAENDIGKEIT_SCHWELLE * 100),
+        "teilnehmer_unter_schwelle": unter_schwelle,
+        "filter_aktiv": _teilnehmer_filter_active(flt),
+    }
+
+
+def export_rohdaten(
+    gruppe_ids: list[int],
+    datum_von: date,
+    datum_bis: date,
+) -> dict:
+    """Anonymous raw dataset for the self-contained interactive HTML export.
+
+    Contains everything needed to recompute Lastprofil, Bedarf, Anteile and
+    Stichprobe client-side, for the selected groups only. No names or e-mails
+    are included; participants are referenced by an opaque index. Only entries
+    of submitted ("eingereicht") participants are included.
+    """
+    gruppen = _get_gruppen(gruppe_ids)
+
+    mitglieder = GruppenMitglied.query.filter(
+        GruppenMitglied.gruppe_id.in_(gruppe_ids)
+    ).all()
+    eingereicht_paare = _eingereichte_paare(gruppe_ids)
+
+    # Stable anonymous index per membership (gruppe_id, user_id).
+    index_map: dict[tuple[int, int], int] = {}
+    teilnehmer = []
+    for m in mitglieder:
+        key = (m.gruppe_id, m.user_id)
+        idx = len(teilnehmer)
+        index_map[key] = idx
+        teilnehmer.append({
+            "i": idx,
+            "funktion": m.funktion or "",
+            "oe": m.organisationseinheit or "",
+            "grad": m.beschaeftigungsgrad if m.beschaeftigungsgrad is not None else 100.0,
+            "eingereicht": key in eingereicht_paare,
+        })
+
+    eintraege_raw = (
+        db.session.query(Eintrag)
+        .filter(Eintrag.gruppe_id.in_(gruppe_ids))
+        .filter(Eintrag.datum >= datum_von)
+        .filter(Eintrag.datum <= datum_bis)
+        .all()
+    )
+    eintraege = []
+    for e in eintraege_raw:
+        key = (e.gruppe_id, e.user_id)
+        if key not in eingereicht_paare:
+            continue
+        idx = index_map.get(key)
+        if idx is None:
+            continue
+        eintraege.append({
+            "t": idx,
+            "k": e.kategorie_id,
+            "wd": e.datum.weekday(),
+            "kw": _iso_kw(e.datum),
+            "von": time_to_minutes(e.zeit_von),
+            "bis": time_to_minutes(e.zeit_bis),
+        })
+
+    kategorien = [
+        {
+            "id": k.id,
+            "name": k.name,
+            "farbe": k.farbe,
+            "taetigkeitsgruppe": k.taetigkeitsgruppe.value,
+            "taetigkeitsgruppe_label": TAETIGKEITSGRUPPE_LABELS.get(
+                k.taetigkeitsgruppe, k.taetigkeitsgruppe.value
+            ),
+            "sort_order": k.sort_order,
+            "anwesend": k.taetigkeitsgruppe in ANWESEND_GRUPPEN,
+        }
+        for k in Kategorie.query.filter_by(aktiv=True)
+        .order_by(Kategorie.sort_order)
+        .all()
+    ]
+
+    return {
+        "gruppen_namen": [g.name for g in gruppen],
+        "anzahl_gruppen": len(gruppen),
+        "zeitraum_von": datum_von.isoformat(),
+        "zeitraum_bis": datum_bis.isoformat(),
+        "arbeitstage": _zaehle_arbeitstage(datum_von, datum_bis, None),
+        "soll_stunden_pro_tag": SOLL_STUNDEN_PRO_TAG,
+        "schwelle_prozent": round(VOLLSTAENDIGKEIT_SCHWELLE * 100),
+        "tag_start_minuten": TAG_START_MINUTEN,
+        "tag_end_minuten": TAG_END_MINUTEN,
+        "slot_minuten": SLOT_MINUTES,
+        "teilnehmer": teilnehmer,
+        "eintraege": eintraege,
+        "kategorien": kategorien,
     }

@@ -1,16 +1,29 @@
-# React + Vite
+# Frontend – Tätigkeitserhebung
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React-Frontend (Vite + Tailwind CSS) für das Tätigkeitserhebungs-Tool. Die vollständige Projekt- und Deployment-Dokumentation steht im [Haupt-README](../README.md).
 
-Currently, two official plugins are available:
+## Entwicklung
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```
+npm install
+npm run dev
+```
 
-## React Compiler
+Der Dev-Server läuft mit Hot-Reload und proxyt API-Aufrufe an das Flask-Backend auf `http://localhost:5000`.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Produktiv-Build
 
-## Expanding the ESLint configuration
+Nicht direkt hier bauen – stattdessen im Projekt-Root:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```
+build.bat
+```
+
+Das Skript baut das Frontend (`vite build`) und kopiert das Ergebnis nach `backend/static/`, von wo Flask es ausliefert. Veraltete Build-Artefakte werden dabei automatisch entfernt.
+
+## Struktur
+
+- `src/pages/admin/` – Admin-Bereich (Dashboard, Kategorien, Erhebungen, Teilnehmer, Auswertung)
+- `src/pages/teilnehmer/` – Teilnehmer-Bereich (Kalender-Erfassung, Hilfe)
+- `src/api/` – HTTP-Clients für die Backend-Endpunkte
+- `src/utils/` – geteilte Helfer (z. B. Tätigkeitsgruppen-Logik)

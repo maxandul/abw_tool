@@ -5,10 +5,16 @@ import socket
 from flask import Blueprint, request
 
 from app.helpers import admin_required, err, login_required, ok
-from app.utils import ValidationError
+from app.utils import ValidationError, parse_date
 from extensions import db
-from models import Rolle, User
-from services import auth_service, gruppe_service, kategorie_service, raumtyp_service
+from models import Gruppe, GruppenMitglied, Rolle, User
+from services import (
+    auth_service,
+    eintrag_service,
+    gruppe_service,
+    kategorie_service,
+    raumtyp_service,
+)
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 
@@ -209,6 +215,125 @@ def put_einreichung_status(user_id: int, gruppe_id: int):
             user_id, gruppe_id, body.get("status") or ""
         )
         return ok(result)
+    except ValidationError as exc:
+        return err(str(exc), 400)
+
+
+# ---------------------------------------------------------------------------
+# Teilnehmer-Einträge (Admin-Einsicht und -Bearbeitung im Namen des Teilnehmers)
+# ---------------------------------------------------------------------------
+
+def _get_mitglied(gruppe_id: int, user_id: int) -> GruppenMitglied:
+    mitglied = GruppenMitglied.query.filter_by(
+        gruppe_id=gruppe_id, user_id=user_id
+    ).first()
+    if mitglied is None:
+        raise ValidationError("Teilnehmer gehört nicht zu dieser Erhebung.")
+    return mitglied
+
+
+def _mitglied_anzeigename(mitglied: GruppenMitglied) -> str:
+    name = " ".join(p for p in (mitglied.vorname, mitglied.nachname) if p).strip()
+    if name:
+        return name
+    if mitglied.user and mitglied.user.email:
+        return mitglied.user.email
+    return f"Teilnehmer {mitglied.user_id}"
+
+
+@admin_bp.route(
+    "/gruppen/<int:gruppe_id>/teilnehmer/<int:user_id>/kontext", methods=["GET"]
+)
+@admin_required
+def admin_eintraege_kontext(gruppe_id: int, user_id: int):
+    """Group + participant metadata for the admin entry view."""
+    try:
+        mitglied = _get_mitglied(gruppe_id, user_id)
+    except ValidationError as exc:
+        return err(str(exc), 404)
+    gruppe = db.session.get(Gruppe, gruppe_id)
+    if gruppe is None:
+        return err("Erhebung nicht gefunden.", 404)
+    return ok({
+        "gruppe": {
+            "id": gruppe.id,
+            "name": gruppe.name,
+            "zeitraum_von": gruppe.zeitraum_von.isoformat() if gruppe.zeitraum_von else None,
+            "zeitraum_bis": gruppe.zeitraum_bis.isoformat() if gruppe.zeitraum_bis else None,
+            "aktiv": gruppe.aktiv,
+            "abgeschlossen": gruppe.abgeschlossen,
+        },
+        "teilnehmer": {
+            "user_id": mitglied.user_id,
+            "name": _mitglied_anzeigename(mitglied),
+            "email": mitglied.user.email if mitglied.user else None,
+            "beschaeftigungsgrad": mitglied.beschaeftigungsgrad,
+        },
+        "einreichung": eintrag_service.get_einreichung(user_id, gruppe_id),
+    })
+
+
+@admin_bp.route(
+    "/gruppen/<int:gruppe_id>/teilnehmer/<int:user_id>/eintraege", methods=["GET"]
+)
+@admin_required
+def admin_get_eintraege(gruppe_id: int, user_id: int):
+    """List a participant's entries within a date range."""
+    try:
+        _get_mitglied(gruppe_id, user_id)
+        datum_von = parse_date(request.args.get("datum_von") or "", "datum_von")
+        datum_bis = parse_date(request.args.get("datum_bis") or "", "datum_bis")
+    except ValidationError as exc:
+        return err(str(exc), 400)
+    return ok(
+        eintrag_service.list_eintraege(user_id, gruppe_id, datum_von, datum_bis)
+    )
+
+
+@admin_bp.route(
+    "/gruppen/<int:gruppe_id>/teilnehmer/<int:user_id>/eintraege", methods=["POST"]
+)
+@admin_required
+def admin_post_eintrag(gruppe_id: int, user_id: int):
+    """Create an entry on behalf of a participant (admin override)."""
+    try:
+        _get_mitglied(gruppe_id, user_id)
+        eintrag = eintrag_service.create_eintrag(
+            user_id, gruppe_id, request.get_json(silent=True) or {}, als_admin=True
+        )
+        return ok(eintrag.to_dict(), 201)
+    except ValidationError as exc:
+        return err(str(exc), 400)
+
+
+@admin_bp.route(
+    "/gruppen/<int:gruppe_id>/teilnehmer/<int:user_id>/eintraege/<int:eintrag_id>",
+    methods=["PUT"],
+)
+@admin_required
+def admin_put_eintrag(gruppe_id: int, user_id: int, eintrag_id: int):
+    """Update a participant's entry (admin override)."""
+    try:
+        _get_mitglied(gruppe_id, user_id)
+        eintrag = eintrag_service.update_eintrag(
+            user_id, eintrag_id, request.get_json(silent=True) or {}, als_admin=True
+        )
+        return ok(eintrag.to_dict())
+    except ValidationError as exc:
+        return err(str(exc), 400)
+
+
+@admin_bp.route(
+    "/gruppen/<int:gruppe_id>/teilnehmer/<int:user_id>/eintraege/<int:eintrag_id>",
+    methods=["DELETE"],
+)
+@admin_required
+def admin_delete_eintrag(gruppe_id: int, user_id: int, eintrag_id: int):
+    """Delete a participant's entry (admin override)."""
+    try:
+        _get_mitglied(gruppe_id, user_id)
+        eintrag_service.delete_eintrag(user_id, eintrag_id, als_admin=True)
+        return ok({"message": "Eintrag gelöscht."})
     except ValidationError as exc:
         return err(str(exc), 400)
 

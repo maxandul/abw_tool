@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
-  getGruppen, getKategorien, getTeilnehmerFilter,
+  getGruppen, getKategorien, getTeilnehmerFilter, getSample,
   getLastprofil, getRaumbedarf, getAnteile, getExportUrl
 } from "../../api/admin";
 import { groupByTaetigkeitsgruppe } from "../../utils/taetigkeiten";
@@ -327,6 +327,112 @@ const LP_HINTS = {
   maximum:    "Maximum (Personen): Anzahl unterschiedlicher Teilnehmender, die diesen Slot über die gesamte Erhebungsdauer mindestens einmal mit einer der gewählten Tätigkeiten belegt haben. Pro Teilnehmer und Slot wird maximal 1 gezählt, unabhängig von Anzahl Wochen oder Tätigkeiten.",
 };
 
+// ── Sample-Info ──────────────────────────────────────────────────────────────
+function SampleStat({ label, value, hint }) {
+  return (
+    <div className="bg-slate-50 rounded-lg p-3">
+      <p className="text-lg font-semibold text-slate-800 leading-tight">{value}</p>
+      <p className="text-xs text-slate-500 mt-0.5">{label}</p>
+      {hint && <p className="text-[0.7rem] text-slate-400 mt-0.5">{hint}</p>}
+    </div>
+  );
+}
+
+function SampleCard({ data, loading }) {
+  if (loading && !data) {
+    return <div className="card flex justify-center py-6"><Spinner size="sm" /></div>;
+  }
+  if (!data) return null;
+
+  const v = data.vollstaendigkeit_prozent ?? 0;
+  const vColor = v >= 85 ? "#16a34a" : v >= 60 ? "#d97706" : "#dc2626";
+  const unter = data.teilnehmer_unter_schwelle ?? [];
+  const schwelle = data.schwelle_prozent ?? 85;
+  const fmtGrad = g => `${g % 1 === 0 ? g : g.toFixed(1)}%`;
+
+  return (
+    <div className="card space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold text-slate-800">Stichprobe</h2>
+        {data.filter_aktiv && (
+          <span className="text-xs text-brand-600 bg-brand-50 rounded-full px-2.5 py-0.5">
+            Sample eingeschränkt durch Filter
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <SampleStat
+          label="Eingereicht"
+          value={`${data.eingereicht} / ${data.teilnehmer_im_sample}`}
+          hint={data.nicht_eingereicht > 0
+            ? `${data.nicht_eingereicht} noch nicht eingereicht`
+            : "alle eingereicht"}
+        />
+        <SampleStat
+          label="FTE (eingereicht)"
+          value={data.fte_summe}
+          hint="Summe der Beschäftigungsgrade"
+        />
+        <SampleStat
+          label="Erfasste Zeit"
+          value={`${data.erfasste_stunden}h`}
+          hint={`von ${data.erwartete_stunden}h erwartet`}
+        />
+        <SampleStat
+          label="Zeitraum"
+          value={`${data.arbeitstage} Arbeitstage`}
+          hint={`${data.anzahl_gruppen} Erhebung${data.anzahl_gruppen === 1 ? "" : "en"}`}
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-slate-600">Vollständigkeit der Eingereichten (erfasst / erwartet)</span>
+          <span className="font-semibold" style={{ color: vColor }}>{v}%</span>
+        </div>
+        <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+          <div className="h-full rounded-full transition-all"
+            style={{ width: `${Math.min(100, v)}%`, backgroundColor: vColor }} />
+        </div>
+        <p className="text-xs text-slate-400">
+          Nur eingereichte Teilnehmer fliessen in die Auswertung ein
+          {" "}(Soll: Arbeitstage × 8,4h × Beschäftigungsgrad).
+        </p>
+      </div>
+
+      {unter.length > 0 && (
+        <details className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
+          <summary className="text-sm text-amber-800 cursor-pointer select-none">
+            {unter.length} Teilnehmer unter {schwelle}% Vollständigkeit
+          </summary>
+          <ul className="mt-2 space-y-1">
+            {unter.map((t, i) => (
+              <li key={i} className="flex items-center justify-between gap-3 text-xs text-slate-600">
+                <span className="truncate">
+                  {t.user_id && t.gruppe_id ? (
+                    <Link
+                      to={`/admin/gruppen/${t.gruppe_id}/teilnehmer/${t.user_id}/eintraege`}
+                      className="text-brand-600 hover:underline">
+                      {t.name}
+                    </Link>
+                  ) : t.name}
+                  {t.beschaeftigungsgrad != null && (
+                    <span className="text-slate-400"> · {fmtGrad(t.beschaeftigungsgrad)}</span>
+                  )}
+                </span>
+                <span className="font-medium text-amber-700 shrink-0">
+                  {t.vollstaendigkeit_prozent}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 export default function AuswertungPage() {
   const [searchParams] = useSearchParams();
@@ -339,6 +445,8 @@ export default function AuswertungPage() {
   const [tnFilterOptions, setTnFilterOptions] = useState(null);
   const [tnFilter, setTnFilter] = useState(EMPTY_TN_FILTER);
   const [anzeige, setAnzeige] = useState("mittelwert");
+  const [sample, setSample]   = useState(null);
+  const [sampleLoading, setSampleLoading] = useState(false);
   const [lp, setLp]           = useState(null);
   const [lpLoading, setLpLoading] = useState(false);
   const [rb, setRb]           = useState(null);
@@ -398,17 +506,18 @@ export default function AuswertungPage() {
   // Load Raumbedarf + Anteile when gruppeIds changes
   const load = useCallback(async () => {
     if (!gruppeIds.length) return;
-    setError(""); setLoading(true);
+    setError(""); setLoading(true); setSampleLoading(true);
     const p = buildParams();
-    const [r, a] = await Promise.all([getRaumbedarf(p), getAnteile(p)]);
-    setLoading(false);
+    const [r, a, s] = await Promise.all([getRaumbedarf(p), getAnteile(p), getSample(p)]);
+    setLoading(false); setSampleLoading(false);
+    if (s.data) setSample(s.data);
     if (r.error) { setError(r.error); return; }
     setRb(r.data); setAnt(a.data);
   }, [buildParams]);
 
   useEffect(() => {
     if (gruppeIds.length) load();
-    else { setRb(null); setAnt(null); setLp(null); }
+    else { setRb(null); setAnt(null); setLp(null); setSample(null); }
   }, [gruppeIds.join(","), tnFilter]);
 
   // Load Lastprofil when gruppeIds, kategorieIds or tnFilter change
@@ -463,7 +572,7 @@ export default function AuswertungPage() {
             </select>
           </div>
           {(rb || ant) && (
-            <a href={getExportUrl(buildParams())} download className="btn-secondary">
+            <a href={getExportUrl(buildLpParams())} download className="btn-secondary">
               Exportieren (HTML)
             </a>
           )}
@@ -503,6 +612,10 @@ export default function AuswertungPage() {
           onChange={setTnFilter}
           onClear={() => setTnFilter(EMPTY_TN_FILTER)}
         />
+      )}
+
+      {gruppeIds.length > 0 && (
+        <SampleCard data={sample} loading={sampleLoading} />
       )}
 
       {/* Lastprofil */}

@@ -25,6 +25,13 @@ MITTAG_MINUTEN = MITTAG.hour * 60 + MITTAG.minute
 # Minimum hours per half-day below which a "gap" is reported on submission.
 MIN_HALBTAG_STUNDEN = 2.0
 
+# Expected working hours per full-time-equivalent per working day. Used for
+# completeness/expected-hours metrics (e.g. dashboard progress, sample card).
+SOLL_STUNDEN_PRO_TAG = 8.4
+
+# Completeness threshold below which a participant is flagged as under-reporting.
+VOLLSTAENDIGKEIT_SCHWELLE = 0.85
+
 # Working days: Monday (0) to Friday (4).
 ARBEITSTAGE = [0, 1, 2, 3, 4]
 WOCHENTAG_NAMEN = {

@@ -30,9 +30,11 @@ from models import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _get_gruppe(gruppe_id: int) -> Gruppe:
+def _get_gruppe(gruppe_id: int, erlaube_inaktiv: bool = False) -> Gruppe:
     gruppe = db.session.get(Gruppe, gruppe_id)
-    if gruppe is None or not gruppe.aktiv:
+    if gruppe is None:
+        raise ValidationError("Gruppe nicht gefunden oder nicht aktiv.")
+    if not gruppe.aktiv and not erlaube_inaktiv:
         raise ValidationError("Gruppe nicht gefunden oder nicht aktiv.")
     return gruppe
 
@@ -107,10 +109,15 @@ def list_eintraege(user_id: int, gruppe_id: int,
     return result
 
 
-def create_eintrag(user_id: int, gruppe_id: int, data: dict) -> Eintrag:
-    """Create a new time-block entry after validation."""
-    gruppe = _get_gruppe(gruppe_id)
-    _assert_editierbar(user_id, gruppe_id)
+def create_eintrag(user_id: int, gruppe_id: int, data: dict, als_admin: bool = False) -> Eintrag:
+    """Create a new time-block entry after validation.
+
+    With ``als_admin`` the submission lock and group-active check are bypassed,
+    allowing an admin to correct entries regardless of status.
+    """
+    gruppe = _get_gruppe(gruppe_id, erlaube_inaktiv=als_admin)
+    if not als_admin:
+        _assert_editierbar(user_id, gruppe_id)
 
     datum = parse_date(data.get("datum"), "Datum")
     zeit_von = _snap(parse_time(data.get("zeit_von"), "Zeit von"))
@@ -151,13 +158,14 @@ def create_eintrag(user_id: int, gruppe_id: int, data: dict) -> Eintrag:
     return eintrag
 
 
-def update_eintrag(user_id: int, eintrag_id: int, data: dict) -> Eintrag:
+def update_eintrag(user_id: int, eintrag_id: int, data: dict, als_admin: bool = False) -> Eintrag:
     """Update an existing entry."""
     eintrag = db.session.get(Eintrag, eintrag_id)
     if eintrag is None or eintrag.user_id != user_id:
         raise ValidationError("Eintrag nicht gefunden.")
-    gruppe = _get_gruppe(eintrag.gruppe_id)
-    _assert_editierbar(user_id, eintrag.gruppe_id)
+    gruppe = _get_gruppe(eintrag.gruppe_id, erlaube_inaktiv=als_admin)
+    if not als_admin:
+        _assert_editierbar(user_id, eintrag.gruppe_id)
 
     datum = parse_date(data.get("datum") or eintrag.datum.isoformat(), "Datum")
     zeit_von = _snap(parse_time(data.get("zeit_von") or eintrag.zeit_von.strftime("%H:%M"), "Zeit von"))
@@ -185,12 +193,13 @@ def update_eintrag(user_id: int, eintrag_id: int, data: dict) -> Eintrag:
     return eintrag
 
 
-def delete_eintrag(user_id: int, eintrag_id: int) -> None:
+def delete_eintrag(user_id: int, eintrag_id: int, als_admin: bool = False) -> None:
     """Delete an entry."""
     eintrag = db.session.get(Eintrag, eintrag_id)
     if eintrag is None or eintrag.user_id != user_id:
         raise ValidationError("Eintrag nicht gefunden.")
-    _assert_editierbar(user_id, eintrag.gruppe_id)
+    if not als_admin:
+        _assert_editierbar(user_id, eintrag.gruppe_id)
     db.session.delete(eintrag)
     db.session.commit()
 

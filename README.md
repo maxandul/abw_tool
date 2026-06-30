@@ -2,10 +2,28 @@
 
 Web-Applikation zur Erhebung von Tätigkeitsprofilen im Rahmen einer arbeitsplatzbasierten Umgestaltung (Activity-Based Working). Teilnehmer erfassen täglich ihre Zeitblöcke nach Tätigkeitskategorie. Admins werten die Daten aus und leiten daraus den Raumbedarf für neue Arbeitswelten ab.
 
-- Max. 100 Teilnehmer
-- Läuft lokal auf einem dedizierten Windows-Laptop im internen Netzwerk (kein Internet nötig)
+- Läuft lokal auf einem dedizierten Windows-Laptop im internen Netzwerk
 - Backend: Python / Flask / SQLAlchemy / SQLite
 - Frontend: React (Vite) / Tailwind CSS
+
+---
+
+## Funktionsumfang
+
+**Teilnehmer**
+- Erfassen ihre Arbeitszeit in einem Wochenkalender, blockweise pro Tätigkeitskategorie.
+- Reichen die Erhebung am Ende ein; eingereichte Erhebungen sind gesperrt (Entsperren auf Wunsch möglich).
+
+**Admin**
+- Verwaltet Tätigkeitskategorien (gruppiert nach Tätigkeitsgruppe) und Erhebungen inkl. Teilnehmer.
+- Dashboard mit Fortschritt pro Erhebung. Die erwarteten Stunden werden nach **Beschäftigungsgrad** gewichtet (Summe der Pensen × Arbeitstage × 8,4 h), Teilzeit zählt anteilig.
+- Kann einzelne Teilnehmer-Erhebungen einsehen und im selben Kalender direkt bearbeiten (Admin-Override, unabhängig vom Einreichungsstatus).
+- **Auswertung** über eine oder mehrere Erhebungen, mit Filtern nach Teilnehmer-Attributen (Funktion, Organisationseinheit, Beschäftigungsgrad), Wochentagen und Tätigkeiten:
+  - *Stichprobe*: Datenbasis (eingereicht/offen, FTE-Summe, erfasste vs. erwartete Stunden, Vollständigkeit; Hinweis auf Teilnehmer unter 85 %).
+  - *Lastprofil*: Heatmap über die Woche (Mittelwert/Maximum) für gewählte Tätigkeiten.
+  - *Bedarf nach Tätigkeit* und *Anteilsübersicht* (nach Tätigkeit und Tätigkeitsgruppe).
+  - In die Auswertung fliessen nur **eingereichte** Teilnehmer ein.
+- **HTML-Export**: eigenständige, anonyme Datei (keine Namen/E-Mail-Adressen) der gewählten Erhebung(en). Sie ist interaktiv – Empfänger können darin selbst nach Attributen filtern und Lastprofile erstellen, ganz ohne Server.
 
 ---
 

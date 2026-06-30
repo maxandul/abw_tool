@@ -25,6 +25,18 @@ export const resetPin           = (uId)           => post(`/api/admin/teilnehmer
 export const setEinreichungStatus = (uId, gId, b) =>
   put(`/api/admin/teilnehmer/${uId}/einreichung/${gId}`, b);
 
+// Teilnehmer-Einträge (Admin-Einsicht / -Bearbeitung)
+export const getTnEintraegeKontext = (gId, uId) =>
+  get(`/api/admin/gruppen/${gId}/teilnehmer/${uId}/kontext`);
+export const getTnEintraege     = (gId, uId, von, bis) =>
+  get(`/api/admin/gruppen/${gId}/teilnehmer/${uId}/eintraege?datum_von=${von}&datum_bis=${bis}`);
+export const createTnEintrag    = (gId, uId, body) =>
+  post(`/api/admin/gruppen/${gId}/teilnehmer/${uId}/eintraege`, body);
+export const updateTnEintrag    = (gId, uId, eId, body) =>
+  put(`/api/admin/gruppen/${gId}/teilnehmer/${uId}/eintraege/${eId}`, body);
+export const deleteTnEintrag    = (gId, uId, eId) =>
+  del(`/api/admin/gruppen/${gId}/teilnehmer/${uId}/eintraege/${eId}`);
+
 // Kategorien
 export const getKategorien      = ()           => get("/api/admin/kategorien");
 export const createKategorie    = (body)       => post("/api/admin/kategorien", body);
@@ -48,6 +60,7 @@ export const deleteAdmin     = (id)     => del(`/api/admin/admins/${id}`);
 
 // Auswertung
 export const getTeilnehmerFilter = (p) => get(`/api/auswertung/teilnehmer-filter?${p}`);
+export const getSample      = (p) => get(`/api/auswertung/sample?${p}`);
 export const getLastprofil  = (p) => get(`/api/auswertung/lastprofil?${p}`);
 export const getRaumbedarf  = (p) => get(`/api/auswertung/raumbedarf?${p}`);
 export const getAnteile     = (p) => get(`/api/auswertung/anteile?${p}`);

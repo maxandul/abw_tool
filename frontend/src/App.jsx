@@ -14,6 +14,7 @@ import PinAendernPage    from "./pages/PinAendernPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import GruppenPage    from "./pages/admin/GruppenPage";
 import TeilnehmerPage from "./pages/admin/TeilnehmerPage";
+import TeilnehmerEintraegePage from "./pages/admin/TeilnehmerEintraegePage";
 import KategorienPage from "./pages/admin/KategorienPage";
 import AuswertungPage from "./pages/admin/AuswertungPage";
 
@@ -58,6 +59,7 @@ export default function App() {
               <Route path="/admin/dashboard"   element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
               <Route path="/admin/gruppen"     element={<RequireAdmin><GruppenPage /></RequireAdmin>} />
               <Route path="/admin/gruppen/:gruppeId/teilnehmer" element={<RequireAdmin><TeilnehmerPage /></RequireAdmin>} />
+              <Route path="/admin/gruppen/:gruppeId/teilnehmer/:userId/eintraege" element={<RequireAdmin><TeilnehmerEintraegePage /></RequireAdmin>} />
               <Route path="/admin/kategorien"  element={<RequireAdmin><KategorienPage /></RequireAdmin>} />
               <Route path="/admin/auswertung"  element={<RequireAdmin><AuswertungPage /></RequireAdmin>} />
               <Route path="/admin/admins"      element={<RequireAdmin><AdminsPage /></RequireAdmin>} />

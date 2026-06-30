@@ -83,8 +83,9 @@ export default function AdminDashboard() {
         {data.gruppen.map(g => {
           const counts      = g.stats.status_counts;
           const anz         = g.stats.anzahl_teilnehmer;
+          const fte         = g.stats.fte_summe ?? anz;     // sum of employment levels (FTE); fallback: headcount
           const tage        = workingDays(g.zeitraum_von, g.zeitraum_bis);
-          const erwartetMin = anz * tage * 8.4 * 60;        // 8.4h per person per working day
+          const erwartetMin = fte * tage * 8.4 * 60;        // 8.4h per FTE per working day
           const erfasstMin  = g.stats.total_minuten_erfasst ?? 0;
           const pct         = erwartetMin > 0 ? Math.min(100, Math.round((erfasstMin / erwartetMin) * 100)) : 0;
           return (

@@ -328,9 +328,16 @@ function WeekGrid({ weekStart, periodStart, periodEnd, eintraege, readonly, kate
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abgeschlossen, gruppeName }) {
+export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abgeschlossen, gruppeName, api, adminMode = false }) {
   const { gruppeId: ctxGruppeId } = useAuth();
   const gId = gruppeId ?? ctxGruppeId;
+
+  // API adapter: defaults to the participant endpoints, can be overridden
+  // (e.g. by the admin "edit on behalf" view).
+  const A = api ?? {
+    getEintraege, createEintrag, updateEintrag, deleteEintrag,
+    getEinreichung, getKategorien, einreichen, entsperren, getLuecken,
+  };
 
   const periodStart = zeitraumVon ? parseISO(zeitraumVon) : new Date();
   const periodEnd   = zeitraumBis ? parseISO(zeitraumBis) : new Date();
@@ -358,9 +365,9 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
     if (!gId || !zeitraumVon || !zeitraumBis) return;
     setLoading(true);
     const [eRes, kRes, eiRes] = await Promise.all([
-      getEintraege(gId, zeitraumVon, zeitraumBis),
-      kategorien.length ? Promise.resolve({ data: kategorien }) : getKategorien(),
-      getEinreichung(gId),
+      A.getEintraege(gId, zeitraumVon, zeitraumBis),
+      kategorien.length ? Promise.resolve({ data: kategorien }) : A.getKategorien(),
+      adminMode ? Promise.resolve({ data: null }) : A.getEinreichung(gId),
     ]);
     setLoading(false);
     if (eRes.error) { setError(eRes.error); return; }
@@ -371,24 +378,27 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
 
   useEffect(() => { load(); }, [load]);
 
-  const readonly = abgeschlossen || einreichung?.status === "EINGEREICHT" || einreichung?.status === "ABGESCHLOSSEN";
+  // In admin mode entries are always editable (full override).
+  const readonly = adminMode
+    ? false
+    : (abgeschlossen || einreichung?.status === "EINGEREICHT" || einreichung?.status === "ABGESCHLOSSEN");
   const canSelfUnlock = !abgeschlossen && einreichung?.status === "EINGEREICHT";
   const kannEinreichen = !abgeschlossen && (einreichung?.status === "OFFEN" || einreichung?.status === "IN_BEARBEITUNG");
 
   const handleEntsperre = async () => {
-    const { error: e } = await entsperren(gId);
+    const { error: e } = await A.entsperren(gId);
     if (e) { setError(e); return; }
     load();
   };
 
   const handleEinreichenStart = async () => {
-    const { data: lData } = await getLuecken(gId);
+    const { data: lData } = await A.getLuecken(gId);
     if (lData && lData.length > 0) { setLuecken(lData); setActionStep("luecken"); }
     else setActionStep("bestaetigen");
   };
 
   const handleEinreichen = async () => {
-    const { error: e } = await einreichen(gId);
+    const { error: e } = await A.einreichen(gId);
     setActionStep(null);
     if (e) { setError(e); return; }
     setMsg("Einträge erfolgreich eingereicht."); load();
@@ -408,14 +418,14 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
       kategorie_id: Number(form.kategorie_id),
     };
     const { error: err } = modal.eintrag?.id
-      ? await updateEintrag(modal.eintrag.id, body)
-      : await createEintrag(body);
+      ? await A.updateEintrag(modal.eintrag.id, body)
+      : await A.createEintrag(body);
     if (err) return { error: err };
     setModal(null); load(); return {};
   };
 
   const handleDelete = async (id) => {
-    await deleteEintrag(id); setModal(null); load();
+    await A.deleteEintrag(id); setModal(null); load();
   };
 
   if (loading) return <div className="flex justify-center mt-12"><Spinner size="lg" /></div>;
@@ -423,12 +433,18 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
   return (
     <div className="max-w-5xl mx-auto p-4 space-y-4">
       {/* Status banners */}
-      {abgeschlossen && (
+      {adminMode && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-sm text-blue-800">
+          Bearbeitung als Admin im Namen des Teilnehmers. Änderungen werden direkt gespeichert
+          {abgeschlossen && " – auch bei abgeschlossener/archivierter Erhebung"}.
+        </div>
+      )}
+      {!adminMode && abgeschlossen && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm text-amber-800">
           Diese Erhebung ist abgeschlossen. Einträge können nicht mehr bearbeitet werden.
         </div>
       )}
-      {!abgeschlossen && readonly && (
+      {!adminMode && !abgeschlossen && readonly && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 flex items-center justify-between text-sm">
           <span className="text-amber-800">
             {einreichung?.status === "ABGESCHLOSSEN" ? "Einträge wurden abgeschlossen." : "Einträge wurden eingereicht."}

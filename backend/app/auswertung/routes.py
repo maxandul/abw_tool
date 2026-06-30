@@ -6,22 +6,7 @@ from flask import Blueprint, make_response, request
 
 from app.helpers import admin_required, err, ok
 from app.utils import ValidationError, parse_date, parse_float_list, parse_int_list, parse_string_list
-from models import Kategorie, Taetigkeitsgruppe
 from services import auswertung_service, export_service
-
-ANWESEND_GRUPPEN = (
-    Taetigkeitsgruppe.EINZELARBEIT,
-    Taetigkeitsgruppe.ZU_ZWEIT_DREIT,
-    Taetigkeitsgruppe.GRUPPE_4PLUS,
-)
-
-
-def _anwesend_kategorie_ids() -> list[int]:
-    return [
-        k.id
-        for k in Kategorie.query.filter_by(aktiv=True).order_by(Kategorie.sort_order).all()
-        if k.taetigkeitsgruppe in ANWESEND_GRUPPEN
-    ]
 
 auswertung_bp = Blueprint("auswertung", __name__, url_prefix="/api/auswertung")
 
@@ -69,6 +54,26 @@ def get_teilnehmer_filter():
         if not gruppe_ids:
             raise ValidationError("gruppe_ids fehlt.")
         return ok(auswertung_service.get_teilnehmer_filter_optionen(gruppe_ids))
+    except ValidationError as exc:
+        return err(str(exc), 400)
+
+
+@auswertung_bp.route("/sample", methods=["GET"])
+@admin_required
+def get_sample():
+    """Sample description: size, FTE, participation and completeness."""
+    try:
+        gruppe_ids, datum_von, datum_bis, wochentage, _, teilnehmer_filter = _parse_filter(
+            request.args
+        )
+        data = auswertung_service.berechne_sample(
+            gruppe_ids,
+            datum_von,
+            datum_bis,
+            wochentage,
+            teilnehmer_filter=teilnehmer_filter or None,
+        )
+        return ok(data)
     except ValidationError as exc:
         return err(str(exc), 400)
 
@@ -147,34 +152,34 @@ def get_kennzahlen():
 @auswertung_bp.route("/export", methods=["GET"])
 @admin_required
 def get_export():
-    """Generate and download a fully self-contained HTML analysis file."""
+    """Generate and download a self-contained, interactive HTML analysis file.
+
+    The export embeds the anonymised raw data of the selected groups and
+    recomputes all views client-side, so the recipient can change the
+    Teilnehmer-Filter and Lastprofil-Tätigkeiten without a server.
+    """
     try:
-        gruppe_ids, datum_von, datum_bis, wochentage, gruppen, teilnehmer_filter = (
+        gruppe_ids, datum_von, datum_bis, _, gruppen, teilnehmer_filter = (
             _parse_filter(request.args)
         )
-        flt = teilnehmer_filter or None
-        lastprofil = auswertung_service.berechne_lastprofil(
-            gruppe_ids,
-            datum_von,
-            datum_bis,
-            wochentage=wochentage,
-            kategorie_ids=_anwesend_kategorie_ids(),
-            teilnehmer_filter=flt,
+        rohdaten = auswertung_service.export_rohdaten(
+            gruppe_ids, datum_von, datum_bis
         )
-        raumbedarf = auswertung_service.berechne_raumbedarf(
-            gruppe_ids, datum_von, datum_bis, teilnehmer_filter=flt
-        )
-        anteile = auswertung_service.berechne_anteile(
-            gruppe_ids, datum_von, datum_bis, teilnehmer_filter=flt
-        )
-        kennzahlen = auswertung_service.berechne_kennzahlen(
-            gruppe_ids, datum_von, datum_bis, teilnehmer_filter=flt
-        )
+
+        kat_raw = request.args.get("kategorie_ids")
+        initial_kategorie_ids = parse_int_list(kat_raw) if kat_raw else []
+        initial_filter = {
+            "funktionen": teilnehmer_filter.get("funktionen", []),
+            "organisationseinheiten": teilnehmer_filter.get(
+                "organisationseinheiten", []
+            ),
+            "beschaeftigungsgrade": teilnehmer_filter.get("beschaeftigungsgrade", []),
+            "kategorie_ids": initial_kategorie_ids,
+        }
 
         gruppen_namen = [g.name for g in gruppen]
         html = export_service.generiere_export_html(
-            lastprofil, raumbedarf, anteile, kennzahlen,
-            gruppen_namen, datum_von, datum_bis
+            rohdaten, initial_filter, datum_von, datum_bis
         )
 
         safe_namen = "_".join(n.replace(" ", "_") for n in gruppen_namen)
