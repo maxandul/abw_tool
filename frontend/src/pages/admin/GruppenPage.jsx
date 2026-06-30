@@ -1,28 +1,21 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  getGruppen, createGruppe, updateGruppe, deleteGruppe, regenerateToken,
+  getGruppen, createGruppe, updateGruppe, deleteGruppe,
   abschliessenGruppe, wiederoeffnenGruppe
 } from "../../api/admin";
+import AppLinkHint from "../../components/AppLinkHint";
+import TeilnehmerPinHint from "../../components/TeilnehmerPinHint";
 import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
 import Modal from "../../components/Modal";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { fmtDate } from "../../utils/format";
 
-const RATIO_PRESETS = [
-  { value: 1.0, label: "1:1 – Kein Sharing" },
-  { value: 1.2, label: "1.2 – Standard" },
-  { value: 1.4, label: "1.4 – Moderat" },
-  { value: 1.6, label: "1.6 – Hoch" },
-  { value: 2.0, label: "2.0 – Sehr hoch" },
-];
-
 function GruppeForm({ initial, onSave, onCancel }) {
-  const [form, setForm] = useState(initial ?? { name: "", zeitraum_von: "", zeitraum_bis: "", sharing_ratio: 1.2 });
+  const [form, setForm] = useState(initial ?? { name: "", zeitraum_von: "", zeitraum_bis: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [customRatio, setCustomRatio] = useState(false);
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
@@ -34,8 +27,6 @@ function GruppeForm({ initial, onSave, onCancel }) {
     setLoading(false);
     if (err) setError(err);
   };
-
-  const ratioIsPreset = RATIO_PRESETS.some(p => p.value === Number(form.sharing_ratio));
 
   return (
     <form onSubmit={submit} className="space-y-4">
@@ -57,27 +48,6 @@ function GruppeForm({ initial, onSave, onCancel }) {
           <input className="input" type="date" value={form.zeitraum_bis} onChange={set("zeitraum_bis")} required />
         </div>
       </div>
-      <div>
-        <label className="label">Sharing-Ratio</label>
-        <select className="input mb-1"
-          value={ratioIsPreset && !customRatio ? Number(form.sharing_ratio) : "custom"}
-          onChange={e => {
-            if (e.target.value === "custom") { setCustomRatio(true); }
-            else { setCustomRatio(false); setForm(f => ({ ...f, sharing_ratio: Number(e.target.value) })); }
-          }}>
-          {RATIO_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-          <option value="custom">Eigener Wert…</option>
-        </select>
-        {customRatio && (
-          <input className="input" type="number" step="0.1" min="0.1" value={form.sharing_ratio}
-            onChange={set("sharing_ratio")} placeholder="z.B. 1.3" />
-        )}
-        <p className="text-xs text-slate-500 mt-1.5">
-          Die <strong>Sharing-Ratio</strong> gibt an, wie viele Personen sich statistisch einen Arbeitsplatz teilen. 
-          Bei 1.2 reichen 10 Arbeitsplätze für 12 Mitarbeitende. Je höher der Wert, desto weniger Arbeitsplätze 
-          werden gegenüber der Mitarbeiterzahl benötigt.
-        </p>
-      </div>
       <div className="flex gap-3 justify-end pt-2">
         <button type="button" className="btn-secondary" onClick={onCancel}>Abbrechen</button>
         <button type="submit" className="btn-primary" disabled={loading}>
@@ -94,7 +64,6 @@ export default function GruppenPage() {
   const [error, setError] = useState("");
   const [modal, setModal] = useState(null);
   const [confirm, setConfirm] = useState(null);
-  const [copiedId, setCopiedId] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -105,26 +74,6 @@ export default function GruppenPage() {
   };
 
   useEffect(load, []);
-
-  const copyLink = (token) => {
-    const url = `${window.location.origin}/registrierung/${token}`;
-    const doFallback = () => {
-      const ta = document.createElement("textarea");
-      ta.value = url;
-      ta.style.cssText = "position:fixed;opacity:0;top:0;left:0";
-      document.body.appendChild(ta);
-      ta.focus(); ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
-    };
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(url).catch(doFallback);
-    } else {
-      doFallback();
-    }
-    setCopiedId(token);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
 
   const handleCreate = async (form) => {
     const { error: err } = await createGruppe(form);
@@ -151,12 +100,6 @@ export default function GruppenPage() {
     await wiederoeffnenGruppe(id); setConfirm(null); load();
   };
 
-  const handleNewToken = async (id) => {
-    await regenerateToken(id);
-    load();
-    setConfirm(null);
-  };
-
   if (loading) return <div className="flex justify-center mt-12"><Spinner size="lg" /></div>;
 
   return (
@@ -168,13 +111,15 @@ export default function GruppenPage() {
 
       {error && <Alert>{error}</Alert>}
 
+      <AppLinkHint />
+      <TeilnehmerPinHint />
+
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
               <th className="table-th">Name</th>
               <th className="table-th">Zeitraum</th>
-              <th className="table-th">Ratio</th>
               <th className="table-th">Teilnehmer</th>
               <th className="table-th">Status</th>
               <th className="table-th"></th>
@@ -185,7 +130,6 @@ export default function GruppenPage() {
               <tr key={g.id} className={!g.aktiv ? "opacity-50" : ""}>
                 <td className="table-td font-medium">{g.name}</td>
                 <td className="table-td text-xs">{fmtDate(g.zeitraum_von)}<br />{fmtDate(g.zeitraum_bis)}</td>
-                <td className="table-td">{g.sharing_ratio}</td>
                 <td className="table-td">{g.stats?.anzahl_teilnehmer ?? "–"}</td>
                 <td className="table-td">
                   {!g.aktiv
@@ -198,12 +142,6 @@ export default function GruppenPage() {
                 <td className="table-td">
                   <div className="flex gap-2 flex-wrap">
                     {g.aktiv && <button className="btn-secondary text-xs" onClick={() => setModal({ id: g.id, gruppe: g })}>Bearbeiten</button>}
-                    {g.aktiv && !g.abgeschlossen && (
-                      <button className="btn-ghost text-xs"
-                        onClick={() => copyLink(g.registrierung_link_token)}>
-                        {copiedId === g.registrierung_link_token ? "Kopiert!" : "Einladungslink kopieren"}
-                      </button>
-                    )}
                     <Link to={`/admin/gruppen/${g.id}/teilnehmer`} className="btn-ghost text-xs">Teilnehmer</Link>
                     <Link to={`/admin/auswertung?gruppe_id=${g.id}`} className="btn-ghost text-xs">Auswertung</Link>
                     {g.aktiv && !g.abgeschlossen && (
@@ -229,7 +167,7 @@ export default function GruppenPage() {
               </tr>
             ))}
             {gruppen.length === 0 && (
-              <tr><td colSpan={6} className="table-td text-center text-slate-500 py-8">Noch keine Erhebungen vorhanden.</td></tr>
+              <tr><td colSpan={5} className="table-td text-center text-slate-500 py-8">Noch keine Erhebungen vorhanden.</td></tr>
             )}
           </tbody>
         </table>

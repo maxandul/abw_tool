@@ -40,7 +40,7 @@ export default function HilfePageTn() {
         <P>Im Kalender sind alle Kalenderwochen des Erhebungszeitraums fest untereinander dargestellt. Tage ausserhalb des Erhebungszeitraums sind ausgegraut und nicht bearbeitbar.</P>
         <ul className="list-disc list-inside space-y-1 pl-2">
           <Li><strong>Klicken und Ziehen:</strong> Halte die Maustaste auf einem freien Zeitslot gedrückt und ziehe nach unten, um eine Zeitspanne auszuwählen. Der blaue Bereich zeigt dir Startzeit, Endzeit und Dauer.</Li>
-          <Li><strong>Kategorie wählen:</strong> Im erscheinenden Formular wählst du die passende Tätigkeitskategorie. Kategorien sind nach Vertraulichkeit gruppiert.</Li>
+          <Li><strong>Tätigkeit wählen:</strong> Im erscheinenden Formular wählst du die passende Tätigkeit. Die Auswahl ist nach Tätigkeitsgruppe gruppiert (Einzelarbeit, Zu zweit/zu dritt physisch, In Gruppen physisch, Extern).</Li>
           <Li><strong>Eintrag bearbeiten / löschen:</strong> Klicke auf einen bestehenden farbigen Block, um ihn zu bearbeiten oder zu löschen.</Li>
         </ul>
       </Section>
@@ -58,12 +58,10 @@ export default function HilfePageTn() {
         <P><strong>Was ist eine Erhebung?</strong> Eine Erhebung ist ein definierter Zeitraum, in dem du deine Tätigkeiten erfasst. Du kannst mehreren Erhebungen zugeordnet sein.</P>
         <P><strong>Was passiert nach dem Abschluss?</strong> Wenn die Erhebung vom Administrator abgeschlossen wird, können keine neuen Einträge mehr gemacht werden. Du siehst deine Einträge noch als Archiv.</P>
         <P><strong>Ich habe meinen PIN vergessen.</strong> Bitte wende dich an den Administrator, der deinen PIN zurücksetzen kann.</P>
-        <P><strong>Welche Zeitspannen soll ich erfassen?</strong> Erfasse alle Tätigkeiten, für die es eine Kategorie gibt – also alle im Raster aufgeführten Tätigkeitstypen. Zeiträume ohne passende Kategorie (z. B. Pausen) musst du nicht zwingend eintragen.</P>
-        <P><strong>Welchen Link soll ich verwenden?</strong> Du hast zwei verschiedene Links erhalten:</P>
-        <ul className="list-disc list-inside space-y-1 pl-2">
-          <Li><strong>Einladungslink</strong> (z. B. <code className="text-xs bg-slate-100 px-1 rounded">/registrierung/…</code>) – nur einmalig zur Erstregistrierung verwenden. Danach ist dieser Link für dich ungültig.</Li>
-          <Li><strong>Login-Link</strong> (z. B. <code className="text-xs bg-slate-100 px-1 rounded">http://SERVERNAME:5000</code>) – diesen Link verwendest du für jeden weiteren Zugriff. Lesezeichen setzen empfohlen.</Li>
-        </ul>
+        <P><strong>Welche Zeitspannen soll ich erfassen?</strong> Erfasse alle Tätigkeiten, für die es eine passende Option gibt. Zeiträume ohne passende Tätigkeit (z. B. Pausen) musst du nicht zwingend eintragen.</P>
+        <P><strong>Wie erhalte ich Zugang?</strong> Der Administrator erfasst dich für die Erhebung und sendet dir den <strong>Link zur App</strong> per E-Mail.</P>
+        <P><strong>Erstanmeldung:</strong> Öffne den Link, melde dich mit deiner Kantons-E-Mail und dem temporären PIN <strong>0000</strong> an und wähle danach einen eigenen PIN.</P>
+        <P><strong>Meine Erhebungen:</strong> Nach dem Login erscheinen deine Erhebungen als Tabs in der blauen Titelleiste – dort wechselst du zwischen Dashboard und Kalender.</P>
       </Section>
 
       {admins.length > 0 && (

@@ -30,8 +30,15 @@ def verify_pin(pin: str, pin_hash: str) -> bool:
 
 
 def generate_temp_pin() -> str:
-    """Generate a random 4-digit temporary PIN."""
+    """Generate a random 4-digit temporary PIN (admin accounts only)."""
     return f"{secrets.randbelow(10000):04d}"
+
+
+def teilnehmer_temp_pin() -> str:
+    """Return the fixed temporary PIN for participants."""
+    from constants import TEILNEHMER_TEMP_PIN
+
+    return TEILNEHMER_TEMP_PIN
 
 
 def admin_exists() -> bool:

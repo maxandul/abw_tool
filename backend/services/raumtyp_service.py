@@ -23,14 +23,9 @@ def _validate(data: dict, partial: bool = False) -> dict:
     return cleaned
 
 
-def _kategorie_count(raumtyp_id: int, nur_aktiv: bool = False) -> int:
-    """Count categories linked to a room type via the M2M association."""
-    raumtyp = db.session.get(Raumtyp, raumtyp_id)
-    if raumtyp is None:
-        return 0
-    if nur_aktiv:
-        return sum(1 for k in raumtyp.kategorien if k.aktiv)
-    return len(raumtyp.kategorien)
+def _kategorie_count(_raumtyp_id: int, _nur_aktiv: bool = False) -> int:
+    """Legacy hook – room types are no longer linked to Tätigkeiten."""
+    return 0
 
 
 def list_raumtypen(nur_aktiv: bool = False) -> list[dict]:
@@ -74,14 +69,6 @@ def set_aktiv(raumtyp_id: int, aktiv: bool) -> Raumtyp:
     raumtyp = db.session.get(Raumtyp, raumtyp_id)
     if raumtyp is None:
         raise ValidationError("Raumtyp nicht gefunden.")
-
-    if not aktiv:
-        betroffene = [k for k in raumtyp.kategorien if k.aktiv]
-        if betroffene:
-            namen = ", ".join(k.name for k in betroffene)
-            raise ValidationError(
-                f"Raumtyp kann nicht deaktiviert werden. Aktive Kategorien: {namen}"
-            )
 
     raumtyp.aktiv = aktiv
     db.session.commit()

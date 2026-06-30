@@ -1,40 +1,22 @@
-"""Business logic for activity categories."""
+"""Business logic for Tätigkeiten (activity types, stored as Kategorie)."""
 
 from app.utils import ValidationError
 from extensions import db
-from models import Eintrag, Gruppengroesse, Kategorie, Raumtyp, Vertraulichkeit
+from models import Eintrag, Kategorie, Planung, Stoerung, Taetigkeitsgruppe
 
 
 def _eintrag_count(kategorie_id: int) -> int:
-    """Count entries referencing a category."""
     return Eintrag.query.filter_by(kategorie_id=kategorie_id).count()
 
 
-def _resolve_raumtypen(ids) -> list:
-    """Resolve a list of raumtyp IDs to Raumtyp objects."""
-    if not ids:
-        return []
-    result = []
-    for rid in ids:
-        try:
-            rid = int(rid)
-        except (TypeError, ValueError) as exc:
-            raise ValidationError("Ungültige Raumtyp-ID.") from exc
-        r = db.session.get(Raumtyp, rid)
-        if r is None:
-            raise ValidationError(f"Raumtyp {rid} nicht gefunden.")
-        result.append(r)
-    return result
-
-
 def _validate(data: dict, partial: bool = False) -> dict:
-    """Validate and normalise category input."""
+    """Validate and normalise Tätigkeit input."""
     cleaned = {}
 
     if not partial or "name" in data:
         name = (data.get("name") or "").strip()
         if not name:
-            raise ValidationError("Der Kategoriename ist erforderlich.")
+            raise ValidationError("Der Name der Tätigkeit ist erforderlich.")
         cleaned["name"] = name
 
     if "beschreibung" in data or not partial:
@@ -52,38 +34,58 @@ def _validate(data: dict, partial: bool = False) -> dict:
         except (TypeError, ValueError) as exc:
             raise ValidationError("Sortierung muss eine Zahl sein.") from exc
 
-    if "vertraulichkeit" in data or not partial:
-        v = data.get("vertraulichkeit")
-        if v in (None, ""):
-            cleaned["vertraulichkeit"] = None
-        else:
-            try:
-                cleaned["vertraulichkeit"] = Vertraulichkeit(v)
-            except ValueError as exc:
-                raise ValidationError(f"Ungültige Vertraulichkeit: {v}") from exc
+    gruppe_raw = data.get("taetigkeitsgruppe")
+    if "taetigkeitsgruppe" in data or not partial:
+        if not gruppe_raw:
+            raise ValidationError("Tätigkeitsgruppe ist erforderlich.")
+        try:
+            gruppe = Taetigkeitsgruppe(gruppe_raw)
+        except ValueError as exc:
+            raise ValidationError(f"Ungültige Tätigkeitsgruppe: {gruppe_raw}") from exc
+        cleaned["taetigkeitsgruppe"] = gruppe
 
-    if "gruppengroesse" in data or not partial:
-        g = data.get("gruppengroesse")
-        if g in (None, ""):
-            cleaned["gruppengroesse"] = None
-        else:
+    stoerung_raw = data.get("stoerung")
+    planung_raw = data.get("planung")
+    if not partial or "stoerung" in data or "planung" in data or "taetigkeitsgruppe" in data:
+        gruppe = cleaned.get("taetigkeitsgruppe")
+        if gruppe is None and partial:
+            # Will be merged with existing row in update path
+            pass
+        stoerung = None
+        planung = None
+        if stoerung_raw not in (None, ""):
             try:
-                cleaned["gruppengroesse"] = Gruppengroesse(g)
+                stoerung = Stoerung(stoerung_raw)
             except ValueError as exc:
-                raise ValidationError(f"Ungültige Gruppengrösse: {g}") from exc
-
-    # raumtyp_ids is a list; also accept legacy single raumtyp_id
-    if "raumtyp_ids" in data or "raumtyp_id" in data or not partial:
-        ids_raw = data.get("raumtyp_ids") or (
-            [data["raumtyp_id"]] if data.get("raumtyp_id") else []
-        )
-        cleaned["raumtyp_ids"] = ids_raw  # will be resolved in apply_update
+                raise ValidationError(f"Ungültige Störung: {stoerung_raw}") from exc
+        if planung_raw not in (None, ""):
+            try:
+                planung = Planung(planung_raw)
+            except ValueError as exc:
+                raise ValidationError(f"Ungültige Planung: {planung_raw}") from exc
+        cleaned["stoerung"] = stoerung
+        cleaned["planung"] = planung
 
     return cleaned
 
 
+def _validate_gruppe_fields(gruppe: Taetigkeitsgruppe, stoerung, planung) -> None:
+    """Ensure stoerung/planung match the selected Tätigkeitsgruppe."""
+    if gruppe == Taetigkeitsgruppe.EXTERN:
+        if stoerung or planung:
+            raise ValidationError("Externe Tätigkeiten haben keine Störung/Planung.")
+        return
+    if gruppe == Taetigkeitsgruppe.EINZELARBEIT:
+        if not stoerung and not planung:
+            raise ValidationError(
+                "Einzelarbeit erfordert Störung (Call/Still) oder Planung (Call ohne Zuhörer)."
+            )
+        return
+    if not stoerung or not planung:
+        raise ValidationError("Diese Tätigkeitsgruppe erfordert Störung und Planung.")
+
+
 def list_kategorien(nur_aktiv: bool = False) -> list[dict]:
-    """List categories, optionally only active ones, with entry counts."""
     query = Kategorie.query
     if nur_aktiv:
         query = query.filter_by(aktiv=True)
@@ -94,28 +96,22 @@ def list_kategorien(nur_aktiv: bool = False) -> list[dict]:
 
 
 def create_kategorie(data: dict) -> Kategorie:
-    """Create a new category."""
     cleaned = _validate(data)
-    raumtypen = _resolve_raumtypen(cleaned.pop("raumtyp_ids", []))
+    _validate_gruppe_fields(
+        cleaned["taetigkeitsgruppe"], cleaned.get("stoerung"), cleaned.get("planung")
+    )
     kategorie = Kategorie(**cleaned)
-    kategorie.raumtypen = raumtypen
     db.session.add(kategorie)
     db.session.commit()
     return kategorie
 
 
 def update_kategorie(kategorie_id: int, data: dict, modus: str = "ueberschreiben") -> Kategorie:
-    """Update a category.
-
-    modus="ueberschreiben": update in place.
-    modus="neu": create a new category with the provided data.
-    """
     kategorie = db.session.get(Kategorie, kategorie_id)
     if kategorie is None:
-        raise ValidationError("Kategorie nicht gefunden.")
+        raise ValidationError("Tätigkeit nicht gefunden.")
 
     cleaned = _validate(data, partial=True)
-    raumtypen = _resolve_raumtypen(cleaned.pop("raumtyp_ids", None) or [])
 
     if modus == "neu":
         merged = {
@@ -123,26 +119,32 @@ def update_kategorie(kategorie_id: int, data: dict, modus: str = "ueberschreiben
             "beschreibung": cleaned.get("beschreibung", kategorie.beschreibung),
             "farbe": cleaned.get("farbe", kategorie.farbe),
             "sort_order": cleaned.get("sort_order", kategorie.sort_order),
+            "taetigkeitsgruppe": cleaned.get("taetigkeitsgruppe", kategorie.taetigkeitsgruppe),
+            "stoerung": cleaned.get("stoerung", kategorie.stoerung),
+            "planung": cleaned.get("planung", kategorie.planung),
         }
+        _validate_gruppe_fields(
+            merged["taetigkeitsgruppe"], merged["stoerung"], merged["planung"]
+        )
         neue = Kategorie(**merged)
-        neue.raumtypen = raumtypen or list(kategorie.raumtypen)
         db.session.add(neue)
         db.session.commit()
         return neue
 
     for key, value in cleaned.items():
         setattr(kategorie, key, value)
-    if "raumtyp_ids" in data or "raumtyp_id" in data:
-        kategorie.raumtypen = raumtypen
+
+    _validate_gruppe_fields(
+        kategorie.taetigkeitsgruppe, kategorie.stoerung, kategorie.planung
+    )
     db.session.commit()
     return kategorie
 
 
 def set_aktiv(kategorie_id: int, aktiv: bool) -> Kategorie:
-    """Deactivate (soft-delete) or reactivate a category."""
     kategorie = db.session.get(Kategorie, kategorie_id)
     if kategorie is None:
-        raise ValidationError("Kategorie nicht gefunden.")
+        raise ValidationError("Tätigkeit nicht gefunden.")
     kategorie.aktiv = aktiv
     db.session.commit()
     return kategorie

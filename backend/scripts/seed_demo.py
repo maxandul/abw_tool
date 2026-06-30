@@ -5,48 +5,53 @@ Run from the project root:
 
 Creates:
   - Erhebung "Demo Standort Zürich"  (2026-05-19 to 2026-05-30)
-  - 5 participants (anna@demo.ch ... elias@demo.ch), PIN: demo1234
-  - Realistic day entries for each participant over the 2 weeks
+  - 5 participants (anna@demo.ch … elias@demo.ch), PIN: 0000
+  - Realistic day entries using the 16 standard Tätigkeiten
   - 3 of 5 participants have submitted their entries
 """
 
-import sys
 import os
-from datetime import date, time, timedelta
-import random
+import sys
+from datetime import date, datetime, time, timedelta
 
-# Allow importing the Flask app from the parent directory
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from run import app
 from extensions import db
-from models import (
-    User, Gruppe, GruppenMitglied, Kategorie,
-    Einreichung, Eintrag,
-)
+from models import User, Gruppe, GruppenMitglied, Kategorie, Einreichung, Eintrag
 from models.einreichung import EinreichungStatus
+from models.kategorie import Taetigkeitsgruppe
 from models.user import Rolle
 from services import auth_service
 
-DEMO_PIN = "demo1234"
-
+# (email, vorname, nachname, funktion, oe, beschäftigungsgrad %)
 TEILNEHMER = [
-    ("anna@demo.ch",   "Anna"),
-    ("ben@demo.ch",    "Ben"),
-    ("clara@demo.ch",  "Clara"),
-    ("daniel@demo.ch", "Daniel"),
-    ("elias@demo.ch",  "Elias"),
+    ("anna@demo.ch",   "Anna",   "Meier",   "Projektleiterin",    "Abteilung Planung", 100.0),
+    ("ben@demo.ch",    "Ben",    "Keller",  "Fachspezialist",     "Abteilung Planung", 100.0),
+    ("clara@demo.ch",  "Clara",  "Brunner", "Teamleiterin",       "Abteilung IT",      80.0),
+    ("daniel@demo.ch", "Daniel", "Frei",    "Sachbearbeiter",     "Abteilung IT",      100.0),
+    ("elias@demo.ch",  "Elias",  "Widmer",  "Praktikant",         "Abteilung Planung", 60.0),
 ]
 
-# Submitted: first 3; last 2 still in progress
 EINGEREICHT_IDX = {0, 1, 2}
 
 VON = date(2026, 5, 19)
 BIS = date(2026, 5, 30)
 
+K = Taetigkeitsgruppe
+STILL_STOER = "Stille Einzelarbeit, Störung erlaubt"
+STILL_RUHIG = "Stille Einzelarbeit, ungestört"
+CALL_ZHOER = "Call, Zuhörer erlaubt"
+CALL_GEPL = "Call, keine Zuhörer, geplant"
+Z23_STOER_GEPL = "Störung erlaubt, geplant (2/3)"
+Z23_STOER_UNG = "Störung erlaubt, ungeplant (2/3)"
+Z23_RUHIG_GEPL = "Ungestört, geplant (2/3)"
+G4_STOER_GEPL = "Störung erlaubt, geplant (4+)"
+G4_STOER_UNG = "Störung erlaubt, ungeplant (4+)"
+G4_RUHIG_GEPL = "Ungestört, geplant (4+)"
 
-def arbeitstage(von: date, bis: date):
-    """Return list of working days (Mon–Fri) in the range."""
+
+def arbeitstage(von: date, bis: date) -> list[date]:
     days = []
     d = von
     while d <= bis:
@@ -56,124 +61,136 @@ def arbeitstage(von: date, bis: date):
     return days
 
 
-def make_tagesplan(kategorien_by_name: dict, wochentag: int, variation: int):
-    """Return a list of (zeit_von, zeit_bis, kategorie_name) for one day."""
-    # Base timetable for a typical office day
+def load_kategorien() -> dict[tuple[str, str], Kategorie]:
+    """Map (taetigkeitsgruppe, name) → Kategorie (names repeat across groups)."""
+    return {
+        (k.taetigkeitsgruppe.value, k.name): k
+        for k in Kategorie.query.filter_by(aktiv=True).all()
+    }
+
+
+def make_tagesplan(wochentag: int, variation: int) -> list[tuple[time, time, Taetigkeitsgruppe, str]]:
+    """Return (zeit_von, zeit_bis, gruppe, tätigkeit_name) for one day."""
     plans = [
-        # Monday / Friday – slightly different
+        # Mo / Fr
         [
-            (time(8,  0), time(9,  0), "Admin"),
-            (time(9,  0), time(10, 0), "Meeting / Austausch"),
-            (time(10, 0), time(12, 0), "Ungestörte Admin"),
-            (time(12, 0), time(13, 0), "Mittagessen intern"),
-            (time(13, 0), time(14, 30), "Admin"),
-            (time(14, 30), time(16, 0), "Interner Call"),
-            (time(16, 0), time(17, 0), "Internes 2er/3er Gespräch"),
+            (time(8, 0), time(9, 0), K.EINZELARBEIT, STILL_STOER),
+            (time(9, 0), time(10, 0), K.GRUPPE_4PLUS, G4_STOER_GEPL),
+            (time(10, 0), time(12, 0), K.EINZELARBEIT, STILL_RUHIG),
+            (time(12, 0), time(13, 0), K.EXTERN, "Teilzeit / frei"),
+            (time(13, 0), time(14, 30), K.EINZELARBEIT, CALL_ZHOER),
+            (time(14, 30), time(16, 0), K.ZU_ZWEIT_DREIT, Z23_STOER_GEPL),
+            (time(16, 0), time(17, 0), K.ZU_ZWEIT_DREIT, Z23_STOER_UNG),
         ],
-        # Tuesday
+        # Di
         [
-            (time(8, 0), time(8, 30),  "Admin"),
-            (time(8, 30), time(10, 30), "Ungestörte Admin"),
-            (time(10, 30), time(12, 0), "Vertrauliches 2er/3er Gespräch"),
-            (time(12, 0), time(13, 0),  "Mittagessen extern"),
-            (time(13, 0), time(14, 30), "Meeting / Austausch"),
-            (time(14, 30), time(15, 30), "Interner Call"),
-            (time(15, 30), time(17, 0),  "Admin"),
+            (time(8, 0), time(8, 30), K.EINZELARBEIT, STILL_STOER),
+            (time(8, 30), time(10, 30), K.EINZELARBEIT, STILL_RUHIG),
+            (time(10, 30), time(12, 0), K.ZU_ZWEIT_DREIT, Z23_RUHIG_GEPL),
+            (time(12, 0), time(13, 0), K.EXTERN, "Mobil / anderer Standort"),
+            (time(13, 0), time(14, 30), K.GRUPPE_4PLUS, G4_STOER_GEPL),
+            (time(14, 30), time(15, 30), K.ZU_ZWEIT_DREIT, Z23_STOER_GEPL),
+            (time(15, 30), time(17, 0), K.EINZELARBEIT, CALL_GEPL),
         ],
-        # Wednesday
+        # Mi
         [
-            (time(8, 0),  time(9, 0),   "Admin"),
-            (time(9, 0),  time(10, 30), "Workshop / Kollaboration"),
-            (time(10, 30), time(12, 0), "Meeting / Austausch"),
-            (time(12, 0), time(13, 0),  "Mittagessen intern"),
-            (time(13, 0), time(15, 0),  "Ungestörte Admin"),
-            (time(15, 0), time(16, 0),  "Call"),
-            (time(16, 0), time(17, 0),  "Admin"),
+            (time(8, 0), time(9, 0), K.EINZELARBEIT, STILL_STOER),
+            (time(9, 0), time(10, 30), K.GRUPPE_4PLUS, G4_STOER_UNG),
+            (time(10, 30), time(12, 0), K.GRUPPE_4PLUS, G4_STOER_GEPL),
+            (time(12, 0), time(13, 0), K.EXTERN, "Teilzeit / frei"),
+            (time(13, 0), time(15, 0), K.EINZELARBEIT, STILL_RUHIG),
+            (time(15, 0), time(16, 0), K.ZU_ZWEIT_DREIT, Z23_STOER_UNG),
+            (time(16, 0), time(17, 0), K.EINZELARBEIT, STILL_STOER),
         ],
-        # Thursday
+        # Do
         [
-            (time(8, 0),  time(9, 0),   "Internes 2er/3er Gespräch"),
-            (time(9, 0),  time(11, 0),  "Ungestörte Admin"),
-            (time(11, 0), time(12, 0),  "Vertraulicher Call"),
-            (time(12, 0), time(13, 0),  "Mittagessen intern"),
-            (time(13, 0), time(14, 0),  "Admin"),
-            (time(14, 0), time(16, 30), "Meeting / Austausch"),
-            (time(16, 30), time(17, 0), "Admin"),
+            (time(8, 0), time(9, 0), K.ZU_ZWEIT_DREIT, Z23_STOER_UNG),
+            (time(9, 0), time(11, 0), K.EINZELARBEIT, STILL_RUHIG),
+            (time(11, 0), time(12, 0), K.ZU_ZWEIT_DREIT, Z23_RUHIG_GEPL),
+            (time(12, 0), time(13, 0), K.EXTERN, "Teilzeit / frei"),
+            (time(13, 0), time(14, 0), K.EINZELARBEIT, CALL_ZHOER),
+            (time(14, 0), time(16, 30), K.GRUPPE_4PLUS, G4_RUHIG_GEPL),
+            (time(16, 30), time(17, 0), K.EINZELARBEIT, STILL_STOER),
         ],
-        # Friday
+        # Fr
         [
-            (time(8, 0),  time(9, 30),  "Ungestörte Admin"),
-            (time(9, 30), time(11, 0),  "Interner Call"),
-            (time(11, 0), time(12, 0),  "Admin"),
-            (time(12, 0), time(13, 0),  "Mittagessen intern"),
-            (time(13, 0), time(14, 30), "Meeting / Austausch"),
-            (time(14, 30), time(16, 0), "Ungestörte Admin"),
-            (time(16, 0), time(17, 0),  "Extern / Home Office"),
+            (time(8, 0), time(9, 30), K.EINZELARBEIT, STILL_RUHIG),
+            (time(9, 30), time(11, 0), K.ZU_ZWEIT_DREIT, Z23_STOER_GEPL),
+            (time(11, 0), time(12, 0), K.EINZELARBEIT, STILL_STOER),
+            (time(12, 0), time(13, 0), K.EXTERN, "Teilzeit / frei"),
+            (time(13, 0), time(14, 30), K.GRUPPE_4PLUS, G4_STOER_GEPL),
+            (time(14, 30), time(16, 0), K.EINZELARBEIT, STILL_RUHIG),
+            (time(16, 0), time(17, 0), K.EXTERN, "Homeoffice"),
         ],
     ]
 
-    # Occasional home office day
     if variation % 7 == 3:
         return [
-            (time(8, 0), time(12, 0), "Extern / Home Office"),
-            (time(13, 0), time(17, 0), "Extern / Home Office"),
+            (time(8, 0), time(12, 0), K.EXTERN, "Homeoffice"),
+            (time(13, 0), time(17, 0), K.EXTERN, "Homeoffice"),
         ]
 
-    base = plans[wochentag % len(plans)]
+    base = list(plans[wochentag % len(plans)])
 
-    # Slight variation: sometimes swap a block
     if variation % 5 == 0 and len(base) > 3:
-        base = list(base)
-        base[2] = (base[2][0], base[2][1], "Admin")
+        base[2] = (base[2][0], base[2][1], K.EINZELARBEIT, STILL_STOER)
 
     return base
 
 
-def seed_demo():
+def seed_demo() -> None:
     with app.app_context():
-        # Check if demo already exists
-        existing = Gruppe.query.filter_by(name="Demo Standort Zürich").first()
-        if existing:
+        if Gruppe.query.filter_by(name="Demo Standort Zürich").first():
             print("Demo-Erhebung existiert bereits. Abbruch.")
+            return
+
+        kategorien = load_kategorien()
+        if len(kategorien) < 16:
+            print(
+                f"FEHLER: Nur {len(kategorien)} Tätigkeiten gefunden. "
+                "Zuerst Server starten oder `flask seed` ausführen."
+            )
             return
 
         print("Erstelle Demo-Erhebung...")
 
-        # ── Gruppe ───────────────────────────────────────────────────────────
         gruppe = Gruppe(
             name="Demo Standort Zürich",
             zeitraum_von=VON,
             zeitraum_bis=BIS,
-            sharing_ratio=1.2,
         )
         db.session.add(gruppe)
         db.session.flush()
 
-        # ── Kategorien laden ────────────────────────────────────────────────
-        kategorien_by_name = {k.name: k for k in Kategorie.query.all()}
-        if not kategorien_by_name:
-            print("FEHLER: Keine Kategorien gefunden. Zuerst Server starten (seed_default_data).")
-            return
-
-        # ── Teilnehmer ───────────────────────────────────────────────────────
+        pin_hash = auth_service.hash_pin(auth_service.teilnehmer_temp_pin())
         users = []
-        pin_hash = auth_service.hash_pin(DEMO_PIN)
-        for email, _ in TEILNEHMER:
-            u = User.query.filter_by(email=email).first()
-            if not u:
-                u = User(email=email, pin_hash=pin_hash, rolle=Rolle.TEILNEHMER, aktiv=True)
-                db.session.add(u)
+
+        for email, vorname, nachname, funktion, oe, pensum in TEILNEHMER:
+            user = User.query.filter_by(email=email).first()
+            if not user:
+                user = User(email=email, pin_hash=pin_hash, rolle=Rolle.TEILNEHMER, aktiv=True)
+                db.session.add(user)
                 db.session.flush()
-            users.append(u)
-            db.session.add(GruppenMitglied(user_id=u.id, gruppe_id=gruppe.id))
+            users.append(user)
+            db.session.add(
+                GruppenMitglied(
+                    user_id=user.id,
+                    gruppe_id=gruppe.id,
+                    vorname=vorname,
+                    nachname=nachname,
+                    funktion=funktion,
+                    organisationseinheit=oe,
+                    beschaeftigungsgrad=pensum,
+                )
+            )
 
         db.session.flush()
 
-        # ── Einträge + Einreichung ────────────────────────────────────────────
         tage = arbeitstage(VON, BIS)
+        eintrag_count = 0
+        skipped = 0
 
         for idx, user in enumerate(users):
-            # Create Einreichung
             ei = Einreichung(
                 user_id=user.id,
                 gruppe_id=gruppe.id,
@@ -182,34 +199,38 @@ def seed_demo():
             db.session.add(ei)
 
             for tag_nr, tag in enumerate(tage):
-                plan = make_tagesplan(kategorien_by_name, tag.weekday(), idx * 13 + tag_nr)
-                for von, bis, kat_name in plan:
-                    kat = kategorien_by_name.get(kat_name)
+                plan = make_tagesplan(tag.weekday(), idx * 13 + tag_nr)
+                for von, bis, gruppe_enum, kat_name in plan:
+                    kat = kategorien.get((gruppe_enum.value, kat_name))
                     if not kat:
+                        skipped += 1
                         continue
-                    db.session.add(Eintrag(
-                        user_id=user.id,
-                        gruppe_id=gruppe.id,
-                        kategorie_id=kat.id,
-                        datum=tag,
-                        zeit_von=von,
-                        zeit_bis=bis,
-                    ))
+                    db.session.add(
+                        Eintrag(
+                            user_id=user.id,
+                            gruppe_id=gruppe.id,
+                            kategorie_id=kat.id,
+                            datum=tag,
+                            zeit_von=von,
+                            zeit_bis=bis,
+                        )
+                    )
+                    eintrag_count += 1
 
-            # Submit first 3 participants
             if idx in EINGEREICHT_IDX:
                 ei.status = EinreichungStatus.EINGEREICHT
-                from datetime import datetime
                 ei.eingereicht_am = datetime.now()
 
         db.session.commit()
 
-        print(f"\nDemo-Daten erstellt:")
+        demo_pin = auth_service.teilnehmer_temp_pin()
+        print("\nDemo-Daten erstellt:")
         print(f"  Erhebung : {gruppe.name}  ({VON} – {BIS})")
+        print(f"  Einträge : {eintrag_count}" + (f"  ({skipped} übersprungen)" if skipped else ""))
         print(f"  Teilnehmer ({len(users)}):")
-        for i, (email, name) in enumerate(TEILNEHMER):
+        for i, (email, vorname, *_rest) in enumerate(TEILNEHMER):
             status = "Eingereicht" if i in EINGEREICHT_IDX else "Offen"
-            print(f"    {name:8s}  {email:22s}  PIN: {DEMO_PIN}  Status: {status}")
+            print(f"    {vorname:8s}  {email:22s}  PIN: {demo_pin}  Status: {status}")
         print(f"  Arbeitstage: {len(tage)}")
 
 

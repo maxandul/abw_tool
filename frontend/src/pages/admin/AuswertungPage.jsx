@@ -1,8 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  getGruppen, getKategorien, getLastprofil, getRaumbedarf, getAnteile, getExportUrl
+  getGruppen, getKategorien, getTeilnehmerFilter,
+  getLastprofil, getRaumbedarf, getAnteile, getExportUrl
 } from "../../api/admin";
+import { groupByTaetigkeitsgruppe } from "../../utils/taetigkeiten";
 import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
 
@@ -76,87 +78,102 @@ function Heatmap({ data, anzeige }) {
   );
 }
 
-// ── Raumbedarf ───────────────────────────────────────────────────────────────
-function Raumbedarf({ data }) {
+const LABEL_W = "14rem";
+
+// ── Bedarf nach Tätigkeit ────────────────────────────────────────────────────
+function TaetigkeitenBedarf({ data }) {
   return (
     <div>
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th className="table-th">Raumtyp</th>
+              <th className="table-th min-w-[14rem]">Tätigkeit</th>
               <th className="table-th text-right">Ø Nutzung</th>
               <th className="table-th text-right">Peak</th>
-              <th className="table-th text-right">Sharing-Ratio</th>
               <th className="table-th text-right">Einheiten (Ø)</th>
               <th className="table-th text-right">Einheiten (Peak)</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {data.raumtypen.map(r => (
-              <tr key={r.id}>
-                <td className="table-td font-medium">{r.name}</td>
+            {data.taetigkeiten.map(r => {
+              const color = r.farbe || undefined;
+              return (
+              <tr key={r.id} style={color ? { color } : undefined}>
+                <td className="table-td font-medium align-top break-words">{r.name}</td>
                 <td className="table-td text-right">{r.avg_nutzung}</td>
                 <td className="table-td text-right">{r.peak_nutzung}</td>
-                <td className="table-td text-right">{data.sharing_ratio}</td>
                 <td className="table-td text-right font-semibold">{r.einheiten_avg}</td>
                 <td className="table-td text-right font-semibold">{r.einheiten_peak}</td>
               </tr>
-            ))}
+            );})}
             <tr className="bg-slate-50 font-semibold">
               <td className="table-td">Anwesend total</td>
               <td className="table-td text-right">{data.anwesend_total.avg_nutzung}</td>
               <td className="table-td text-right">{data.anwesend_total.peak_nutzung}</td>
-              <td colSpan={3} />
+              <td colSpan={2} />
             </tr>
           </tbody>
         </table>
       </div>
       <p className="text-xs text-slate-500 mt-3">
-        Die empfohlene Anzahl Einheiten basiert auf der Sharing-Ratio ({data.sharing_ratio}). Ø-Werte sind kosteneffizienter, Peak-Werte decken Spitzenlastzeiten ab.
+        Empfohlene Einheiten basieren auf Ø- bzw. Peak-Nutzung (aufgerundet). Ø-Werte sind kosteneffizienter, Peak-Werte decken Spitzenlastzeiten ab. Externe Tätigkeiten (Homeoffice, Teilzeit usw.) sind nicht enthalten.
       </p>
     </div>
   );
 }
 
 // ── Anteile ──────────────────────────────────────────────────────────────────
-function BarRow({ name, stunden, anteil, max, color }) {
+function BarRow({ name, stunden, anteil, max, barColor = "#1e3a5f", labelColor }) {
+  const pct = Math.min(100, (stunden / max) * 100);
+  const textColor = labelColor || barColor;
   return (
-    <div className="flex items-center gap-3">
-      <span className="w-48 text-sm text-right text-slate-600 truncate shrink-0">{name}</span>
-      <div className="flex-1 bg-slate-100 rounded-full h-3.5 overflow-hidden">
-        <div className={`h-full ${color} rounded-full transition-all`}
-          style={{ width: `${(stunden / max) * 100}%` }} />
+    <div className="flex items-center gap-3 w-full">
+      <span
+        className="text-sm break-words leading-snug shrink-0"
+        style={{ width: LABEL_W, color: textColor }}
+      >
+        {name}
+      </span>
+      <div className="flex-1 min-w-0 bg-slate-100 rounded-full h-3.5 overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all"
+          style={{ width: `${pct}%`, backgroundColor: barColor }}
+        />
       </div>
-      <span className="text-xs text-slate-500 w-24 shrink-0 text-right">{stunden}h ({anteil}%)</span>
+      <span className="text-xs text-slate-500 shrink-0 whitespace-nowrap text-right min-w-[5.5rem]">
+        {stunden}h ({anteil}%)
+      </span>
     </div>
   );
 }
 
 function Anteile({ data }) {
-  const maxRt  = Math.max(1, ...data.raumtyp_anteile.map(r => r.stunden));
+  const tgAnteile = data.taetigkeitsgruppe_anteile ?? [];
+  const maxTg = Math.max(1, ...tgAnteile.map(r => r.stunden));
   const maxKat = data.kategorie_anteile?.length
     ? Math.max(1, ...data.kategorie_anteile.map(k => k.stunden))
     : 1;
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">Nach Raumtyp</h3>
+        <h3 className="text-sm font-semibold text-slate-700 mb-3">Nach Tätigkeitsgruppe</h3>
         <div className="space-y-1.5">
-          {data.raumtyp_anteile.filter(r => r.stunden > 0).map(r => (
-            <BarRow key={r.id} name={r.name} stunden={r.stunden}
-              anteil={r.anteil_prozent} max={maxRt} color="bg-brand-600" />
+          {tgAnteile.filter(r => r.stunden > 0).map(r => (
+            <BarRow key={r.gruppe} name={r.name} stunden={r.stunden}
+              anteil={r.anteil_prozent} max={maxTg} barColor="#1e3a5f" labelColor="#475569" />
           ))}
           <p className="text-xs text-slate-400 pt-1">Gesamt: {data.gesamt_stunden}h</p>
         </div>
       </div>
       {data.kategorie_anteile?.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-slate-700 mb-3">Nach Kategorie</h3>
+          <h3 className="text-sm font-semibold text-slate-700 mb-3">Nach Tätigkeit</h3>
           <div className="space-y-1.5">
             {data.kategorie_anteile.map(k => (
               <BarRow key={k.id} name={k.name} stunden={k.stunden}
-                anteil={k.anteil_prozent} max={maxKat} color="bg-brand-400" />
+                anteil={k.anteil_prozent} max={maxKat}
+                barColor={k.farbe || "#64748b"} />
             ))}
           </div>
         </div>
@@ -165,21 +182,111 @@ function Anteile({ data }) {
   );
 }
 
-// ── Kategorie-Filter ─────────────────────────────────────────────────────────
-const VERT_ORDER  = ["OFFEN", "INTERN", "VERTRAULICH"];
-const VERT_LABELS = { OFFEN: "Öffentlich (externe dürfen zuhören)", INTERN: "Intern (nur Kolleg:innen)", VERTRAULICH: "Vertraulich (abgeschlossener Raum)" };
-const GRP_ORDER   = ["ALLEIN", "KLEIN", "MITTEL", "GROSS"];
+// ── Teilnehmer-Filter ────────────────────────────────────────────────────────
+const EMPTY_TN_FILTER = { funktionen: [], organisationseinheiten: [], beschaeftigungsgrade: [] };
 
-function KategorieFilter({ kategorien, aktiveIds, onToggle }) {
-  // Group and sort
-  const byVert = {};
-  kategorien.forEach(k => {
-    const v = k.vertraulichkeit || "_KEINE";
-    if (!byVert[v]) byVert[v] = [];
-    byVert[v].push(k);
-  });
-  const grpIdx = g => GRP_ORDER.indexOf(g) === -1 ? 99 : GRP_ORDER.indexOf(g);
-  Object.values(byVert).forEach(arr => arr.sort((a, b) => grpIdx(a.gruppengroesse) - grpIdx(b.gruppengroesse)));
+function FilterChipGroup({ label, items, selected, onToggle, formatLabel }) {
+  if (!items?.length) return null;
+  const fmt = formatLabel ?? (v => v);
+  return (
+    <div>
+      <p className="text-xs text-slate-500 mb-1.5">{label}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map(item => {
+          const key = String(item);
+          const active = selected.includes(item);
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onToggle(item)}
+              className={`px-2.5 py-0.5 rounded-full text-xs border transition-colors ${
+                active
+                  ? "bg-brand-600 text-white border-brand-600"
+                  : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"
+              }`}
+            >
+              {fmt(item)}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TeilnehmerFilterCard({ options, filters, onChange, onClear }) {
+  const activeCount =
+    filters.funktionen.length +
+    filters.organisationseinheiten.length +
+    filters.beschaeftigungsgrade.length;
+
+  const toggle = (key, value) => {
+    onChange({
+      ...filters,
+      [key]: filters[key].includes(value)
+        ? filters[key].filter(v => v !== value)
+        : [...filters[key], value],
+    });
+  };
+
+  const hasOptions =
+    options?.funktionen?.length ||
+    options?.organisationseinheiten?.length ||
+    options?.beschaeftigungsgrade?.length;
+
+  if (!hasOptions) {
+    return (
+      <div className="card text-sm text-slate-500">
+        Keine Teilnehmerattribute für die gewählte Erhebung vorhanden.
+      </div>
+    );
+  }
+
+  return (
+    <div className="card space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold text-slate-800">Teilnehmer-Filter</h2>
+        {activeCount > 0 && (
+          <button type="button" onClick={onClear}
+            className="text-xs text-slate-400 hover:text-slate-600 underline">
+            Alle Filter zurücksetzen
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-slate-500">
+        Optional einschränken nach Funktion, Organisationseinheit oder Beschäftigungsgrad.
+        Wirkt auf Lastprofil, Bedarf nach Tätigkeit und Anteilsübersicht.
+        {activeCount > 0 && (
+          <span className="text-brand-600"> ({activeCount} Filter aktiv)</span>
+        )}
+      </p>
+      <FilterChipGroup
+        label="Funktion"
+        items={options.funktionen}
+        selected={filters.funktionen}
+        onToggle={v => toggle("funktionen", v)}
+      />
+      <FilterChipGroup
+        label="Organisationseinheit"
+        items={options.organisationseinheiten}
+        selected={filters.organisationseinheiten}
+        onToggle={v => toggle("organisationseinheiten", v)}
+      />
+      <FilterChipGroup
+        label="Beschäftigungsgrad"
+        items={options.beschaeftigungsgrade}
+        selected={filters.beschaeftigungsgrade}
+        onToggle={v => toggle("beschaeftigungsgrade", v)}
+        formatLabel={v => `${v % 1 === 0 ? v : v.toFixed(1)}%`}
+      />
+    </div>
+  );
+}
+
+// ── Tätigkeiten-Filter ───────────────────────────────────────────────────────
+function TaetigkeitFilter({ kategorien, aktiveIds, onToggle }) {
+  const groups = groupByTaetigkeitsgruppe(kategorien);
 
   const chip = k => (
     <button key={k.id} type="button" onClick={() => onToggle(k.id)}
@@ -196,7 +303,7 @@ function KategorieFilter({ kategorien, aktiveIds, onToggle }) {
     <div className="mb-4 space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs text-slate-500">
-          Kategorien auswählen{aktiveIds.length > 0 ? ` (${aktiveIds.length} aktiv)` : " – mind. 1 wählen"}:
+          Tätigkeiten auswählen{aktiveIds.length > 0 ? ` (${aktiveIds.length} aktiv)` : " – mind. 1 wählen"}:
         </p>
         {aktiveIds.length > 0 && (
           <button type="button" onClick={() => onToggle(null)}
@@ -205,25 +312,19 @@ function KategorieFilter({ kategorien, aktiveIds, onToggle }) {
           </button>
         )}
       </div>
-      {VERT_ORDER.filter(v => byVert[v]?.length).map(v => (
-        <div key={v}>
-          <p className="text-xs text-slate-400 mb-1">{VERT_LABELS[v]}</p>
-          <div className="flex flex-wrap gap-1.5">{byVert[v].map(chip)}</div>
+      {groups.map(g => (
+        <div key={g.key}>
+          <p className="text-xs text-slate-400 mb-1">{g.label}</p>
+          <div className="flex flex-wrap gap-1.5">{g.items.map(chip)}</div>
         </div>
       ))}
-      {byVert["_KEINE"]?.length > 0 && (
-        <div>
-          <p className="text-xs text-slate-400 mb-1">Ohne Klassifizierung</p>
-          <div className="flex flex-wrap gap-1.5">{byVert["_KEINE"].map(chip)}</div>
-        </div>
-      )}
     </div>
   );
 }
 
 const LP_HINTS = {
-  mittelwert: "Mittelwert (Ø Personen): Pro Teilnehmer und gewählter Kategorie wird berechnet, in wie vielen der erfassten Wochen ein Eintrag vorhanden war – geteilt durch die Anzahl Wochen. Diese Anteile werden über alle Kategorien und Teilnehmenden summiert. Das Ergebnis gibt an, wie viele Personen diesen Slot pro Woche im Durchschnitt belegt haben.",
-  maximum:    "Maximum (Personen): Anzahl unterschiedlicher Teilnehmender, die diesen Slot über die gesamte Erhebungsdauer mindestens einmal mit einer der gewählten Kategorien belegt haben. Pro Teilnehmer und Slot wird maximal 1 gezählt, unabhängig von Anzahl Wochen oder Kategorien.",
+  mittelwert: "Mittelwert (Ø Personen): Pro Teilnehmer und gewählter Tätigkeit wird berechnet, in wie vielen der erfassten Wochen ein Eintrag vorhanden war – geteilt durch die Anzahl Wochen. Diese Anteile werden über alle Tätigkeiten und Teilnehmenden summiert. Das Ergebnis gibt an, wie viele Personen diesen Slot pro Woche im Durchschnitt belegt haben.",
+  maximum:    "Maximum (Personen): Anzahl unterschiedlicher Teilnehmender, die diesen Slot über die gesamte Erhebungsdauer mindestens einmal mit einer der gewählten Tätigkeiten belegt haben. Pro Teilnehmer und Slot wird maximal 1 gezählt, unabhängig von Anzahl Wochen oder Tätigkeiten.",
 };
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -235,6 +336,8 @@ export default function AuswertungPage() {
     searchParams.get("gruppe_id") ? [parseInt(searchParams.get("gruppe_id"))] : []
   );
   const [kategorieIds, setKategorieIds] = useState([]);
+  const [tnFilterOptions, setTnFilterOptions] = useState(null);
+  const [tnFilter, setTnFilter] = useState(EMPTY_TN_FILTER);
   const [anzeige, setAnzeige] = useState("mittelwert");
   const [lp, setLp]           = useState(null);
   const [lpLoading, setLpLoading] = useState(false);
@@ -256,14 +359,41 @@ export default function AuswertungPage() {
     });
   }, []);
 
+  const appendTnFilterParams = useCallback((p) => {
+    let q = p;
+    if (tnFilter.funktionen.length) {
+      q += `&funktionen=${encodeURIComponent(tnFilter.funktionen.join(","))}`;
+    }
+    if (tnFilter.organisationseinheiten.length) {
+      q += `&organisationseinheiten=${encodeURIComponent(tnFilter.organisationseinheiten.join(","))}`;
+    }
+    if (tnFilter.beschaeftigungsgrade.length) {
+      q += `&beschaeftigungsgrade=${tnFilter.beschaeftigungsgrade.join(",")}`;
+    }
+    return q;
+  }, [tnFilter]);
+
   const buildParams = useCallback(() =>
-    `gruppe_ids=${gruppeIds.join(",")}`, [gruppeIds]);
+    appendTnFilterParams(`gruppe_ids=${gruppeIds.join(",")}`),
+    [gruppeIds, appendTnFilterParams]);
 
   const buildLpParams = useCallback(() => {
     let p = buildParams();
     if (kategorieIds.length) p += `&kategorie_ids=${kategorieIds.join(",")}`;
     return p;
   }, [buildParams, kategorieIds]);
+
+  useEffect(() => {
+    if (!gruppeIds.length) {
+      setTnFilterOptions(null);
+      setTnFilter(EMPTY_TN_FILTER);
+      return;
+    }
+    setTnFilter(EMPTY_TN_FILTER);
+    getTeilnehmerFilter(`gruppe_ids=${gruppeIds.join(",")}`).then(({ data }) => {
+      if (data) setTnFilterOptions(data);
+    });
+  }, [gruppeIds.join(",")]);
 
   // Load Raumbedarf + Anteile when gruppeIds changes
   const load = useCallback(async () => {
@@ -279,18 +409,18 @@ export default function AuswertungPage() {
   useEffect(() => {
     if (gruppeIds.length) load();
     else { setRb(null); setAnt(null); setLp(null); }
-  }, [gruppeIds.join(",")]);
+  }, [gruppeIds.join(","), tnFilter]);
 
-  // Load Lastprofil when gruppeIds or kategorieIds change
+  // Load Lastprofil when gruppeIds, kategorieIds or tnFilter change
   const reloadLp = useCallback(async () => {
     if (!gruppeIds.length || !kategorieIds.length) { setLp(null); return; }
     setLpLoading(true);
     const { data, error: e } = await getLastprofil(buildLpParams());
     setLpLoading(false);
     if (e) setError(e); else setLp(data);
-  }, [gruppeIds.join(","), kategorieIds.join(","), buildLpParams]);
+  }, [gruppeIds.join(","), kategorieIds.join(","), tnFilter, buildLpParams]);
 
-  useEffect(() => { reloadLp(); }, [gruppeIds.join(","), kategorieIds.join(",")]);
+  useEffect(() => { reloadLp(); }, [gruppeIds.join(","), kategorieIds.join(","), tnFilter]);
 
   const toggleGruppe    = id => setGruppeIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
   const toggleKategorie = id => {
@@ -366,6 +496,15 @@ export default function AuswertungPage() {
         <div className="card text-center text-slate-500 py-12">Wähle eine Erhebung aus.</div>
       )}
 
+      {gruppeIds.length > 0 && (
+        <TeilnehmerFilterCard
+          options={tnFilterOptions}
+          filters={tnFilter}
+          onChange={setTnFilter}
+          onClear={() => setTnFilter(EMPTY_TN_FILTER)}
+        />
+      )}
+
       {/* Lastprofil */}
       {gruppeIds.length > 0 && (
         <div className="card">
@@ -385,15 +524,14 @@ export default function AuswertungPage() {
             {LP_HINTS[anzeige]}
           </p>
 
-          {/* Category filter – grouped by Vertraulichkeit × Gruppengrösse */}
-          <KategorieFilter
+          <TaetigkeitFilter
             kategorien={kategorien}
             aktiveIds={kategorieIds}
             onToggle={toggleKategorie}
           />
 
           {kategorieIds.length === 0
-            ? <div className="text-center text-slate-400 py-12 text-sm">Wähle mindestens eine Kategorie, um das Lastprofil anzuzeigen.</div>
+            ? <div className="text-center text-slate-400 py-12 text-sm">Wähle mindestens eine Tätigkeit, um das Lastprofil anzuzeigen.</div>
             : lpLoading
               ? <div className="flex justify-center py-12"><Spinner /></div>
               : lp ? <Heatmap data={lp} anzeige={anzeige} /> : null
@@ -403,8 +541,8 @@ export default function AuswertungPage() {
 
       {rb && (
         <div className="card">
-          <h2 className="font-semibold text-slate-800 mb-4">Raumbedarf</h2>
-          <Raumbedarf data={rb} />
+          <h2 className="font-semibold text-slate-800 mb-4">Bedarf nach Tätigkeit</h2>
+          <TaetigkeitenBedarf data={rb} />
         </div>
       )}
 

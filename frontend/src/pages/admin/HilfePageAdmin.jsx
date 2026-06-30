@@ -28,41 +28,39 @@ export default function HilfePageAdmin() {
       <Section title="Erhebungen verwalten">
         <P>Unter <em>Erhebungen</em> kannst du Erhebungen erstellen, bearbeiten und deren Lebenszyklus steuern:</P>
         <ul className="list-disc list-inside space-y-1 pl-2">
-          <Li><strong>Neue Erhebung:</strong> Name, Zeitraum (von/bis), Sharing-Ratio und optionaler Standort-Hinweis.</Li>
-          <Li><strong>Einladungslink kopieren:</strong> Erzeugt einen einmaligen Registrierungslink. Dieser Link ist nur für die <strong>Erstregistrierung</strong> gültig – jede Person kann ihn nur einmal verwenden.</Li>
+          <Li><strong>Neue Erhebung:</strong> Name und Zeitraum (von/bis).</Li>
+          <Li><strong>Link zur App:</strong> Oben auf der Seite den stabilen Link mit PC-Namen kopieren und an Teilnehmende senden (nicht die IP-Adresse).</Li>
           <Li><strong>Abschliessen / Wieder öffnen:</strong> Steuert, ob Teilnehmer noch Einträge erfassen können.</Li>
           <Li><strong>Archivieren:</strong> Erhebung für immer deaktivieren (nur wenn abgeschlossen). Erfordert Bestätigung.</Li>
         </ul>
-        <P>Für den täglichen Login der Teilnehmenden gilt: Den <strong>Login-Link</strong> (<code className="text-xs bg-slate-100 px-1 rounded">http://SERVERNAME:5000</code>) per E-Mail oder Teams kommunizieren – nicht den Einladungslink. Wer an mehreren Erhebungen teilnimmt, kann manuell unter <em>Teilnehmer</em> hinzugefügt werden (kein neuer Registrierungslink nötig).</P>
       </Section>
 
       <Section title="Teilnehmer verwalten">
-        <P>Pro Erhebung siehst du alle Teilnehmer mit Status (Offen / In Bearbeitung / Eingereicht / Abgeschlossen) und der Anzahl erfasster Stunden.</P>
-        <P>Du kannst Teilnehmer manuell hinzufügen (sie erhalten automatisch einen temporären PIN) oder den PIN eines Teilnehmers zurücksetzen.</P>
-        <P>Manuelle Teilnehmer werden direkt der Erhebung zugewiesen – beim nächsten Login landen sie direkt auf dem Kalender dieser Erhebung.</P>
-      </Section>
-
-      <Section title="Kategorien">
-        <P>Kategorien definieren die Tätigkeitsarten, die Teilnehmer im Kalender auswählen können.</P>
+        <P>Teilnehmer werden pro Erhebung erfasst – per <strong>CSV-Import</strong> (Massenerfassung) oder <strong>manuell</strong>.</P>
         <ul className="list-disc list-inside space-y-1 pl-2">
-          <Li><strong>Name + Farbe:</strong> Identifikation im Kalender.</Li>
-          <Li><strong>Beschreibung:</strong> Erklärender Text, der Teilnehmern beim Erfassen angezeigt wird.</Li>
-          <Li><strong>Vertraulichkeit:</strong> Klassifiziert die Kategorie nach Offenheit (Offen / Intern / Vertraulich). Wird im Kalender als Gruppierung verwendet.</Li>
-          <Li><strong>Gruppengrösse:</strong> Gibt an, für welche Gruppengrösse diese Tätigkeit typisch ist (Allein / Klein / Mittel / Gross).</Li>
-          <Li><strong>Raumtypen:</strong> Mehrere Raumtypen pro Kategorie möglich.</Li>
-          <Li><strong>Deaktivieren / Reaktivieren:</strong> Inaktive Kategorien können nicht mehr erfasst werden, bestehende Einträge bleiben erhalten.</Li>
+          <Li><strong>Temporärer PIN:</strong> Für alle Teilnehmer immer <strong>0000</strong> (neue Accounts und PIN-Reset). Beim ersten Login wählen sie einen eigenen PIN.</Li>
+          <Li><strong>Link zur App:</strong> Ein gemeinsamer Link für alle Erhebungen (z. B. <code className="text-xs bg-slate-100 px-1 rounded">http://PCNAME:5000</code>). Nach dem Login sehen Teilnehmende ihre Erhebungen als Tabs in der Titelleiste.</Li>
+          <Li><strong>CSV-Import:</strong> SAP-Export als CSV (Semikolon, UTF-8). Spalten: E-Mail, Vorname, Nachname, Funktion, Organisationseinheit, Beschäftigungsgrad (%).</Li>
+          <Li><strong>Erneuter Import:</strong> Bereits erfasste Teilnehmer (gleiche E-Mail) werden aktualisiert.</Li>
+          <Li><strong>Manuell / Bearbeiten / PIN reset / Entfernen:</strong> Einzelpersonen erfassen, Attribute anpassen, PIN auf 0000 zurücksetzen oder aus Erhebung entfernen.</Li>
         </ul>
-        <P>Wenn eine Kategorie in bestehenden Einträgen verwendet wird, erhältst du beim Bearbeiten die Wahl: bestehende Einträge überschreiben oder neue Einträge mit der geänderten Kategorie erfassen.</P>
       </Section>
 
-      <Section title="Raumtypen">
-        <P>Raumtypen beschreiben die Raumform, die für eine Kategorie passend ist (z. B. Besprechungsraum, Open Space). Sie sind optional und dienen der Auswertung.</P>
-        <P>Raumtypen können deaktiviert und reaktiviert werden.</P>
+      <Section title="Tätigkeiten">
+        <P>Tätigkeiten definieren die Arten, die Teilnehmer im Kalender auswählen können. Sie sind in vier Gruppen gegliedert:</P>
+        <ul className="list-disc list-inside space-y-1 pl-2">
+          <Li><strong>Einzelarbeit:</strong> Call- und stille Einzelarbeit-Varianten (Grüntöne im Kalender).</Li>
+          <Li><strong>Zu zweit/zu dritt (physisch):</strong> Störung erlaubt/ungestört × geplant/ungeplant (Blautöne).</Li>
+          <Li><strong>In Gruppen (4+, physisch):</strong> wie zu zweit/zu dritt (Rottöne).</Li>
+          <Li><strong>Extern:</strong> Teilzeit/frei, Homeoffice, Mobil/anderer Standort.</Li>
+        </ul>
+        <P>Pro Tätigkeit kannst du Name, Farbe (Gruppen-Palette oder eigene Farbe per «+»), Beschreibung und Sortierung anpassen. Im Teilnehmer-Kalender erscheinen die Tätigkeiten gruppiert nach diesen Gruppen.</P>
+        <P>Inaktive Tätigkeiten können nicht mehr erfasst werden; bestehende Einträge bleiben erhalten.</P>
       </Section>
 
       <Section title="Auswertung">
-        <P>Wähle eine oder mehrere Erhebungen aus dem Dropdown. Der aktive Vergleichsmodus ermöglicht das Überlagern mehrerer Erhebungen per Chip-Auswahl.</P>
-        <P>Die Auswertung zeigt Zeitanteile pro Kategorie sowie tagesweise Verteilungen. Abgeschlossene und offene Erhebungen können verglichen werden.</P>
+        <P>Wähle eine oder mehrere Erhebungen aus dem Dropdown. Der Vergleichsmodus ermöglicht das Überlagern mehrerer Erhebungen per Chip-Auswahl.</P>
+        <P>Die Auswertung zeigt Lastprofile, Bedarf nach Tätigkeit sowie Zeitanteile pro Tätigkeit und Tätigkeitsgruppe.</P>
       </Section>
 
       <Section title="Administratoren verwalten">

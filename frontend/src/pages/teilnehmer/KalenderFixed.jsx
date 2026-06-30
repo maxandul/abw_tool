@@ -10,6 +10,7 @@ import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
 import Modal from "../../components/Modal";
 import { fmtDate } from "../../utils/format";
+import { groupByTaetigkeitsgruppe, sortTaetigkeiten, formatTaetigkeitMeta } from "../../utils/taetigkeiten";
 
 const HOUR_START = 7;
 const HOUR_END   = 19;
@@ -36,20 +37,9 @@ const TIME_OPTIONS = Array.from({ length: SLOTS + 1 }, (_, i) => {
   return { value: fmtTime(m), label: fmtTime(m) };
 });
 
-const VERTRAULICHKEIT_ORDER = { OFFEN: 0, INTERN: 1, VERTRAULICH: 2 };
-const GRUPPENGROESSE_ORDER  = { ALLEIN: 0, KLEIN: 1, MITTEL: 2, GROSS: 3 };
-const VLABELS = { OFFEN: "Offen", INTERN: "Intern", VERTRAULICH: "Vertraulich", "–": "Nicht klassifiziert" };
 
 function sortKategorien(ks) {
-  return [...ks].sort((a, b) => {
-    const va = VERTRAULICHKEIT_ORDER[a.vertraulichkeit] ?? 99;
-    const vb = VERTRAULICHKEIT_ORDER[b.vertraulichkeit] ?? 99;
-    if (va !== vb) return va - vb;
-    const ga = GRUPPENGROESSE_ORDER[a.gruppengroesse] ?? 99;
-    const gb = GRUPPENGROESSE_ORDER[b.gruppengroesse] ?? 99;
-    if (ga !== gb) return ga - gb;
-    return (a.sort_order ?? 0) - (b.sort_order ?? 0);
-  });
+  return sortTaetigkeiten(ks);
 }
 
 // ── Entry form modal ──────────────────────────────────────────────────────────
@@ -78,17 +68,12 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
       <div className="space-y-2 text-sm">
         <p><span className="text-slate-500">Datum:</span> {fmtDate(initial?.datum)}</p>
         <p><span className="text-slate-500">Zeit:</span> {initial?.zeit_von} – {initial?.zeit_bis}</p>
-        <p><span className="text-slate-500">Kategorie:</span> {initial?.kategorie?.name}</p>
+        <p><span className="text-slate-500">Tätigkeit:</span> {initial?.kategorie?.name}</p>
       </div>
     </Modal>
   );
 
-  const groups = {};
-  sorted.forEach(k => {
-    const v = k.vertraulichkeit ?? "–";
-    if (!groups[v]) groups[v] = [];
-    groups[v].push(k);
-  });
+  const groups = groupByTaetigkeitsgruppe(sorted);
 
   return (
     <Modal title={initial?.id ? "Eintrag bearbeiten" : "Neuer Eintrag"} onClose={onClose}>
@@ -109,12 +94,12 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
           </div>
         </div>
         <div>
-          <label className="label">Tätigkeitskategorie</label>
+          <label className="label">Tätigkeit</label>
           <div className="flex gap-2 items-center">
             <select className="input flex-1" value={form.kategorie_id} onChange={set("kategorie_id")}>
-              {Object.entries(groups).map(([v, ks]) => (
-                <optgroup key={v} label={VLABELS[v] ?? v}>
-                  {ks.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+              {groups.map(g => (
+                <optgroup key={g.key} label={g.label}>
+                  {g.items.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
                 </optgroup>
               ))}
             </select>
@@ -128,8 +113,7 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
             <div className="flex items-center gap-1.5 mt-1">
               <span className="inline-block w-3 h-3 rounded-sm" style={{ background: selKat.farbe ?? "#ccc" }} />
               <span className="text-xs text-slate-400">
-                {[selKat.vertraulichkeit && VLABELS[selKat.vertraulichkeit],
-                  selKat.raumtyp_namen?.join(", ")].filter(Boolean).join(" · ")}
+                {[selKat.taetigkeitsgruppe_label, formatTaetigkeitMeta(selKat)].filter(Boolean).join(" · ")}
               </span>
             </div>
           )}

@@ -38,6 +38,5 @@ WOCHENTAG_NAMEN = {
 # Room type used for "no room needed" (absence / external work).
 RAUMTYP_KEIN_RAUM = "Kein Raum nötig"
 
-# Sharing-ratio presets (Dok. 2).
-SHARING_RATIO_PRESETS = [1.0, 1.2, 1.4, 1.6, 2.0]
-DEFAULT_SHARING_RATIO = 1.2
+# Fixed temporary PIN for participants (new accounts and PIN reset).
+TEILNEHMER_TEMP_PIN = "0000"

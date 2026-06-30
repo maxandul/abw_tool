@@ -9,15 +9,12 @@ import Spinner from "./components/Spinner";
 
 import SetupPage         from "./pages/SetupPage";
 import LoginPage         from "./pages/LoginPage";
-import RegistrierungPage from "./pages/RegistrierungPage";
-import GruppenAuswahlPage from "./pages/GruppenAuswahlPage";
 import PinAendernPage    from "./pages/PinAendernPage";
 
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import GruppenPage    from "./pages/admin/GruppenPage";
 import TeilnehmerPage from "./pages/admin/TeilnehmerPage";
 import KategorienPage from "./pages/admin/KategorienPage";
-import RaumtypenPage  from "./pages/admin/RaumtypenPage";
 import AuswertungPage from "./pages/admin/AuswertungPage";
 
 import TnMain       from "./pages/teilnehmer/TnMain";
@@ -54,7 +51,6 @@ export default function App() {
               <Route path="/"                  element={<Root />} />
               <Route path="/setup"             element={<SetupPage />} />
               <Route path="/login"             element={<LoginPage />} />
-              <Route path="/registrierung/:token" element={<RegistrierungPage />} />
               <Route path="/pin-aendern"       element={<RequireAuth><PinAendernPage /></RequireAuth>} />
               <Route path="/gruppen-auswahl"   element={<Navigate to="/tn/dashboard" replace />} />
 
@@ -63,7 +59,6 @@ export default function App() {
               <Route path="/admin/gruppen"     element={<RequireAdmin><GruppenPage /></RequireAdmin>} />
               <Route path="/admin/gruppen/:gruppeId/teilnehmer" element={<RequireAdmin><TeilnehmerPage /></RequireAdmin>} />
               <Route path="/admin/kategorien"  element={<RequireAdmin><KategorienPage /></RequireAdmin>} />
-              <Route path="/admin/raumtypen"   element={<RequireAdmin><RaumtypenPage /></RequireAdmin>} />
               <Route path="/admin/auswertung"  element={<RequireAdmin><AuswertungPage /></RequireAdmin>} />
               <Route path="/admin/admins"      element={<RequireAdmin><AdminsPage /></RequireAdmin>} />
               <Route path="/admin/hilfe"       element={<RequireAdmin><HilfePageAdmin /></RequireAdmin>} />

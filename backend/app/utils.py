@@ -50,6 +50,37 @@ def parse_int_list(value) -> list[int]:
     return result
 
 
+def parse_string_list(value) -> list[str]:
+    """Parse a comma-separated string into a list of non-empty strings."""
+    if value is None or value == "":
+        return []
+    if isinstance(value, (list, tuple)):
+        items = value
+    else:
+        items = str(value).split(",")
+    return [str(item).strip() for item in items if str(item).strip()]
+
+
+def parse_float_list(value) -> list[float]:
+    """Parse a comma-separated string into a list of floats."""
+    if value is None or value == "":
+        return []
+    if isinstance(value, (list, tuple)):
+        items = value
+    else:
+        items = str(value).split(",")
+    result = []
+    for item in items:
+        item = str(item).strip()
+        if not item:
+            continue
+        try:
+            result.append(float(item.replace(",", ".")))
+        except ValueError as exc:
+            raise ValidationError(f"Ungültige Zahl: {item}") from exc
+    return result
+
+
 def time_to_minutes(t: time) -> int:
     """Convert a time object to minutes since midnight."""
     return t.hour * 60 + t.minute

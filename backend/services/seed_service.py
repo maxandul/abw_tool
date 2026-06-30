@@ -1,84 +1,150 @@
-"""Seed default room types and activity categories.
+"""Seed default Tätigkeiten (activity types).
 
-The seed runs on first start and only inserts data when the respective
-tables are empty, so it never overwrites existing data.
+Runs on app start when the kategorie table is empty, or replaces legacy
+seed data when there are no Einträge yet.  Existing databases are upgraded
+in-place via ``_ensure_catalog`` (renames + missing rows).
 """
 
 from extensions import db
-from models import Kategorie, Raumtyp
+from models import Eintrag, Kategorie, Planung, Stoerung, Taetigkeitsgruppe
 
-# (sort_order, name, beschreibung)
-RAUMTYPEN = [
-    (1, "Stiller Arbeitsplatz", "Einzelarbeitsplatz für konzentriertes, ungestörtes Arbeiten"),
-    (2, "Telefonbox", "Abgeschlossene Einzelkabine für Telefonate und Videocalls"),
-    (3, "Kleiner Meetingraum", "Raum für 2–4 Personen, vertrauliche oder interne Gespräche"),
-    (4, "Grosser Meetingraum", "Raum für 5+ Personen, Sitzungen und Teaminformationen"),
-    (5, "Creative Space", "Offener Kollaborationsbereich für Workshops und Konzeptarbeit"),
-    (6, "Empfang / Besucherzone", "Bereich für externe Besucher und Gruppenempfänge"),
-    (7, "Pausenraum", "Aufenthaltsbereich für Pausen und informelle Begegnung"),
-    (8, "Kein Raum nötig", "Tätigkeit findet ausserhalb des Büros statt oder ist Abwesenheit"),
+# (sort_order, name, farbe, gruppe, stoerung, planung, beschreibung)
+DEFAULT_TAETIGKEITEN = [
+    # Einzelarbeit – Grüntöne
+    (1, "Call, Zuhörer erlaubt", "#58D68D", Taetigkeitsgruppe.EINZELARBEIT, Stoerung.ERLAUBT, None,
+     "Telefon- oder Video-Call, bei dem andere mithören dürfen."),
+    (2, "Call, keine Zuhörer, geplant", "#2ECC71", Taetigkeitsgruppe.EINZELARBEIT, Stoerung.UNGESTOERT, Planung.GEPLANT,
+     "Geplanter Call ohne Zuhörer im Raum."),
+    (3, "Call, keine Zuhörer, ungeplant", "#27AE60", Taetigkeitsgruppe.EINZELARBEIT, Stoerung.UNGESTOERT, Planung.UNGEPLANT,
+     "Spontaner Call ohne Zuhörer im Raum."),
+    (4, "Stille Einzelarbeit, Störung erlaubt", "#1E8449", Taetigkeitsgruppe.EINZELARBEIT, Stoerung.ERLAUBT, None,
+     "Konzentrierte Einzelarbeit; kurze Unterbrechungen sind möglich."),
+    (5, "Stille Einzelarbeit, ungestört", "#145A32", Taetigkeitsgruppe.EINZELARBEIT, Stoerung.UNGESTOERT, None,
+     "Konzentrierte Einzelarbeit ohne Unterbrechungen."),
+    # Zu zweit / zu dritt (physisch) – Blautöne
+    (10, "Störung erlaubt, geplant (2/3)", "#85C1E9", Taetigkeitsgruppe.ZU_ZWEIT_DREIT, Stoerung.ERLAUBT, Planung.GEPLANT,
+     "Geplantes Gespräch zu zweit oder zu dritt vor Ort. Unterbrechungen oder Zuhörer sind möglich."),
+    (11, "Störung erlaubt, ungeplant (2/3)", "#5DADE2", Taetigkeitsgruppe.ZU_ZWEIT_DREIT, Stoerung.ERLAUBT, Planung.UNGEPLANT,
+     "Spontanes Gespräch zu zweit oder zu dritt vor Ort. Unterbrechungen oder Zuhörer sind möglich."),
+    (12, "Ungestört, geplant (2/3)", "#3498DB", Taetigkeitsgruppe.ZU_ZWEIT_DREIT, Stoerung.UNGESTOERT, Planung.GEPLANT,
+     "Geplantes Gespräch zu zweit oder zu dritt vor Ort ohne Unterbrechungen und ohne Zuhörer."),
+    (13, "Ungestört, ungeplant (2/3)", "#2874A6", Taetigkeitsgruppe.ZU_ZWEIT_DREIT, Stoerung.UNGESTOERT, Planung.UNGEPLANT,
+     "Spontanes Gespräch zu zweit oder zu dritt vor Ort ohne Unterbrechungen und ohne Zuhörer."),
+    # In Gruppen (4+, physisch) – Rottöne
+    (20, "Störung erlaubt, geplant (4+)", "#F1948A", Taetigkeitsgruppe.GRUPPE_4PLUS, Stoerung.ERLAUBT, Planung.GEPLANT,
+     "Geplante Gruppensitzung oder Workshop vor Ort. Unterbrechungen oder Zuhörer sind möglich."),
+    (21, "Störung erlaubt, ungeplant (4+)", "#EC7063", Taetigkeitsgruppe.GRUPPE_4PLUS, Stoerung.ERLAUBT, Planung.UNGEPLANT,
+     "Spontane Gruppenarbeit oder Ad-hoc-Meeting vor Ort. Unterbrechungen oder Zuhörer sind möglich."),
+    (22, "Ungestört, geplant (4+)", "#E74C3C", Taetigkeitsgruppe.GRUPPE_4PLUS, Stoerung.UNGESTOERT, Planung.GEPLANT,
+     "Geplante Gruppensitzung vor Ort ohne Unterbrechungen und ohne Zuhörer."),
+    (23, "Ungestört, ungeplant (4+)", "#C0392B", Taetigkeitsgruppe.GRUPPE_4PLUS, Stoerung.UNGESTOERT, Planung.UNGEPLANT,
+     "Spontane Gruppenarbeit vor Ort ohne Unterbrechungen und ohne Zuhörer."),
+    # Extern – Grautöne
+    (30, "Teilzeit / frei", "#D5D8DC", Taetigkeitsgruppe.EXTERN, None, None,
+     "Nicht gearbeitet aufgrund Teilzeitpensum oder freier Zeit."),
+    (31, "Homeoffice", "#BDC3C7", Taetigkeitsgruppe.EXTERN, None, None,
+     "Arbeit im Homeoffice."),
+    (32, "Mobil / anderer Standort", "#95A5A6", Taetigkeitsgruppe.EXTERN, None, None,
+     "Arbeit ausserhalb des Erhebungsstandorts: Aussendienst, anderer Standort, unterwegs."),
 ]
 
-# (sort_order, name, farbe, raumtyp_name, beschreibung)
-KATEGORIEN = [
-    (1, "Ungestörte Admin", "#2E86AB", "Stiller Arbeitsplatz",
-     "Konzentrierte Einzelarbeit die Ruhe erfordert: Führungsarbeit, Protokoll schreiben, Scanning, komplexe Sachbearbeitung"),
-    (2, "Admin", "#5BA4CF", "Stiller Arbeitsplatz",
-     "Einfachere administrative Einzelarbeit: Ämtli, Ablage, E-Mails beantworten, Routineaufgaben"),
-    (3, "Vertraulicher Call", "#E84855", "Telefonbox",
-     "Telefonat oder Videocall mit vertraulichem Inhalt: Reklamationsgespräch, sensibles Thema, Beratung"),
-    (4, "Interner Call", "#F4845F", "Telefonbox",
-     "Internes Telefonat oder Videocall: Teams Meeting, Abstimmung mit Kolleginnen und Kollegen"),
-    (5, "Call", "#F9A26C", "Telefonbox",
-     "Allgemeines Telefonat: Beratungsgespräch, Auskunft, Anmeldung"),
-    (6, "Vertrauliches 2er/3er Gespräch", "#9B2335", "Kleiner Meetingraum",
-     "Vertrauliches Gespräch zu zweit oder zu dritt: Mitarbeitendengespräch, Bifa, Konfliktgespräch"),
-    (7, "Internes 2er/3er Gespräch", "#C0392B", "Kleiner Meetingraum",
-     "Internes Arbeitsgespräch zu zweit oder zu dritt: Fallbesprechung, kurze Abstimmung, Projektarbeit"),
-    (8, "2er/3er Gespräch", "#E74C3C", "Kleiner Meetingraum",
-     "Offenes Gespräch zu zweit oder zu dritt mit internen oder externen Personen: BG-Gespräch, Anmeldegespräch"),
-    (9, "Vertrauliches Gruppengespräch", "#1B4F72", "Grosser Meetingraum",
-     "Vertrauliches Gespräch in der Gruppe: Führungsaustausch, sensible Teamthemen"),
-    (10, "Meeting / Austausch", "#2980B9", "Grosser Meetingraum",
-     "Reguläre Sitzung oder Teaminformation: Teamsitzung, Abteilungsmeeting, Informationsveranstaltung"),
-    (11, "Workshop / Kollaboration", "#8E44AD", "Creative Space",
-     "Kollaborative Gruppenarbeit: Konzeptentwicklung, Workshopdurchführung, Whiteboard-Session"),
-    (12, "Gruppenbesuch", "#27AE60", "Empfang / Besucherzone",
-     "Empfang externer Gruppen: KB-Tag, Open House, Führungen, Infoveranstaltungen für Externe"),
-    (13, "Extern / Home Office", "#7F8C8D", "Kein Raum nötig",
-     "Tätigkeit ausserhalb des Büros: Kundenbesuche, Aussendienst, Home Office, Mobile Working. Zählt als nicht anwesend und fliesst in die Sharing-Ratio-Berechnung ein."),
-    (14, "Mittagessen intern", "#F39C12", "Pausenraum",
-     "Mittagspause im Gebäude: Kantine, Aufenthaltsraum, informeller Austausch beim Essen"),
-    (15, "Mittagessen extern", "#E67E22", "Kein Raum nötig",
-     "Mittagspause ausserhalb des Gebäudes"),
-    (16, "Abwesend – Teilzeit", "#BDC3C7", "Kein Raum nötig",
-     "Nicht gearbeitet aufgrund Teilzeitpensum. Wird vom System vorgeschlagen wenn Vor- oder Nachmittag weniger als 2h erfasst wurden."),
-    (17, "Abwesend – andere Gründe", "#95A5A6", "Kein Raum nötig",
-     "Abwesenheit aus anderen Gründen: Krankheit, Ferien, Militär, Feiertag, Weiterbildung ausser Haus"),
+# (gruppe, old_name, new_name) – preserves Eintrag FKs on rename.
+_CATALOG_RENAMES: list[tuple[Taetigkeitsgruppe, str, str]] = [
+    (Taetigkeitsgruppe.EINZELARBEIT, "Störung erlaubt", "Stille Einzelarbeit, Störung erlaubt"),
+    (Taetigkeitsgruppe.EINZELARBEIT, "Ungestört", "Stille Einzelarbeit, ungestört"),
+    (Taetigkeitsgruppe.EINZELARBEIT, "Still, Störung erlaubt", "Stille Einzelarbeit, Störung erlaubt"),
+    (Taetigkeitsgruppe.EINZELARBEIT, "Still, ungestört", "Stille Einzelarbeit, ungestört"),
+    (Taetigkeitsgruppe.ZU_ZWEIT_DREIT, "Störung erlaubt, geplant", "Störung erlaubt, geplant (2/3)"),
+    (Taetigkeitsgruppe.ZU_ZWEIT_DREIT, "Störung erlaubt, ungeplant", "Störung erlaubt, ungeplant (2/3)"),
+    (Taetigkeitsgruppe.ZU_ZWEIT_DREIT, "Ungestört, geplant", "Ungestört, geplant (2/3)"),
+    (Taetigkeitsgruppe.ZU_ZWEIT_DREIT, "Ungestört, ungeplant", "Ungestört, ungeplant (2/3)"),
+    (Taetigkeitsgruppe.GRUPPE_4PLUS, "Störung erlaubt, geplant", "Störung erlaubt, geplant (4+)"),
+    (Taetigkeitsgruppe.GRUPPE_4PLUS, "Störung erlaubt, ungeplant", "Störung erlaubt, ungeplant (4+)"),
+    (Taetigkeitsgruppe.GRUPPE_4PLUS, "Ungestört, geplant", "Ungestört, geplant (4+)"),
+    (Taetigkeitsgruppe.GRUPPE_4PLUS, "Ungestört, ungeplant", "Ungestört, ungeplant (4+)"),
 ]
 
 
-def seed_default_data() -> None:
-    """Seed Raumtypen and Kategorien when the tables are empty."""
-    if Raumtyp.query.count() == 0:
-        for sort_order, name, beschreibung in RAUMTYPEN:
-            db.session.add(
-                Raumtyp(name=name, beschreibung=beschreibung, sort_order=sort_order)
-            )
-        db.session.flush()
-
-    if Kategorie.query.count() == 0:
-        raumtyp_by_name = {r.name: r for r in Raumtyp.query.all()}
-        for sort_order, name, farbe, raumtyp_name, beschreibung in KATEGORIEN:
-            raumtyp = raumtyp_by_name.get(raumtyp_name)
-            k = Kategorie(
+def _insert_default_taetigkeiten() -> None:
+    for row in DEFAULT_TAETIGKEITEN:
+        sort_order, name, farbe, gruppe, stoerung, planung, beschreibung = row
+        db.session.add(
+            Kategorie(
                 name=name,
                 farbe=farbe,
                 beschreibung=beschreibung,
+                taetigkeitsgruppe=gruppe,
+                stoerung=stoerung,
+                planung=planung,
                 sort_order=sort_order,
             )
-            if raumtyp:
-                k.raumtypen.append(raumtyp)
-            db.session.add(k)
+        )
+
+
+def _apply_renames() -> None:
+    for gruppe, old_name, new_name in _CATALOG_RENAMES:
+        kat = Kategorie.query.filter_by(taetigkeitsgruppe=gruppe, name=old_name).first()
+        if kat is None:
+            continue
+        target = Kategorie.query.filter_by(taetigkeitsgruppe=gruppe, name=new_name).first()
+        if target is None:
+            kat.name = new_name
+        elif target.id != kat.id:
+            kat.aktiv = False
+
+
+def _ensure_catalog() -> None:
+    """Bring an existing DB in line with the current default catalog."""
+    _apply_renames()
+
+    for row in DEFAULT_TAETIGKEITEN:
+        sort_order, name, farbe, gruppe, stoerung, planung, beschreibung = row
+        kat = Kategorie.query.filter_by(taetigkeitsgruppe=gruppe, name=name).first()
+        if kat is None:
+            kat = Kategorie.query.filter_by(
+                taetigkeitsgruppe=gruppe, sort_order=sort_order
+            ).first()
+        if kat is None:
+            db.session.add(
+                Kategorie(
+                    name=name,
+                    farbe=farbe,
+                    beschreibung=beschreibung,
+                    taetigkeitsgruppe=gruppe,
+                    stoerung=stoerung,
+                    planung=planung,
+                    sort_order=sort_order,
+                    aktiv=True,
+                )
+            )
+        else:
+            kat.name = name
+            kat.farbe = farbe
+            kat.beschreibung = beschreibung
+            kat.stoerung = stoerung
+            kat.planung = planung
+            kat.sort_order = sort_order
+            kat.aktiv = True
+
+
+def _needs_legacy_reseed() -> bool:
+    """Detect pre-Tätigkeiten category seed (no stoerung/planung fields set)."""
+    if Kategorie.query.count() == 0:
+        return False
+    if Eintrag.query.count() > 0:
+        return False
+    return Kategorie.query.filter(Kategorie.stoerung.isnot(None)).count() == 0
+
+
+def seed_default_data() -> None:
+    """Seed or upgrade default Tätigkeiten."""
+    if _needs_legacy_reseed():
+        Kategorie.query.delete()
+        db.session.flush()
+        _insert_default_taetigkeiten()
+    elif Kategorie.query.count() == 0:
+        _insert_default_taetigkeiten()
+    else:
+        _ensure_catalog()
 
     db.session.commit()

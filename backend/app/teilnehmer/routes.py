@@ -5,78 +5,9 @@ from flask import Blueprint, request
 from app.helpers import err, login_required, ok
 from app.utils import ValidationError, parse_date
 from services import auth_service, eintrag_service, kategorie_service
-from extensions import db
-from models import Gruppe, GruppenMitglied, Rolle, User
+from models import Gruppe, GruppenMitglied, User
 
 teilnehmer_bp = Blueprint("teilnehmer", __name__, url_prefix="/api")
-
-
-# ---------------------------------------------------------------------------
-# Registration
-# ---------------------------------------------------------------------------
-
-@teilnehmer_bp.route("/registrierung/<string:token>", methods=["GET"])
-def registrierung_info(token: str):
-    """Resolve a registration token and return group details."""
-    gruppe = Gruppe.query.filter_by(registrierung_link_token=token).first()
-    if gruppe is None or not gruppe.aktiv:
-        return err("Der Registrierungslink ist ungültig oder abgelaufen.", 404)
-    return ok({
-        "gruppe_id": gruppe.id,
-        "gruppe_name": gruppe.name,
-        "zeitraum_von": gruppe.zeitraum_von.isoformat(),
-        "zeitraum_bis": gruppe.zeitraum_bis.isoformat(),
-    })
-
-
-@teilnehmer_bp.route("/auth/registrieren", methods=["POST"])
-def registrieren():
-    """Self-registration via group link token.
-
-    If the email already exists, the existing account is linked to the group
-    (no new PIN is needed – the participant uses their current PIN).
-    """
-    body = request.get_json(silent=True) or {}
-    token = (body.get("token") or "").strip()
-    email = (body.get("email") or "").strip().lower()
-    pin = body.get("pin") or ""
-    pin_bestaetigung = body.get("pin_bestaetigung") or ""
-
-    gruppe = Gruppe.query.filter_by(registrierung_link_token=token).first()
-    if gruppe is None or not gruppe.aktiv:
-        return err("Der Registrierungslink ist ungültig oder abgelaufen.", 404)
-
-    if not email or "@" not in email:
-        return err("Bitte eine gültige E-Mail-Adresse angeben.", 400)
-
-    user = User.query.filter_by(email=email).first()
-    already_linked = user is not None and GruppenMitglied.query.filter_by(
-        user_id=user.id, gruppe_id=gruppe.id
-    ).first() is not None
-
-    if already_linked:
-        return err("Diese E-Mail-Adresse ist bereits in dieser Gruppe registriert.", 409)
-
-    if user is None:
-        if len(pin) < 4:
-            return err("Der PIN muss mindestens 4 Zeichen haben.", 400)
-        if pin != pin_bestaetigung:
-            return err("Die PINs stimmen nicht überein.", 400)
-        user = User(
-            email=email,
-            pin_hash=auth_service.hash_pin(pin),
-            rolle=Rolle.TEILNEHMER,
-            aktiv=True,
-            pin_temporaer=False,
-        )
-        db.session.add(user)
-        db.session.flush()
-
-    db.session.add(GruppenMitglied(user_id=user.id, gruppe_id=gruppe.id))
-    db.session.commit()
-
-    auth_service.login_user(user)
-    return ok({"user": user.to_dict(), "gruppe_id": gruppe.id}, 201)
 
 
 # ---------------------------------------------------------------------------

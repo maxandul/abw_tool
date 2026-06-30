@@ -36,8 +36,7 @@ export default function NavBar() {
           <>
             <NavLink to="/admin/dashboard" className={linkCls}>Dashboard</NavLink>
             <NavLink to="/admin/gruppen"   className={linkCls}>Erhebungen</NavLink>
-            <NavLink to="/admin/kategorien" className={linkCls}>Kategorien</NavLink>
-            <NavLink to="/admin/raumtypen"  className={linkCls}>Raumtypen</NavLink>
+            <NavLink to="/admin/kategorien" className={linkCls}>Tätigkeiten</NavLink>
             <NavLink to="/admin/auswertung" className={linkCls}>Auswertung</NavLink>
             <NavLink to="/admin/admins"     className={linkCls}>Admins</NavLink>
             <NavLink to="/admin/hilfe"      className={linkCls}>Hilfe</NavLink>

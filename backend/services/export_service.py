@@ -42,12 +42,14 @@ _EXPORT_TEMPLATE = """\
     .heatmap-table td span {{ display: none; }}
     .heatmap-table td:hover span {{ display: block; position: absolute; background: #1e293b; color: #fff; padding: .375rem .625rem; border-radius: .375rem; font-size: .7rem; z-index: 10; white-space: nowrap; transform: translateY(-110%); }}
     .heatmap-table td {{ position: relative; }}
-    .bar-chart {{ display: flex; flex-direction: column; gap: .5rem; }}
-    .bar-row {{ display: flex; align-items: center; gap: .5rem; font-size: .8rem; }}
-    .bar-label {{ width: 200px; text-align: right; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-    .bar-track {{ flex: 1; background: #f1f5f9; border-radius: 9999px; height: 18px; overflow: hidden; }}
+    .bar-chart {{ display: flex; flex-direction: column; gap: .75rem; }}
+    .bar-row {{ display: flex; align-items: center; gap: .75rem; font-size: .8rem; width: 100%; }}
+    .bar-label {{ width: 14rem; flex-shrink: 0; word-break: break-word; line-height: 1.35; }}
+    .bar-track {{ flex: 1; min-width: 0; background: #f1f5f9; border-radius: 9999px; height: 18px; overflow: hidden; }}
     .bar-fill {{ height: 100%; border-radius: 9999px; }}
-    .bar-value {{ width: 60px; font-size: .75rem; color: #64748b; }}
+    .bar-value {{ font-size: .75rem; color: #64748b; white-space: nowrap; width: 6rem; text-align: right; flex-shrink: 0; }}
+    .subsection {{ margin-top: 1.25rem; }}
+    .subsection h3 {{ font-size: .95rem; color: #334155; margin: 0 0 .75rem; }}
     .toggle-btns {{ display: flex; gap: .5rem; margin-bottom: 1rem; }}
     .toggle-btn {{ padding: .375rem .75rem; border: 1px solid #cbd5e1; border-radius: .375rem; background: #fff; cursor: pointer; font-size: .8rem; }}
     .toggle-btn.active {{ background: #1e3a5f; color: #fff; border-color: #1e3a5f; }}
@@ -65,12 +67,6 @@ _EXPORT_TEMPLATE = """\
       <h2>Filter</h2>
       <div class="filter-row">
         <div class="filter-group">
-          <label>Raumtyp</label>
-          <select id="sel-raumtyp" onchange="renderAll()">
-            <option value="">Alle Raumtypen</option>
-          </select>
-        </div>
-        <div class="filter-group">
           <label>Wochentag</label>
           <select id="sel-wochentag" onchange="renderAll()">
             <option value="">Alle Wochentage</option>
@@ -86,7 +82,6 @@ _EXPORT_TEMPLATE = """\
           <div class="toggle-btns">
             <button class="toggle-btn active" onclick="setAnzeige('mittelwert', this)">Mittelwert</button>
             <button class="toggle-btn" onclick="setAnzeige('maximum', this)">Maximum</button>
-            <button class="toggle-btn" onclick="setAnzeige('minimum', this)">Minimum</button>
           </div>
         </div>
       </div>
@@ -101,9 +96,9 @@ _EXPORT_TEMPLATE = """\
       <h2>Lastprofil – Wochenansicht</h2>
       <div class="heatmap-grid" id="heatmap-container"></div>
     </section>
-    <!-- Room demand -->
+    <!-- Demand by activity -->
     <section id="raumbedarf">
-      <h2>Raumbedarf</h2>
+      <h2>Bedarf nach Tätigkeit</h2>
       <div id="raumbedarf-container"></div>
     </section>
     <!-- Shares -->
@@ -125,9 +120,8 @@ _EXPORT_TEMPLATE = """\
     }}
 
     function getFilter() {{
-      const rt = document.getElementById('sel-raumtyp').value;
       const wt = document.getElementById('sel-wochentag').value;
-      return {{ raumtyp_id: rt ? parseInt(rt) : null, wochentag: wt !== '' ? parseInt(wt) : null }};
+      return {{ wochentag: wt !== '' ? parseInt(wt) : null }};
     }}
 
     function renderAll() {{ renderKacheln(); renderHeatmap(); renderRaumbedarf(); renderAnteile(); }}
@@ -151,7 +145,6 @@ _EXPORT_TEMPLATE = """\
       // slots[wochentag][slot_offset][raumtyp_id] = {{mittelwert, maximum, minimum}}
       const slotMap = {{}};
       for (const s of D.lastprofil.slots) {{
-        if (f.raumtyp_id !== null && s.raumtyp_id !== f.raumtyp_id) continue;
         if (f.wochentag !== null && s.wochentag !== f.wochentag) continue;
         const key = `${{s.wochentag}}_${{s.slot_start_minuten}}`;
         if (!slotMap[key]) slotMap[key] = {{ mittelwert: 0, maximum: 0, minimum: Infinity, count: 0 }};
@@ -161,7 +154,7 @@ _EXPORT_TEMPLATE = """\
         slotMap[key].count++;
       }}
 
-      const maxVal = Math.max(1, ...Object.values(slotMap).map(v => v[anzeige === 'minimum' ? 'minimum' : anzeige === 'maximum' ? 'maximum' : 'mittelwert'] || 0));
+      const maxVal = Math.max(1, ...Object.values(slotMap).map(v => v[anzeige === 'maximum' ? 'maximum' : 'mittelwert'] || 0));
       const days = f.wochentag !== null ? [f.wochentag] : [0,1,2,3,4];
 
       let hdr = '<tr><th>Zeit</th>' + days.map(d => `<th>${{TAGE[d]}}</th>`).join('') + '</tr>';
@@ -176,7 +169,7 @@ _EXPORT_TEMPLATE = """\
           const key = `${{wt}}_${{si * 15}}`;
           const val = slotMap[key];
           if (!val) {{ rows += '<td></td>'; continue; }}
-          const v = anzeige === 'maximum' ? val.maximum : anzeige === 'minimum' ? (val.minimum === Infinity ? 0 : val.minimum) : val.mittelwert;
+          const v = anzeige === 'maximum' ? val.maximum : val.mittelwert;
           const intensity = Math.min(1, v / maxVal);
           const bg = `rgba(30,58,95,${{intensity.toFixed(2)}})`;
           const fg = intensity > 0.5 ? '#fff' : '#1e293b';
@@ -190,55 +183,57 @@ _EXPORT_TEMPLATE = """\
 
     function renderRaumbedarf() {{
       const d = D.raumbedarf;
-      let rows = d.raumtypen.map(r => `<tr>
-        <td>${{r.name}}</td>
-        <td>${{r.avg_nutzung}}</td>
-        <td>${{r.peak_nutzung}}</td>
-        <td>${{d.sharing_ratio}}</td>
-        <td><strong>${{r.einheiten_avg}}</strong></td>
-        <td><strong>${{r.einheiten_peak}}</strong></td>
+      const rows = (d.taetigkeiten || []).map(r => `<tr>
+        <td style="color:${{r.farbe || '#1e293b'}};font-weight:500">${{r.name}}</td>
+        <td style="color:${{r.farbe || 'inherit'}}">${{r.avg_nutzung}}</td>
+        <td style="color:${{r.farbe || 'inherit'}}">${{r.peak_nutzung}}</td>
+        <td style="color:${{r.farbe || 'inherit'}}"><strong>${{r.einheiten_avg}}</strong></td>
+        <td style="color:${{r.farbe || 'inherit'}}"><strong>${{r.einheiten_peak}}</strong></td>
       </tr>`).join('');
-      rows += `<tr style="background:#f1f5f9;font-weight:600">
+      const total = `<tr style="background:#f1f5f9;font-weight:600">
         <td>Anwesend total</td>
         <td>${{d.anwesend_total.avg_nutzung}}</td>
         <td>${{d.anwesend_total.peak_nutzung}}</td>
-        <td colspan="3"></td>
+        <td colspan="2"></td>
       </tr>`;
       document.getElementById('raumbedarf-container').innerHTML = `
         <table>
           <thead><tr>
-            <th>Raumtyp</th><th>Ø Nutzung</th><th>Peak</th>
-            <th>Sharing-Ratio</th><th>Einheiten (Ø)</th><th>Einheiten (Peak)</th>
+            <th>Tätigkeit</th><th>Ø Nutzung</th><th>Peak</th>
+            <th>Einheiten (Ø)</th><th>Einheiten (Peak)</th>
           </tr></thead>
-          <tbody>${{rows}}</tbody>
+          <tbody>${{rows}}${{total}}</tbody>
         </table>
-        <p class="note">Die empfohlene Anzahl Einheiten basiert auf der eingestellten Sharing-Ratio (${{d.sharing_ratio}}). Ø-Werte sind kosteneffizienter, Peak-Werte decken Spitzenlastzeiten ab.</p>`;
+        <p class="note">Empfohlene Einheiten basieren auf Ø- bzw. Peak-Nutzung (aufgerundet). Ø-Werte sind kosteneffizienter, Peak-Werte decken Spitzenlastzeiten ab. Externe Tätigkeiten sind nicht enthalten.</p>`;
+    }}
+
+    function barChart(items, maxH, fallbackColor) {{
+      return items.map(r => {{
+        const color = r.farbe || fallbackColor;
+        return `
+        <div class="bar-row">
+          <div class="bar-label" style="color:${{color}}">${{r.name}}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${{(r.stunden/maxH*100).toFixed(1)}}%;background:${{color}}"></div></div>
+          <div class="bar-value">${{r.stunden}}h (${{r.anteil_prozent}}%)</div>
+        </div>`;
+      }}).join('');
     }}
 
     function renderAnteile() {{
       const d = D.anteile;
-      const maxH = Math.max(1, ...d.raumtyp_anteile.map(r => r.stunden));
-      const bars = d.raumtyp_anteile.map(r => `
-        <div class="bar-row">
-          <div class="bar-label" title="${{r.name}}">${{r.name}}</div>
-          <div class="bar-track"><div class="bar-fill" style="width:${{(r.stunden/maxH*100).toFixed(1)}}%;background:#2980B9"></div></div>
-          <div class="bar-value">${{r.stunden}}h (${{r.anteil_prozent}}%)</div>
-        </div>`).join('');
-      document.getElementById('anteile-container').innerHTML = `
-        <p style="font-size:.875rem;color:#64748b">Gesamt: ${{d.gesamt_stunden}} Stunden</p>
-        <div class="bar-chart">${{bars}}</div>`;
-    }}
-
-    // Populate room type filter.
-    (function() {{
-      const sel = document.getElementById('sel-raumtyp');
-      for (const rt of D.lastprofil.raumtypen) {{
-        const o = document.createElement('option');
-        o.value = rt.id;
-        o.textContent = rt.name;
-        sel.appendChild(o);
+      const tg = (d.taetigkeitsgruppe_anteile || []).filter(r => r.stunden > 0);
+      const kat = d.kategorie_anteile || [];
+      const maxTg = Math.max(1, ...tg.map(r => r.stunden));
+      const maxKat = Math.max(1, ...kat.map(r => r.stunden));
+      let html = `<p style="font-size:.875rem;color:#64748b;margin:0 0 1rem">Gesamt: ${{d.gesamt_stunden}} Stunden</p>`;
+      if (tg.length) {{
+        html += `<div class="subsection"><h3>Nach Tätigkeitsgruppe</h3><div class="bar-chart">${{barChart(tg, maxTg, '#1e3a5f')}}</div></div>`;
       }}
-    }})();
+      if (kat.length) {{
+        html += `<div class="subsection"><h3>Nach Tätigkeit</h3><div class="bar-chart">${{barChart(kat, maxKat, '#64748b')}}</div></div>`;
+      }}
+      document.getElementById('anteile-container').innerHTML = html;
+    }}
 
     renderAll();
   </script>

@@ -12,10 +12,22 @@ async function request(method, url, body) {
 
   try {
     const res = await fetch(url, opts);
-    const json = await res.json();
-    return json; // { data: ..., error: ... }
+    const text = await res.text();
+    if (!text) {
+      return { data: null, error: res.ok ? null : `Serverfehler (${res.status})` };
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      return {
+        data: null,
+        error: res.ok
+          ? "Ungültige Serverantwort."
+          : `Serverfehler (${res.status}) – bitte Backend neu starten.`,
+      };
+    }
   } catch {
-    return { data: null, error: "Netzwerkfehler – bitte erneut versuchen." };
+    return { data: null, error: "Netzwerkfehler – ist das Backend auf Port 5000 erreichbar?" };
   }
 }
 

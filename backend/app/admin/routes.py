@@ -1,5 +1,7 @@
 """Admin API routes (Dok. 3)."""
 
+import socket
+
 from flask import Blueprint, request
 
 from app.helpers import admin_required, err, login_required, ok
@@ -9,6 +11,16 @@ from models import Rolle, User
 from services import auth_service, gruppe_service, kategorie_service, raumtyp_service
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
+
+APP_PORT = 5000
+
+
+@admin_bp.route("/server-url", methods=["GET"])
+@admin_required
+def server_url():
+    """Return the app URL using the server hostname (stable on the org network)."""
+    hostname = socket.gethostname().lower()
+    return ok({"app_url": f"http://{hostname}:{APP_PORT}", "hostname": hostname})
 
 
 # ---------------------------------------------------------------------------
@@ -72,12 +84,8 @@ def put_gruppe(gruppe_id: int):
 @admin_bp.route("/gruppen/<int:gruppe_id>/neuer-token", methods=["POST"])
 @admin_required
 def neuer_token(gruppe_id: int):
-    """Generate a new registration token (invalidates the old link)."""
-    try:
-        gruppe = gruppe_service.regenerate_token(gruppe_id)
-        return ok(gruppe.to_dict())
-    except ValidationError as exc:
-        return err(str(exc), 404)
+    """Deprecated – registration links are no longer supported."""
+    return err("Registrierungslinks werden nicht mehr unterstützt.", 410)
 
 
 @admin_bp.route("/gruppen/<int:gruppe_id>/abschliessen", methods=["POST"])
@@ -130,11 +138,37 @@ def get_teilnehmer(gruppe_id: int):
 @admin_bp.route("/gruppen/<int:gruppe_id>/teilnehmer", methods=["POST"])
 @admin_required
 def post_teilnehmer(gruppe_id: int):
-    """Add a participant to a group by email address."""
+    """Add or update a participant in a group (manual entry)."""
     body = request.get_json(silent=True) or {}
     try:
-        result = gruppe_service.add_teilnehmer(gruppe_id, body.get("email") or "")
-        return ok(result, 201)
+        result = gruppe_service.add_teilnehmer(gruppe_id, body)
+        status = 200 if result.get("updated") else 201
+        return ok(result, status)
+    except ValidationError as exc:
+        return err(str(exc), 400)
+
+
+@admin_bp.route(
+    "/gruppen/<int:gruppe_id>/teilnehmer/<int:user_id>", methods=["PUT"]
+)
+@admin_required
+def put_teilnehmer(gruppe_id: int, user_id: int):
+    """Update profile attributes of a group member."""
+    body = request.get_json(silent=True) or {}
+    try:
+        return ok(gruppe_service.update_teilnehmer(gruppe_id, user_id, body))
+    except ValidationError as exc:
+        return err(str(exc), 400)
+
+
+@admin_bp.route("/gruppen/<int:gruppe_id>/teilnehmer/import", methods=["POST"])
+@admin_required
+def import_teilnehmer(gruppe_id: int):
+    """Bulk-import participants from a JSON array of row objects."""
+    body = request.get_json(silent=True) or {}
+    rows = body.get("rows") or []
+    try:
+        return ok(gruppe_service.import_teilnehmer(gruppe_id, rows))
     except ValidationError as exc:
         return err(str(exc), 400)
 

@@ -2,6 +2,7 @@ import { del, get, post, put } from "./client";
 
 // Dashboard
 export const getDashboard = () => get("/api/admin/dashboard");
+export const getServerUrl  = () => get("/api/admin/server-url");
 
 // Gruppen
 export const getGruppen         = (inclInaktiv = false) =>
@@ -12,11 +13,13 @@ export const updateGruppe       = (id, b) => put(`/api/admin/gruppen/${id}`, b);
 export const deleteGruppe       = (id)    => del(`/api/admin/gruppen/${id}`);
 export const abschliessenGruppe = (id)    => post(`/api/admin/gruppen/${id}/abschliessen`, {});
 export const wiederoeffnenGruppe= (id)    => post(`/api/admin/gruppen/${id}/wiederoeffnen`, {});
-export const regenerateToken    = (id)    => post(`/api/admin/gruppen/${id}/neuer-token`);
 
 // Teilnehmer
 export const getTeilnehmer      = (gId)           => get(`/api/admin/gruppen/${gId}/teilnehmer`);
 export const addTeilnehmer      = (gId, body)     => post(`/api/admin/gruppen/${gId}/teilnehmer`, body);
+export const updateTeilnehmer   = (gId, uId, b)   => put(`/api/admin/gruppen/${gId}/teilnehmer/${uId}`, b);
+export const importTeilnehmer   = (gId, rows)     =>
+  post(`/api/admin/gruppen/${gId}/teilnehmer/import`, { rows });
 export const removeTeilnehmer   = (gId, uId)      => del(`/api/admin/gruppen/${gId}/teilnehmer/${uId}`);
 export const resetPin           = (uId)           => post(`/api/admin/teilnehmer/${uId}/pin-reset`);
 export const setEinreichungStatus = (uId, gId, b) =>
@@ -44,6 +47,7 @@ export const resetAdminPin   = (id)     => post(`/api/admin/admins/${id}/pin-res
 export const deleteAdmin     = (id)     => del(`/api/admin/admins/${id}`);
 
 // Auswertung
+export const getTeilnehmerFilter = (p) => get(`/api/auswertung/teilnehmer-filter?${p}`);
 export const getLastprofil  = (p) => get(`/api/auswertung/lastprofil?${p}`);
 export const getRaumbedarf  = (p) => get(`/api/auswertung/raumbedarf?${p}`);
 export const getAnteile     = (p) => get(`/api/auswertung/anteile?${p}`);

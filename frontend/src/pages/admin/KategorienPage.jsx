@@ -1,47 +1,51 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  getKategorien, getRaumtypen, createKategorie, updateKategorie, deleteKategorie, reactivateKategorie
+  getKategorien, createKategorie, updateKategorie, deleteKategorie, reactivateKategorie
 } from "../../api/admin";
 import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
 import Modal from "../../components/Modal";
 import ConfirmDialog from "../../components/ConfirmDialog";
+import Farbauswahl from "../../components/Farbauswahl";
+import {
+  TAETIGKEITSGRUPPE_LABELS,
+  TAETIGKEITSGRUPPE_ORDER,
+  STOERUNG_OPTS,
+  PLANUNG_OPTS,
+  formatTaetigkeitMeta,
+  needsStoerung,
+  showPlanung,
+  planungRequired,
+  defaultFarbeForGruppe,
+} from "../../utils/taetigkeiten";
 
-const VERTRAULICHKEIT_OPTS = [
-  { value: "",           label: "Nicht klassifiziert" },
-  { value: "OFFEN",      label: "Offen – Externe dürfen zuhören" },
-  { value: "INTERN",     label: "Intern – Nur Kolleginnen/Kollegen" },
-  { value: "VERTRAULICH",label: "Vertraulich – Abgeschlossener Raum nötig" },
-];
+const GRUPPE_OPTS = TAETIGKEITSGRUPPE_ORDER.map(v => ({
+  value: v,
+  label: TAETIGKEITSGRUPPE_LABELS[v],
+}));
 
-const GRUPPENGROESSE_OPTS = [
-  { value: "",      label: "Nicht klassifiziert" },
-  { value: "ALLEIN",label: "Allein (1 Person)" },
-  { value: "KLEIN", label: "Kleine Gruppe (2–5 Personen)" },
-  { value: "MITTEL",label: "Mittlere Gruppe (6–15 Personen)" },
-  { value: "GROSS", label: "Grosse Gruppe (16+ Personen)" },
-];
-
-function KategorieForm({ initial, raumtypen, onSave, onCancel }) {
+function TaetigkeitForm({ initial, onSave, onCancel }) {
   const [form, setForm] = useState(() => ({
     name: initial?.name ?? "",
     beschreibung: initial?.beschreibung ?? "",
-    farbe: initial?.farbe ?? "#4472C4",
-    raumtyp_ids: initial?.raumtyp_ids ?? [],
-    vertraulichkeit: initial?.vertraulichkeit ?? "",
-    gruppengroesse: initial?.gruppengroesse ?? "",
+    farbe: initial?.farbe ?? defaultFarbeForGruppe(initial?.taetigkeitsgruppe ?? "EINZELARBEIT"),
+    taetigkeitsgruppe: initial?.taetigkeitsgruppe ?? "EINZELARBEIT",
+    stoerung: initial?.stoerung ?? "ERLAUBT",
+    planung: initial?.planung ?? "GEPLANT",
     sort_order: initial?.sort_order ?? 0,
   }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
-  const toggleRaumtyp = (id) => {
+  const onGruppeChange = (e) => {
+    const gruppe = e.target.value;
     setForm(f => ({
       ...f,
-      raumtyp_ids: f.raumtyp_ids.includes(id)
-        ? f.raumtyp_ids.filter(x => x !== id)
-        : [...f.raumtyp_ids, id],
+      taetigkeitsgruppe: gruppe,
+      farbe: defaultFarbeForGruppe(gruppe),
+      stoerung: gruppe === "EXTERN" ? "" : (f.stoerung || "ERLAUBT"),
+      planung: showPlanung(gruppe) ? (f.planung || (planungRequired(gruppe) ? "GEPLANT" : "")) : "",
     }));
   };
 
@@ -49,7 +53,12 @@ function KategorieForm({ initial, raumtypen, onSave, onCancel }) {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const { error: err } = await onSave(form);
+    const payload = {
+      ...form,
+      stoerung: needsStoerung(form.taetigkeitsgruppe) ? (form.stoerung || null) : null,
+      planung: showPlanung(form.taetigkeitsgruppe) && form.planung ? form.planung : null,
+    };
+    const { error: err } = await onSave(payload);
     setLoading(false);
     if (err) setError(err);
   };
@@ -67,49 +76,37 @@ function KategorieForm({ initial, raumtypen, onSave, onCancel }) {
       </div>
       <div>
         <label className="label">Farbe</label>
-        <div className="flex gap-2 items-center">
-          <input type="color" value={form.farbe ?? "#4472C4"}
-            onChange={e => setForm(f => ({ ...f, farbe: e.target.value }))}
-            className="h-9 w-12 rounded border border-slate-300 p-0.5 cursor-pointer" />
-          <input className="input flex-1" value={form.farbe ?? ""} onChange={set("farbe")} maxLength={7} placeholder="#RRGGBB" />
-        </div>
+        <Farbauswahl
+          gruppe={form.taetigkeitsgruppe}
+          value={form.farbe}
+          onChange={hex => setForm(f => ({ ...f, farbe: hex }))}
+        />
       </div>
       <div>
-        <label className="label">Raumtypen (Mehrfachauswahl)</label>
-        <div className="flex flex-wrap gap-2 mt-1">
-          {raumtypen.filter(r => r.aktiv).map(r => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => toggleRaumtyp(r.id)}
-              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                form.raumtyp_ids.includes(r.id)
-                  ? "bg-brand-600 text-white border-brand-600"
-                  : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"
-              }`}
-            >
-              {r.name}
-            </button>
-          ))}
-          {raumtypen.filter(r => r.aktiv).length === 0 && (
-            <span className="text-xs text-slate-400">Keine aktiven Raumtypen vorhanden.</span>
-          )}
-        </div>
+        <label className="label">Tätigkeitsgruppe *</label>
+        <select className="input" value={form.taetigkeitsgruppe} onChange={onGruppeChange}>
+          {GRUPPE_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      {needsStoerung(form.taetigkeitsgruppe) && (
         <div>
-          <label className="label">Vertraulichkeit</label>
-          <select className="input" value={form.vertraulichkeit ?? ""} onChange={set("vertraulichkeit")}>
-            {VERTRAULICHKEIT_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          <label className="label">Störung</label>
+          <select className="input" value={form.stoerung} onChange={set("stoerung")}>
+            {STOERUNG_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
+      )}
+      {showPlanung(form.taetigkeitsgruppe) && (
         <div>
-          <label className="label">Gruppengrösse</label>
-          <select className="input" value={form.gruppengroesse ?? ""} onChange={set("gruppengroesse")}>
-            {GRUPPENGROESSE_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          <label className="label">Planung{!planungRequired(form.taetigkeitsgruppe) ? " (optional)" : ""}</label>
+          <select className="input" value={form.planung ?? ""} onChange={set("planung")}>
+            {!planungRequired(form.taetigkeitsgruppe) && (
+              <option value="">—</option>
+            )}
+            {PLANUNG_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
-      </div>
+      )}
       <div>
         <label className="label">Sortierung</label>
         <input className="input" type="number" value={form.sort_order ?? 0} onChange={set("sort_order")} />
@@ -126,11 +123,10 @@ function KategorieForm({ initial, raumtypen, onSave, onCancel }) {
 
 export default function KategorienPage() {
   const [kategorien, setKategorien] = useState([]);
-  const [raumtypen, setRaumtypen]   = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState("");
-  const [modal, setModal]           = useState(null);
-  const [confirm, setConfirm]       = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [modal, setModal] = useState(null);
+  const [confirm, setConfirm] = useState(null);
 
   const scrollRef = useRef(null);
   const drag = useRef({ active: false, startX: 0, scrollLeft: 0 });
@@ -143,8 +139,7 @@ export default function KategorienPage() {
   const onDragMove = (e) => {
     if (!drag.current.active) return;
     e.preventDefault();
-    const dx = e.clientX - drag.current.startX;
-    scrollRef.current.scrollLeft = drag.current.scrollLeft - dx;
+    scrollRef.current.scrollLeft = drag.current.scrollLeft - (e.clientX - drag.current.startX);
   };
   const onDragEnd = () => {
     drag.current.active = false;
@@ -153,10 +148,10 @@ export default function KategorienPage() {
 
   const load = () => {
     setLoading(true);
-    Promise.all([getKategorien(), getRaumtypen()]).then(([k, r]) => {
+    getKategorien().then(({ data, error: err }) => {
       setLoading(false);
-      if (k.error) setError(k.error);
-      else { setKategorien(k.data); setRaumtypen(r.data ?? []); }
+      if (err) setError(err);
+      else setKategorien(data ?? []);
     });
   };
   useEffect(load, []);
@@ -186,8 +181,8 @@ export default function KategorienPage() {
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">Kategorien</h1>
-        <button className="btn-primary" onClick={() => setModal("create")}>+ Kategorie anlegen</button>
+        <h1 className="text-2xl font-bold text-slate-800">Tätigkeiten</h1>
+        <button className="btn-primary" onClick={() => setModal("create")}>+ Tätigkeit anlegen</button>
       </div>
       {error && <Alert>{error}</Alert>}
 
@@ -197,15 +192,13 @@ export default function KategorienPage() {
         <table className="w-full">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th className="table-th w-10 sticky left-0 z-20 bg-slate-50 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-slate-200"></th>
-              <th className="table-th sticky left-10 z-20 bg-slate-50 after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-slate-200">Name</th>
+              <th className="table-th w-10 sticky left-0 z-20 bg-slate-50" />
+              <th className="table-th sticky left-10 z-20 bg-slate-50">Name</th>
+              <th className="table-th min-w-[200px]">Gruppe</th>
               <th className="table-th min-w-[220px]">Beschreibung</th>
-              <th className="table-th">Vertraulichkeit</th>
-              <th className="table-th">Gruppe</th>
-              <th className="table-th">Raumtyp</th>
               <th className="table-th">Einträge</th>
               <th className="table-th">Status</th>
-              <th className="table-th"></th>
+              <th className="table-th" />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -215,20 +208,14 @@ export default function KategorienPage() {
                   <span className="inline-block w-5 h-5 rounded" style={{ background: k.farbe ?? "#ccc" }} />
                 </td>
                 <td className="table-td font-medium sticky left-10 z-10 bg-white border-r border-slate-100">{k.name}</td>
+                <td className="table-td text-xs text-slate-500">
+                  <div>{k.taetigkeitsgruppe_label ?? TAETIGKEITSGRUPPE_LABELS[k.taetigkeitsgruppe]}</div>
+                  {formatTaetigkeitMeta(k) && (
+                    <div className="text-slate-400">{formatTaetigkeitMeta(k)}</div>
+                  )}
+                </td>
                 <td className="table-td text-xs text-slate-500 whitespace-normal min-w-[220px]">
-                  {k.beschreibung || "–"}</td>
-                <td className="table-td text-xs text-slate-500">
-                  {k.vertraulichkeit
-                    ? { OFFEN: "Offen", INTERN: "Intern", VERTRAULICH: "Vertraulich" }[k.vertraulichkeit] ?? k.vertraulichkeit
-                    : "–"}
-                </td>
-                <td className="table-td text-xs text-slate-500">
-                  {k.gruppengroesse
-                    ? { ALLEIN: "Allein", KLEIN: "Klein", MITTEL: "Mittel", GROSS: "Gross" }[k.gruppengroesse] ?? k.gruppengroesse
-                    : "–"}
-                </td>
-                <td className="table-td text-xs text-slate-500">
-                  {k.raumtyp_namen?.length > 0 ? k.raumtyp_namen.join(", ") : "–"}
+                  {k.beschreibung || "–"}
                 </td>
                 <td className="table-td">{k.anzahl_eintraege}</td>
                 <td className="table-td">
@@ -260,40 +247,39 @@ export default function KategorienPage() {
       </div>
 
       {modal === "create" && (
-        <Modal title="Neue Kategorie" onClose={() => setModal(null)}>
-          <KategorieForm raumtypen={raumtypen} onSave={handleCreate} onCancel={() => setModal(null)} />
+        <Modal title="Neue Tätigkeit" onClose={() => setModal(null)}>
+          <TaetigkeitForm onSave={handleCreate} onCancel={() => setModal(null)} />
         </Modal>
       )}
       {modal?.id && !modal.modus && (
-        <Modal title="Kategorie bearbeiten" onClose={() => setModal(null)}>
+        <Modal title="Tätigkeit bearbeiten" onClose={() => setModal(null)}>
           {modal.kategorie.anzahl_eintraege > 0 ? (
             <div className="space-y-4">
               <p className="text-sm text-slate-600">
-                Diese Kategorie wurde in <strong>{modal.kategorie.anzahl_eintraege} Einträgen</strong> bereits verwendet.
-                Möchtest du sie überschreiben (bestehende Einträge werden aktualisiert) oder eine neue Kategorie erstellen?
+                Diese Tätigkeit wurde in <strong>{modal.kategorie.anzahl_eintraege} Einträgen</strong> bereits verwendet.
+                Möchtest du sie überschreiben (bestehende Einträge werden aktualisiert) oder eine neue Tätigkeit erstellen?
               </p>
               <div className="flex gap-3">
                 <button className="btn-secondary flex-1" onClick={() => setModal(m => ({ ...m, modus: "ueberschreiben" }))}>Überschreiben</button>
-                <button className="btn-secondary flex-1" onClick={() => setModal(m => ({ ...m, modus: "neu" }))}>Neue Kategorie</button>
+                <button className="btn-secondary flex-1" onClick={() => setModal(m => ({ ...m, modus: "neu" }))}>Neue Tätigkeit</button>
               </div>
             </div>
           ) : (
-            // No entries yet → skip the choice, go straight to edit
-            <KategorieForm initial={modal.kategorie} raumtypen={raumtypen}
+            <TaetigkeitForm initial={modal.kategorie}
               onSave={handleUpdate(modal.id, "ueberschreiben")} onCancel={() => setModal(null)} />
           )}
         </Modal>
       )}
       {modal?.id && modal.modus && (
-        <Modal title={modal.modus === "neu" ? "Neue Kategorie erstellen" : "Kategorie bearbeiten"} onClose={() => setModal(null)}>
-          <KategorieForm initial={modal.kategorie} raumtypen={raumtypen}
+        <Modal title={modal.modus === "neu" ? "Neue Tätigkeit erstellen" : "Tätigkeit bearbeiten"} onClose={() => setModal(null)}>
+          <TaetigkeitForm initial={modal.kategorie}
             onSave={handleUpdate(modal.id, modal.modus)} onCancel={() => setModal(null)} />
         </Modal>
       )}
       {confirm && (
         <ConfirmDialog
-          title="Kategorie deaktivieren"
-          message={`«${confirm.name}» deaktivieren? ${confirm.count > 0 ? `${confirm.count} Einträge verweisen auf diese Kategorie und bleiben unverändert.` : ""}`}
+          title="Tätigkeit deaktivieren"
+          message={`«${confirm.name}» deaktivieren? ${confirm.count > 0 ? `${confirm.count} Einträge verweisen auf diese Tätigkeit und bleiben unverändert.` : ""}`}
           onConfirm={() => handleDeactivate(confirm.id)}
           onCancel={() => setConfirm(null)}
         />

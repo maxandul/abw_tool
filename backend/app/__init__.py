@@ -38,9 +38,30 @@ def create_app(config_class=None) -> Flask:
 
     _register_blueprints(app)
     _register_cli(app)
+    _register_api_errors(app)
     _register_spa(app)
 
     return app
+
+
+def _register_api_errors(app: Flask) -> None:
+    """Return JSON (not HTML) for unhandled API errors."""
+
+    @app.errorhandler(500)
+    def handle_500(err):
+        from flask import request
+        from werkzeug.exceptions import InternalServerError
+
+        if request.path.startswith("/api/"):
+            if app.debug:
+                return jsonify({"data": None, "error": str(err)}), 500
+            return jsonify(
+                {
+                    "data": None,
+                    "error": "Interner Serverfehler – bitte Backend neu starten.",
+                }
+            ), 500
+        return InternalServerError(original_exception=err)
 
 
 def _register_blueprints(app: Flask) -> None:

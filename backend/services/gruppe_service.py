@@ -1,7 +1,6 @@
 """Business logic for groups, group participants and the admin dashboard."""
 
 from app.utils import ValidationError, parse_date
-from constants import DEFAULT_SHARING_RATIO
 from extensions import db
 from models import (
     Einreichung,
@@ -12,8 +11,72 @@ from models import (
     Rolle,
     User,
 )
-from models.gruppe import generate_token
+from models.gruppe import generate_token  # noqa: F401 – kept for DB default on Gruppe
 from services import auth_service
+
+
+def _parse_beschaeftigungsgrad(value) -> float:
+    """Normalise employment percentage (0–100). Empty values default to 100."""
+    if value is None or value == "":
+        return 100.0
+    raw = str(value).strip().replace("%", "").replace(",", ".")
+    try:
+        grad = float(raw)
+    except ValueError as exc:
+        raise ValidationError(
+            f"Beschäftigungsgrad «{value}» ist keine gültige Zahl."
+        ) from exc
+    if grad <= 0 or grad > 100:
+        raise ValidationError("Beschäftigungsgrad muss zwischen 0 und 100 liegen.")
+    return grad
+
+
+def _parse_teilnehmer_attrs(data: dict) -> dict:
+    """Validate and normalise erhebungs-specific participant attributes."""
+    return {
+        "vorname": (data.get("vorname") or "").strip() or None,
+        "nachname": (data.get("nachname") or "").strip() or None,
+        "funktion": (data.get("funktion") or "").strip() or None,
+        "organisationseinheit": (
+            (data.get("organisationseinheit") or "").strip() or None
+        ),
+        "beschaeftigungsgrad": _parse_beschaeftigungsgrad(
+            data.get("beschaeftigungsgrad")
+        ),
+    }
+
+
+def _apply_profil(mitglied: GruppenMitglied, attrs: dict) -> None:
+    """Write parsed profile attributes onto a membership row."""
+    for key, value in attrs.items():
+        setattr(mitglied, key, value)
+
+
+def _teilnehmer_entry(
+    mitglied: GruppenMitglied, user: User, gruppe: Gruppe
+) -> dict:
+    """Build the API dict for one participant in a group."""
+    einreichung = Einreichung.query.filter_by(
+        user_id=user.id, gruppe_id=gruppe.id
+    ).first()
+    eintraege = Eintrag.query.filter_by(user_id=user.id, gruppe_id=gruppe.id).all()
+    letzter = max((e.datum for e in eintraege), default=None)
+    gruppen_namen = [gm.gruppe.name for gm in user.mitgliedschaften]
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "aktiv": user.aktiv,
+        "pin_temporaer": user.pin_temporaer,
+        "gruppen": gruppen_namen,
+        "status": (
+            einreichung.status.value
+            if einreichung
+            else EinreichungStatus.OFFEN.value
+        ),
+        "anzahl_eintraege": len(eintraege),
+        "letzter_eintrag": letzter.isoformat() if letzter else None,
+        **mitglied.profil_dict(),
+    }
 
 
 def _validate_gruppe_input(data: dict, partial: bool = False) -> dict:
@@ -33,16 +96,6 @@ def _validate_gruppe_input(data: dict, partial: bool = False) -> dict:
             raise ValidationError("'Zeitraum bis' muss nach 'Zeitraum von' liegen.")
         cleaned["zeitraum_von"] = von
         cleaned["zeitraum_bis"] = bis
-
-    if not partial or "sharing_ratio" in data:
-        ratio = data.get("sharing_ratio", DEFAULT_SHARING_RATIO)
-        try:
-            ratio = float(ratio)
-        except (TypeError, ValueError) as exc:
-            raise ValidationError("Sharing-Ratio muss eine Zahl sein.") from exc
-        if ratio <= 0:
-            raise ValidationError("Sharing-Ratio muss grösser als 0 sein.")
-        cleaned["sharing_ratio"] = ratio
 
     return cleaned
 
@@ -135,11 +188,8 @@ def update_gruppe(gruppe_id: int, data: dict) -> Gruppe:
 
 
 def regenerate_token(gruppe_id: int) -> Gruppe:
-    """Generate a new registration token, invalidating the old link."""
-    gruppe = get_gruppe(gruppe_id)
-    gruppe.registrierung_link_token = generate_token()
-    db.session.commit()
-    return gruppe
+    """Deprecated: registration links are no longer used."""
+    raise ValidationError("Registrierungslinks werden nicht mehr unterstützt.")
 
 
 def abschliessen_gruppe(gruppe_id: int) -> Gruppe:
@@ -204,51 +254,36 @@ def dashboard() -> dict:
 def list_teilnehmer(gruppe_id: int) -> list[dict]:
     """List all participants of a group with status and entry statistics."""
     gruppe = get_gruppe(gruppe_id)
-    result = []
-    for m in gruppe.mitglieder:
-        user = m.user
-        einreichung = Einreichung.query.filter_by(
-            user_id=user.id, gruppe_id=gruppe.id
-        ).first()
-        eintraege = Eintrag.query.filter_by(
-            user_id=user.id, gruppe_id=gruppe.id
-        ).all()
-        letzter = max((e.datum for e in eintraege), default=None)
-        gruppen_namen = [gm.gruppe.name for gm in user.mitgliedschaften]
-        result.append(
-            {
-                "user_id": user.id,
-                "email": user.email,
-                "aktiv": user.aktiv,
-                "pin_temporaer": user.pin_temporaer,
-                "gruppen": gruppen_namen,
-                "status": (
-                    einreichung.status.value
-                    if einreichung
-                    else EinreichungStatus.OFFEN.value
-                ),
-                "anzahl_eintraege": len(eintraege),
-                "letzter_eintrag": letzter.isoformat() if letzter else None,
-            }
+    return [
+        _teilnehmer_entry(m, m.user, gruppe)
+        for m in sorted(
+            gruppe.mitglieder,
+            key=lambda m: (
+                (m.nachname or "").lower(),
+                (m.vorname or "").lower(),
+                m.user.email,
+            ),
         )
-    return result
+    ]
 
 
-def add_teilnehmer(gruppe_id: int, email: str) -> dict:
-    """Add a participant by email, linking or creating the account.
+def upsert_teilnehmer(gruppe_id: int, data: dict) -> dict:
+    """Create or update a participant in a group (profile per Erhebung).
 
-    Returns a dict that includes a temporary PIN only when a new account is
-    created (the admin communicates it to the participant).
+    Returns user info, optional temporary PIN (new accounts only), and flags
+    indicating whether the row was created or updated.
     """
     gruppe = get_gruppe(gruppe_id)
-    email = (email or "").strip().lower()
+    email = (data.get("email") or "").strip().lower()
     if not email or "@" not in email:
         raise ValidationError("Bitte eine gültige E-Mail-Adresse angeben.")
 
+    attrs = _parse_teilnehmer_attrs(data)
     user = User.query.filter_by(email=email).first()
     temp_pin = None
+
     if user is None:
-        temp_pin = auth_service.generate_temp_pin()
+        temp_pin = auth_service.teilnehmer_temp_pin()
         user = User(
             email=email,
             pin_hash=auth_service.hash_pin(temp_pin),
@@ -259,15 +294,94 @@ def add_teilnehmer(gruppe_id: int, email: str) -> dict:
         db.session.add(user)
         db.session.flush()
 
-    existing = GruppenMitglied.query.filter_by(
+    mitglied = GruppenMitglied.query.filter_by(
         user_id=user.id, gruppe_id=gruppe.id
     ).first()
-    if existing:
-        raise ValidationError("Diese Person ist bereits in der Gruppe.")
+    is_new = mitglied is None
 
-    db.session.add(GruppenMitglied(user_id=user.id, gruppe_id=gruppe.id))
+    if mitglied is None:
+        mitglied = GruppenMitglied(user_id=user.id, gruppe_id=gruppe.id)
+        db.session.add(mitglied)
+
+    _apply_profil(mitglied, attrs)
     db.session.commit()
-    return {"user": user.to_dict(), "temporaerer_pin": temp_pin}
+
+    return {
+        "user": user.to_dict(),
+        "temporaerer_pin": temp_pin,
+        "created": is_new,
+        "updated": not is_new,
+        "profil": mitglied.profil_dict(),
+    }
+
+
+def add_teilnehmer(gruppe_id: int, data: dict) -> dict:
+    """Add or update a single participant (manual admin entry)."""
+    return upsert_teilnehmer(gruppe_id, data)
+
+
+def update_teilnehmer(gruppe_id: int, user_id: int, data: dict) -> dict:
+    """Update profile attributes of an existing group member."""
+    gruppe = get_gruppe(gruppe_id)
+    mitglied = GruppenMitglied.query.filter_by(
+        user_id=user_id, gruppe_id=gruppe.id
+    ).first()
+    if mitglied is None:
+        raise ValidationError("Teilnehmer nicht in dieser Erhebung gefunden.")
+
+    attrs = _parse_teilnehmer_attrs(data)
+    _apply_profil(mitglied, attrs)
+    db.session.commit()
+    return _teilnehmer_entry(mitglied, mitglied.user, gruppe)
+
+
+def import_teilnehmer(gruppe_id: int, rows: list) -> dict:
+    """Bulk-import participants from a list of row dicts.
+
+    Each row is processed independently; valid rows are committed even when
+    others fail. Existing members are updated (attributes overwritten).
+    """
+    if not rows:
+        raise ValidationError("Keine Daten zum Importieren vorhanden.")
+
+    erstellt = 0
+    aktualisiert = 0
+    neue_accounts = 0
+    fehler: list[dict] = []
+
+    for idx, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            fehler.append({"zeile": idx, "email": None, "fehler": "Ungültige Zeile."})
+            continue
+        try:
+            had_user = bool(
+                User.query.filter_by(
+                    email=(row.get("email") or "").strip().lower()
+                ).first()
+            )
+            result = upsert_teilnehmer(gruppe_id, row)
+            if result["updated"]:
+                aktualisiert += 1
+            else:
+                erstellt += 1
+            if not had_user:
+                neue_accounts += 1
+        except ValidationError as exc:
+            db.session.rollback()
+            fehler.append(
+                {
+                    "zeile": idx,
+                    "email": (row.get("email") or "").strip() or None,
+                    "fehler": str(exc),
+                }
+            )
+
+    return {
+        "erstellt": erstellt,
+        "aktualisiert": aktualisiert,
+        "neue_accounts": neue_accounts,
+        "fehler": fehler,
+    }
 
 
 def remove_teilnehmer(gruppe_id: int, user_id: int) -> None:
@@ -282,11 +396,11 @@ def remove_teilnehmer(gruppe_id: int, user_id: int) -> None:
 
 
 def reset_pin(user_id: int) -> str:
-    """Reset a participant's PIN to a random temporary PIN and return it."""
+    """Reset a participant's PIN to the fixed temporary PIN."""
     user = db.session.get(User, user_id)
     if user is None:
         raise ValidationError("Teilnehmer nicht gefunden.")
-    temp_pin = auth_service.generate_temp_pin()
+    temp_pin = auth_service.teilnehmer_temp_pin()
     user.pin_hash = auth_service.hash_pin(temp_pin)
     user.pin_temporaer = True
     db.session.commit()

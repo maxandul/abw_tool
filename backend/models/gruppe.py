@@ -5,8 +5,6 @@ from datetime import datetime
 
 from extensions import db
 
-DEFAULT_SHARING_RATIO = 1.2
-
 
 def generate_token() -> str:
     """Generate a unique token for the self-registration link."""
@@ -14,7 +12,7 @@ def generate_token() -> str:
 
 
 class Gruppe(db.Model):
-    """A survey group with a defined collection period and sharing ratio."""
+    """A survey group with a defined collection period."""
 
     __tablename__ = "gruppe"
 
@@ -22,7 +20,6 @@ class Gruppe(db.Model):
     name = db.Column(db.String(255), nullable=False)
     zeitraum_von = db.Column(db.Date, nullable=False)
     zeitraum_bis = db.Column(db.Date, nullable=False)
-    sharing_ratio = db.Column(db.Float, nullable=False, default=DEFAULT_SHARING_RATIO)
     registrierung_link_token = db.Column(
         db.String(64), unique=True, nullable=False, default=generate_token
     )
@@ -41,8 +38,6 @@ class Gruppe(db.Model):
             "name": self.name,
             "zeitraum_von": self.zeitraum_von.isoformat() if self.zeitraum_von else None,
             "zeitraum_bis": self.zeitraum_bis.isoformat() if self.zeitraum_bis else None,
-            "sharing_ratio": self.sharing_ratio,
-            "registrierung_link_token": self.registrierung_link_token,
             "aktiv": self.aktiv,
             "abgeschlossen": self.abgeschlossen,
             "created_at": self.created_at.isoformat() if self.created_at else None,
