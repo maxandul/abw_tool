@@ -40,12 +40,14 @@ DEFAULT_TAETIGKEITEN = [
     (23, "Ungestört, ungeplant (4+)", "#C0392B", Taetigkeitsgruppe.GRUPPE_4PLUS, Stoerung.UNGESTOERT, Planung.UNGEPLANT,
      "Spontane Gruppenarbeit vor Ort ohne Unterbrechungen und ohne Zuhörer."),
     # Extern – Grautöne
-    (30, "Teilzeit / frei", "#D5D8DC", Taetigkeitsgruppe.EXTERN, None, None,
-     "Nicht gearbeitet aufgrund Teilzeitpensum oder freier Zeit."),
+    (30, "Teilzeit", "#D5D8DC", Taetigkeitsgruppe.EXTERN, None, None,
+     "Vereinbarte freie Zeit aufgrund eines Teilzeitpensums (regulär nicht gearbeitet)."),
     (31, "Homeoffice", "#BDC3C7", Taetigkeitsgruppe.EXTERN, None, None,
      "Arbeit im Homeoffice."),
     (32, "Mobil / anderer Standort", "#95A5A6", Taetigkeitsgruppe.EXTERN, None, None,
      "Arbeit ausserhalb des Erhebungsstandorts: Aussendienst, anderer Standort, unterwegs."),
+    (33, "Abwesend", "#7F8C8D", Taetigkeitsgruppe.EXTERN, None, None,
+     "Abwesend wegen Ferien, Krankheit, Feiertag oder Ähnlichem."),
 ]
 
 # (gruppe, old_name, new_name) – preserves Eintrag FKs on rename.
@@ -62,6 +64,9 @@ _CATALOG_RENAMES: list[tuple[Taetigkeitsgruppe, str, str]] = [
     (Taetigkeitsgruppe.GRUPPE_4PLUS, "Störung erlaubt, ungeplant", "Störung erlaubt, ungeplant (4+)"),
     (Taetigkeitsgruppe.GRUPPE_4PLUS, "Ungestört, geplant", "Ungestört, geplant (4+)"),
     (Taetigkeitsgruppe.GRUPPE_4PLUS, "Ungestört, ungeplant", "Ungestört, ungeplant (4+)"),
+    # "Teilzeit / frei" split into a dedicated "Teilzeit" activity; "Abwesend"
+    # (vacation/sick/etc.) is added as a separate new category.
+    (Taetigkeitsgruppe.EXTERN, "Teilzeit / frei", "Teilzeit"),
 ]
 
 

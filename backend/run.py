@@ -42,6 +42,27 @@ def _init_db() -> None:
             print(f"Seed übersprungen: {exc}")
 
 
+def _serve(host: str = "0.0.0.0", port: int = 5000) -> None:
+    """Serve the app.
+
+    Uses the production-grade waitress WSGI server when available (more robust
+    under concurrent access from many participants), and transparently falls
+    back to Flask's built-in server if waitress is not installed. Either way the
+    app is reachable over plain HTTP at http://<host-name>:5000 on the LAN.
+    """
+    if app.debug:
+        app.run(host=host, port=port)
+        return
+    try:
+        from waitress import serve
+
+        print(f"Server läuft (waitress) auf http://{host}:{port}")
+        serve(app, host=host, port=port, threads=8)
+    except ImportError:
+        print("waitress nicht gefunden – nutze den eingebauten Server.")
+        app.run(host=host, port=port)
+
+
 if __name__ == "__main__":
     _init_db()
-    app.run(host="0.0.0.0", port=5000)
+    _serve()

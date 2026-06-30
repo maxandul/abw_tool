@@ -15,6 +15,11 @@ from models import Rolle, User
 SESSION_USER_ID = "user_id"
 SESSION_ROLLE = "rolle"
 
+# Pre-computed bcrypt hash of a random value, used to spend the same amount of
+# time verifying a login even when the e-mail does not exist. This prevents an
+# attacker from distinguishing "unknown e-mail" from "wrong PIN" by timing.
+_DUMMY_PIN_HASH = bcrypt.hashpw(secrets.token_bytes(16), bcrypt.gensalt()).decode("utf-8")
+
 
 def hash_pin(pin: str) -> str:
     """Hash a plaintext PIN with bcrypt and return the UTF-8 hash string."""
@@ -27,6 +32,11 @@ def verify_pin(pin: str, pin_hash: str) -> bool:
         return bcrypt.checkpw(pin.encode("utf-8"), pin_hash.encode("utf-8"))
     except (ValueError, TypeError):
         return False
+
+
+def dummy_verify() -> None:
+    """Perform a throwaway bcrypt check to equalise login response time."""
+    verify_pin("0000", _DUMMY_PIN_HASH)
 
 
 def generate_temp_pin() -> str:

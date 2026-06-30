@@ -21,7 +21,7 @@ export default function HilfePageAdmin() {
           <Li><strong>Offen:</strong> Erhebungen, in denen noch Einträge erfasst werden können.</Li>
           <Li><strong>Abgeschlossen:</strong> Erhebungen, die gesperrt, aber noch nicht archiviert sind.</Li>
         </ul>
-        <P>Pro Erhebung wird ein Fortschrittsbalken angezeigt: Erfasste Stunden vs. Erwartete Stunden (Summe der Beschäftigungsgrade × Arbeitstage × 8,4h). Teilzeitkräfte werden so anteilig gewichtet (z. B. zählt ein 80%-Pensum als 0,8).</P>
+        <P>Pro Erhebung wird ein Fortschrittsbalken angezeigt: Erfasste Stunden vs. Erwartete Stunden (Anzahl Teilnehmer × Arbeitstage × 8,4h). Das Soll ist für alle gleich – auch Teilzeitkräfte erfassen die ganze Woche, indem sie ihre regulär freie Zeit als Tätigkeit «Teilzeit» eintragen. Übererfassung Einzelner wird je Teilnehmer auf 100% des Solls begrenzt, damit Lücken anderer sichtbar bleiben.</P>
         <P>Aktionen direkt aus dem Dashboard: <strong>Abschliessen</strong> (sperrt neue Einträge), <strong>Wieder öffnen</strong>, <strong>Archivieren</strong> (nur möglich wenn abgeschlossen).</P>
       </Section>
 
@@ -52,7 +52,7 @@ export default function HilfePageAdmin() {
           <Li><strong>Einzelarbeit:</strong> Call- und stille Einzelarbeit-Varianten (Grüntöne im Kalender).</Li>
           <Li><strong>Zu zweit/zu dritt (physisch):</strong> Störung erlaubt/ungestört × geplant/ungeplant (Blautöne).</Li>
           <Li><strong>In Gruppen (4+, physisch):</strong> wie zu zweit/zu dritt (Rottöne).</Li>
-          <Li><strong>Extern:</strong> Teilzeit/frei, Homeoffice, Mobil/anderer Standort.</Li>
+          <Li><strong>Extern:</strong> Teilzeit (regulär freie Zeit bei Teilzeitpensum), Homeoffice, Mobil/anderer Standort, Abwesend (Ferien, Krankheit, Feiertag). Diese zählen zur Vollständigkeit, gelten aber nicht als Anwesenheit/Raumbedarf.</Li>
         </ul>
         <P>Pro Tätigkeit kannst du Name, Farbe (Gruppen-Palette oder eigene Farbe per «+»), Beschreibung und Sortierung anpassen. Im Teilnehmer-Kalender erscheinen die Tätigkeiten gruppiert nach diesen Gruppen.</P>
         <P>Inaktive Tätigkeiten können nicht mehr erfasst werden; bestehende Einträge bleiben erhalten.</P>
@@ -61,7 +61,7 @@ export default function HilfePageAdmin() {
       <Section title="Auswertung">
         <P>Wähle eine oder mehrere Erhebungen aus dem Dropdown. Der Vergleichsmodus ermöglicht das Überlagern mehrerer Erhebungen per Chip-Auswahl.</P>
         <P>In die Auswertung fliessen <strong>nur eingereichte</strong> Teilnehmer ein (Status «Eingereicht» oder «Abgeschlossen»). Wer noch nicht eingereicht oder die Erhebung zur Bearbeitung entsperrt hat, wird nicht berücksichtigt.</P>
-        <P>Die Karte <strong>Stichprobe</strong> fasst die Datenbasis zusammen: wie viele von wie vielen eingereicht haben, FTE-Summe und erfasste Zeit der Eingereichten sowie deren Vollständigkeit (erfasste vs. erwartete Stunden). Eingereichte Teilnehmer unter 85% Vollständigkeit werden separat ausgewiesen und sind anklickbar. Die Werte berücksichtigen den Teilnehmer-Filter.</P>
+        <P>Die Karte <strong>Stichprobe</strong> fasst die Datenbasis zusammen: wie viele von wie vielen eingereicht haben, FTE-Summe und erfasste Zeit der Eingereichten sowie deren Vollständigkeit (erfasste vs. erwartete Stunden). Übererfassung einzelner Teilnehmer wird dabei auf 100% des jeweiligen Solls begrenzt, damit Lücken anderer nicht überdeckt werden. Eingereichte Teilnehmer unter 85% Vollständigkeit werden separat ausgewiesen und sind anklickbar. Die Werte berücksichtigen den Teilnehmer-Filter.</P>
         <P>Die Auswertung zeigt Lastprofile, Bedarf nach Tätigkeit sowie Zeitanteile pro Tätigkeit und Tätigkeitsgruppe.</P>
         <P>Der <strong>HTML-Export</strong> ist eine eigenständige, anonyme Datei (keine Namen oder E-Mail-Adressen) der aktuell gewählten Erhebung(en). Sie ist interaktiv: Empfänger können darin selbst nach Teilnehmer-Attributen filtern und Lastprofile für verschiedene Tätigkeiten erstellen – ganz ohne Server. Der beim Export aktive Filter ist als Ausgangszustand voreingestellt.</P>
       </Section>

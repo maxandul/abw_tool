@@ -1,5 +1,8 @@
 """Authentication routes: bootstrap setup, login, logout, PIN change."""
 
+import threading
+import time
+
 from flask import Blueprint, request
 
 from app.helpers import err, login_required, ok
@@ -10,6 +13,65 @@ from services import auth_service
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 MIN_PIN_LENGTH = 4
+
+# ---------------------------------------------------------------------------
+# Simple in-memory brute-force throttle for the login endpoint.
+#
+# Tracks failed attempts per client IP. After MAX_FAILS failures the IP is
+# locked out for LOCK_SECONDS. Successful logins reset the counter. This lives
+# in process memory (the app runs as a single long-lived server), so it adds
+# no infrastructure and does not affect normal LAN usage – each PC has its own
+# IP, and a legitimate user almost never hits the limit.
+# ---------------------------------------------------------------------------
+
+_MAX_FAILS = 10
+_LOCK_SECONDS = 300  # 5 minutes
+_WINDOW_SECONDS = 300  # failures older than this no longer count
+
+_login_attempts: dict[str, dict] = {}
+_login_lock = threading.Lock()
+
+
+def _client_key() -> str:
+    """Identify the caller for throttling (best-effort, proxy-aware)."""
+    fwd = request.headers.get("X-Forwarded-For", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+
+def _check_login_allowed(key: str) -> float:
+    """Return remaining lockout seconds (0 if the caller may attempt a login)."""
+    now = time.time()
+    with _login_lock:
+        rec = _login_attempts.get(key)
+        if not rec:
+            return 0.0
+        if rec.get("locked_until", 0) > now:
+            return rec["locked_until"] - now
+        # Drop stale failures outside the rolling window.
+        if now - rec.get("last", 0) > _WINDOW_SECONDS:
+            _login_attempts.pop(key, None)
+        return 0.0
+
+
+def _register_login_failure(key: str) -> None:
+    now = time.time()
+    with _login_lock:
+        rec = _login_attempts.get(key)
+        if not rec or now - rec.get("last", 0) > _WINDOW_SECONDS:
+            rec = {"fails": 0, "last": now, "locked_until": 0}
+        rec["fails"] += 1
+        rec["last"] = now
+        if rec["fails"] >= _MAX_FAILS:
+            rec["locked_until"] = now + _LOCK_SECONDS
+            rec["fails"] = 0
+        _login_attempts[key] = rec
+
+
+def _register_login_success(key: str) -> None:
+    with _login_lock:
+        _login_attempts.pop(key, None)
 
 
 @auth_bp.route("/setup-status", methods=["GET"])
@@ -43,6 +105,15 @@ def setup():
 @auth_bp.route("/login", methods=["POST"])
 def login():
     """Authenticate a user with email + PIN."""
+    client_key = _client_key()
+    wartezeit = _check_login_allowed(client_key)
+    if wartezeit > 0:
+        return err(
+            "Zu viele Fehlversuche. Bitte in "
+            f"{int(wartezeit // 60) + 1} Minute(n) erneut versuchen.",
+            429,
+        )
+
     body = request.get_json(silent=True) or {}
     email = (body.get("email") or "").strip().lower()
     pin = body.get("pin") or ""
@@ -50,9 +121,17 @@ def login():
     from models import User
 
     user = User.query.filter_by(email=email).first()
-    if user is None or not user.aktiv or not auth_service.verify_pin(pin, user.pin_hash):
+    # Always run a bcrypt verification (real or dummy) so the response time does
+    # not reveal whether the e-mail exists.
+    if user is None or not user.aktiv:
+        auth_service.dummy_verify()
+        _register_login_failure(client_key)
+        return err("E-Mail-Adresse oder PIN ist falsch.", 401)
+    if not auth_service.verify_pin(pin, user.pin_hash):
+        _register_login_failure(client_key)
         return err("E-Mail-Adresse oder PIN ist falsch.", 401)
 
+    _register_login_success(client_key)
     auth_service.login_user(user)
 
     gruppen = [

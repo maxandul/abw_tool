@@ -16,7 +16,7 @@ Web-Applikation zur Erhebung von Tätigkeitsprofilen im Rahmen einer arbeitsplat
 
 **Admin**
 - Verwaltet Tätigkeitskategorien (gruppiert nach Tätigkeitsgruppe) und Erhebungen inkl. Teilnehmer.
-- Dashboard mit Fortschritt pro Erhebung. Die erwarteten Stunden werden nach **Beschäftigungsgrad** gewichtet (Summe der Pensen × Arbeitstage × 8,4 h), Teilzeit zählt anteilig.
+- Dashboard mit Fortschritt pro Erhebung. Das Soll ist für alle Teilnehmer gleich (Arbeitstage × 8,4 h): Auch Teilzeitkräfte erfassen die ganze Woche und tragen ihre regulär freie Zeit als Tätigkeit «Teilzeit» ein. Übererfassung Einzelner wird je Teilnehmer auf 100 % begrenzt, damit Lücken anderer sichtbar bleiben.
 - Kann einzelne Teilnehmer-Erhebungen einsehen und im selben Kalender direkt bearbeiten (Admin-Override, unabhängig vom Einreichungsstatus).
 - **Auswertung** über eine oder mehrere Erhebungen, mit Filtern nach Teilnehmer-Attributen (Funktion, Organisationseinheit, Beschäftigungsgrad), Wochentagen und Tätigkeiten:
   - *Stichprobe*: Datenbasis (eingereicht/offen, FTE-Summe, erfasste vs. erwartete Stunden, Vollständigkeit; Hinweis auf Teilnehmer unter 85 %).
@@ -139,3 +139,19 @@ Kopiert `frontend/dist/` nach `backend/static/`.
 
 `backup.bat` kopiert die aktuelle Datenbankdatei mit Zeitstempel in den Ordner `backup/`.
 Empfehlung: täglich ausführen oder via Windows Task Scheduler automatisieren.
+
+---
+
+## Sicherheit
+
+Die Applikation ist für den Betrieb im **internen Netzwerk** ausgelegt – die Teilnehmer greifen während der Erhebung über `http://<pc-name>:5000` zu (kein Internet, kein HTTPS). Folgende Massnahmen sind umgesetzt:
+
+- **Sitzungsschlüssel**: Beim ersten Start wird automatisch ein zufälliger `SECRET_KEY` erzeugt und in `backend/data/secret_key` gespeichert (nicht im Repo). Es ist keine manuelle Konfiguration nötig; ein bekannter Standard-Schlüssel wird nie verwendet. Optional kann der Schlüssel weiterhin über die `.env` gesetzt werden.
+- **PINs**: Werden mit bcrypt gehasht gespeichert (nie im Klartext). Teilnehmer müssen den Start-PIN beim ersten Login durch einen eigenen ersetzen, bevor sie Daten erfassen können.
+- **Login-Schutz**: Wiederholte Fehlversuche werden pro Gerät gedrosselt (Schutz gegen automatisiertes Durchprobieren).
+- **Rollen-/Zugriffsschutz**: Admin- und Teilnehmer-Funktionen sind serverseitig getrennt; Teilnehmer sehen und ändern nur eigene Einträge.
+- **Anonymer Export**: Der HTML-Export enthält keine Namen oder E-Mail-Adressen und ist gegen Code-Einschleusung (XSS) abgesichert.
+
+### Bewusst akzeptiertes Restrisiko
+
+Da der Zugriff über **HTTP** (ohne Verschlüsselung) im lokalen Netz erfolgt, werden Anmelde-PIN und Sitzungscookie unverschlüsselt übertragen. Wer den Netzwerkverkehr im selben Netz mitlesen kann, könnte diese abgreifen. Für eine zeitlich begrenzte, interne Erhebung ist dies eine bewusste Abwägung zugunsten der einfachen Erreichbarkeit (`http://<pc-name>:5000`). Eine Umstellung auf HTTPS würde diesen Zugriffsweg verändern und ist daher nicht vorgesehen.

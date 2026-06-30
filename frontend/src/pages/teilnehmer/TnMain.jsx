@@ -49,11 +49,16 @@ function ErhebungKachel({ gruppe, onKalender }) {
   if (loading) return <div className="card flex justify-center py-8"><Spinner /></div>;
   if (!dash) return <div className="card"><Alert>{err}</Alert></div>;
 
-  const { status, gesamt_stunden, tage_mit_eintraegen, arbeitstage_gesamt, kategorien } = dash;
+  const {
+    status, gesamt_stunden, tage_mit_eintraegen, arbeitstage_gesamt, kategorien,
+    erwartete_stunden, vollstaendigkeit_prozent,
+  } = dash;
   const offen           = gruppe.aktiv && !gruppe.abgeschlossen;
   const kannEinreichen  = offen && (status === "OFFEN" || status === "IN_BEARBEITUNG");
   const kannEntsperre   = offen && status === "EINGEREICHT";
   const maxMin = Math.max(1, ...(kategorien || []).map(k => k.minuten));
+  const voll = vollstaendigkeit_prozent ?? 0;
+  const vollColor = voll >= 85 ? "#16a34a" : voll >= 60 ? "#d97706" : "#dc2626";
 
   return (
     <div className="card space-y-4">
@@ -72,22 +77,43 @@ function ErhebungKachel({ gruppe, onKalender }) {
       </div>
 
       <div className="flex items-center gap-4 text-sm text-slate-600">
-        <span>Erfasst: <strong>{gesamt_stunden}h</strong></span>
         <span>Tage: <strong>{tage_mit_eintraegen}/{arbeitstage_gesamt}</strong></span>
       </div>
 
+      {/* Fortschritt: erfasste Zeit gegenüber Sollzeit */}
+      {arbeitstage_gesamt > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-baseline justify-between gap-2 text-sm">
+            <span className="text-slate-600">
+              <strong>{gesamt_stunden}h</strong> erfasst
+              <span className="text-slate-400"> · Soll {erwartete_stunden}h</span>
+            </span>
+            <span className="font-semibold shrink-0" style={{ color: vollColor }}>{voll}%</span>
+          </div>
+          <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+            <div className="h-full rounded-full transition-all"
+              style={{ width: `${Math.min(100, voll)}%`, backgroundColor: vollColor }} />
+          </div>
+        </div>
+      )}
+
       {(kategorien || []).length > 0 && (
-        <div className="space-y-1.5">
+        <div className="space-y-2.5">
+          <h4 className="text-xs font-semibold text-slate-500">Zeitanteile</h4>
           {kategorien.sort((a, b) => b.minuten - a.minuten).slice(0, 5).map(k => (
-            <div key={k.kategorie.id} className="flex items-center gap-2">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
-                style={{ background: k.kategorie.farbe ?? "#ccc" }} />
-              <span className="text-xs text-slate-600 w-36 truncate">{k.kategorie.name}</span>
-              <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+            <div key={k.kategorie.id} className="space-y-1">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="flex items-center gap-2 text-xs text-slate-600 min-w-0">
+                  <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+                    style={{ background: k.kategorie.farbe ?? "#ccc" }} />
+                  <span className="leading-snug">{k.kategorie.name}</span>
+                </span>
+                <span className="text-xs text-slate-500 shrink-0 tabular-nums">{(k.minuten / 60).toFixed(1)}h</span>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                 <div className="h-full rounded-full transition-all"
                   style={{ width: `${(k.minuten / maxMin) * 100}%`, background: k.kategorie.farbe ?? "#3B82F6" }} />
               </div>
-              <span className="text-xs text-slate-500 w-12 text-right">{(k.minuten / 60).toFixed(1)}h</span>
             </div>
           ))}
         </div>
@@ -180,7 +206,7 @@ export default function TnMain() {
 
   // Dashboard view
   if (!activeGruppe) return (
-    <div className="max-w-3xl mx-auto p-6 space-y-4">
+    <div className="max-w-4xl mx-auto p-6 space-y-4">
       <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
       {gruppen.length === 0 && (
         <div className="card text-center text-slate-500 py-12">

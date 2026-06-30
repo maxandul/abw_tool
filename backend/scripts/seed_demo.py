@@ -6,7 +6,7 @@ Run from the project root:
 Creates:
   - Erhebung "Demo Standort Zürich"  (2026-05-19 to 2026-05-30)
   - 5 participants (anna@demo.ch … elias@demo.ch), PIN: 0000
-  - Realistic day entries using the 16 standard Tätigkeiten
+  - Realistic day entries using the standard Tätigkeiten
   - 3 of 5 participants have submitted their entries
 """
 
@@ -77,7 +77,7 @@ def make_tagesplan(wochentag: int, variation: int) -> list[tuple[time, time, Tae
             (time(8, 0), time(9, 0), K.EINZELARBEIT, STILL_STOER),
             (time(9, 0), time(10, 0), K.GRUPPE_4PLUS, G4_STOER_GEPL),
             (time(10, 0), time(12, 0), K.EINZELARBEIT, STILL_RUHIG),
-            (time(12, 0), time(13, 0), K.EXTERN, "Teilzeit / frei"),
+            (time(12, 0), time(13, 0), K.EXTERN, "Teilzeit"),
             (time(13, 0), time(14, 30), K.EINZELARBEIT, CALL_ZHOER),
             (time(14, 30), time(16, 0), K.ZU_ZWEIT_DREIT, Z23_STOER_GEPL),
             (time(16, 0), time(17, 0), K.ZU_ZWEIT_DREIT, Z23_STOER_UNG),
@@ -97,7 +97,7 @@ def make_tagesplan(wochentag: int, variation: int) -> list[tuple[time, time, Tae
             (time(8, 0), time(9, 0), K.EINZELARBEIT, STILL_STOER),
             (time(9, 0), time(10, 30), K.GRUPPE_4PLUS, G4_STOER_UNG),
             (time(10, 30), time(12, 0), K.GRUPPE_4PLUS, G4_STOER_GEPL),
-            (time(12, 0), time(13, 0), K.EXTERN, "Teilzeit / frei"),
+            (time(12, 0), time(13, 0), K.EXTERN, "Teilzeit"),
             (time(13, 0), time(15, 0), K.EINZELARBEIT, STILL_RUHIG),
             (time(15, 0), time(16, 0), K.ZU_ZWEIT_DREIT, Z23_STOER_UNG),
             (time(16, 0), time(17, 0), K.EINZELARBEIT, STILL_STOER),
@@ -107,7 +107,7 @@ def make_tagesplan(wochentag: int, variation: int) -> list[tuple[time, time, Tae
             (time(8, 0), time(9, 0), K.ZU_ZWEIT_DREIT, Z23_STOER_UNG),
             (time(9, 0), time(11, 0), K.EINZELARBEIT, STILL_RUHIG),
             (time(11, 0), time(12, 0), K.ZU_ZWEIT_DREIT, Z23_RUHIG_GEPL),
-            (time(12, 0), time(13, 0), K.EXTERN, "Teilzeit / frei"),
+            (time(12, 0), time(13, 0), K.EXTERN, "Teilzeit"),
             (time(13, 0), time(14, 0), K.EINZELARBEIT, CALL_ZHOER),
             (time(14, 0), time(16, 30), K.GRUPPE_4PLUS, G4_RUHIG_GEPL),
             (time(16, 30), time(17, 0), K.EINZELARBEIT, STILL_STOER),
@@ -117,7 +117,7 @@ def make_tagesplan(wochentag: int, variation: int) -> list[tuple[time, time, Tae
             (time(8, 0), time(9, 30), K.EINZELARBEIT, STILL_RUHIG),
             (time(9, 30), time(11, 0), K.ZU_ZWEIT_DREIT, Z23_STOER_GEPL),
             (time(11, 0), time(12, 0), K.EINZELARBEIT, STILL_STOER),
-            (time(12, 0), time(13, 0), K.EXTERN, "Teilzeit / frei"),
+            (time(12, 0), time(13, 0), K.EXTERN, "Teilzeit"),
             (time(13, 0), time(14, 30), K.GRUPPE_4PLUS, G4_STOER_GEPL),
             (time(14, 30), time(16, 0), K.EINZELARBEIT, STILL_RUHIG),
             (time(16, 0), time(17, 0), K.EXTERN, "Homeoffice"),
@@ -145,7 +145,7 @@ def seed_demo() -> None:
             return
 
         kategorien = load_kategorien()
-        if len(kategorien) < 16:
+        if len(kategorien) < 17:
             print(
                 f"FEHLER: Nur {len(kategorien)} Tätigkeiten gefunden. "
                 "Zuerst Server starten oder `flask seed` ausführen."

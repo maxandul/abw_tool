@@ -4,3 +4,4 @@ Flask-Migrate==4.0.7
 SQLAlchemy==2.0.31
 bcrypt==4.2.0
 python-dotenv==1.0.1
+waitress==3.0.2

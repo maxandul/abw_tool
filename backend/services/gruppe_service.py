@@ -1,6 +1,9 @@
 """Business logic for groups, group participants and the admin dashboard."""
 
-from app.utils import ValidationError, parse_date
+from datetime import date as date_type, timedelta
+
+from app.utils import ValidationError, parse_date, time_to_minutes
+from constants import ARBEITSTAGE, SOLL_STUNDEN_PRO_TAG
 from extensions import db
 from models import (
     Einreichung,
@@ -13,6 +16,19 @@ from models import (
 )
 from models.gruppe import generate_token  # noqa: F401 – kept for DB default on Gruppe
 from services import auth_service
+
+
+def _zaehle_arbeitstage(von: date_type, bis: date_type) -> int:
+    """Count working days (Mon–Fri) between two dates, inclusive."""
+    if not von or not bis:
+        return 0
+    tage = 0
+    aktuell = von
+    while aktuell <= bis:
+        if aktuell.weekday() in ARBEITSTAGE:
+            tage += 1
+        aktuell += timedelta(days=1)
+    return tage
 
 
 def _parse_beschaeftigungsgrad(value) -> float:
@@ -100,19 +116,42 @@ def _validate_gruppe_input(data: dict, partial: bool = False) -> dict:
     return cleaned
 
 
-def _minuten_erfasst(gruppe_id: int) -> int:
-    """Sum all recorded minutes (zeit_bis - zeit_von) for a group."""
-    from datetime import datetime, date as date_type
-    eintraege = Eintrag.query.filter_by(gruppe_id=gruppe_id).all()
-    total = 0
-    for e in eintraege:
+def _fortschritt(gruppe: Gruppe) -> dict:
+    """Compute the time-recording progress for a group.
+
+    Every participant records the whole week (part-time staff fill their
+    non-working time with the "Teilzeit" activity), so the expected hours are
+    the same for everyone: working days × 8.4h. Completeness is measured per
+    participant and capped at that expected value, so over-recording by some
+    cannot mask gaps of others. All participants are included regardless of
+    submission status, giving an honest overall recording progress.
+    """
+    tage = _zaehle_arbeitstage(gruppe.zeitraum_von, gruppe.zeitraum_bis)
+    soll_pro_person = tage * SOLL_STUNDEN_PRO_TAG * 60
+
+    # Recorded minutes per participant.
+    erfasst_pro_user: dict[int, int] = {}
+    for e in Eintrag.query.filter_by(gruppe_id=gruppe.id).all():
         if e.zeit_von and e.zeit_bis:
-            delta = (
-                datetime.combine(date_type.min, e.zeit_bis)
-                - datetime.combine(date_type.min, e.zeit_von)
-            )
-            total += max(0, int(delta.total_seconds() // 60))
-    return total
+            dauer = time_to_minutes(e.zeit_bis) - time_to_minutes(e.zeit_von)
+            if dauer > 0:
+                erfasst_pro_user[e.user_id] = erfasst_pro_user.get(e.user_id, 0) + dauer
+
+    erfasst_total = 0
+    erfasst_gedeckelt = 0.0
+    erwartet_total = 0.0
+    for m in gruppe.mitglieder:
+        ist = erfasst_pro_user.get(m.user_id, 0)
+        erwartet_total += soll_pro_person
+        erfasst_total += ist
+        erfasst_gedeckelt += min(ist, soll_pro_person)
+
+    return {
+        "total_minuten_erfasst": erfasst_total,
+        "erfasste_minuten_gedeckelt": round(erfasst_gedeckelt),
+        "erwartete_minuten": round(erwartet_total),
+        "arbeitstage": tage,
+    }
 
 
 def gruppe_stats(gruppe: Gruppe) -> dict:
@@ -148,12 +187,17 @@ def gruppe_stats(gruppe: Gruppe) -> dict:
     else:
         ohne_eintraege = 0
 
+    fortschritt = _fortschritt(gruppe)
+
     return {
         "anzahl_teilnehmer": anzahl_teilnehmer,
         "fte_summe": round(fte_summe, 2),
         "status_counts": status_counts,
         "teilnehmer_ohne_eintraege": ohne_eintraege,
-        "total_minuten_erfasst": _minuten_erfasst(gruppe.id),
+        "total_minuten_erfasst": fortschritt["total_minuten_erfasst"],
+        "erfasste_minuten_gedeckelt": fortschritt["erfasste_minuten_gedeckelt"],
+        "erwartete_minuten": fortschritt["erwartete_minuten"],
+        "arbeitstage": fortschritt["arbeitstage"],
     }
 
 

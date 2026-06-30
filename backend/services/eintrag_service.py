@@ -11,6 +11,7 @@ from constants import (
     MITTAG,
     MITTAG_MINUTEN,
     SLOT_MINUTES,
+    SOLL_STUNDEN_PRO_TAG,
     TAG_END,
     TAG_START,
     WOCHENTAG_NAMEN,
@@ -361,6 +362,16 @@ def get_dashboard(user_id: int, gruppe_id: int) -> dict:
             arbeitstage += 1
         aktuell += timedelta(days=1)
 
+    # Expected hours are the same for everyone (working days × 8.4h); part-time
+    # staff record their non-working time as "Teilzeit". Completeness caps the
+    # recorded time at the expected value.
+    erwartete_minuten = arbeitstage * SOLL_STUNDEN_PRO_TAG * 60
+    vollstaendigkeit = (
+        round(min(total_minuten, erwartete_minuten) / erwartete_minuten * 100, 1)
+        if erwartete_minuten
+        else 0.0
+    )
+
     return {
         "gruppe": gruppe.to_dict(),
         "status": status,
@@ -368,4 +379,6 @@ def get_dashboard(user_id: int, gruppe_id: int) -> dict:
         "kategorien": list(kategorie_minuten.values()),
         "tage_mit_eintraegen": tage_mit_eintraegen,
         "arbeitstage_gesamt": arbeitstage,
+        "erwartete_stunden": round(erwartete_minuten / 60, 1),
+        "vollstaendigkeit_prozent": vollstaendigkeit,
     }

@@ -29,6 +29,7 @@ export default function HilfePageTn() {
         <P>Auf dem Dashboard siehst du alle Erhebungen, an denen du teilnimmst. Pro Erhebung siehst du:</P>
         <ul className="list-disc list-inside space-y-1 pl-2">
           <Li><strong>Status:</strong> Offen (noch erfassbar), Eingereicht, Abgeschlossen.</Li>
+          <Li><strong>Fortschritt:</strong> Balken mit erfasster Zeit gegenüber dem Soll (Arbeitstage × 8,4 h) und dem Prozentwert deiner Vollständigkeit.</Li>
           <Li><strong>Zeitanteile:</strong> Balkendiagramm deiner bisher erfassten Tätigkeitskategorien.</Li>
           <Li><strong>Tätigkeit erfassen:</strong> Öffnet den Kalender dieser Erhebung.</Li>
           <Li><strong>Einreichen:</strong> Reicht deine Einträge definitiv ein.</Li>
@@ -41,6 +42,8 @@ export default function HilfePageTn() {
         <ul className="list-disc list-inside space-y-1 pl-2">
           <Li><strong>Klicken und Ziehen:</strong> Halte die Maustaste auf einem freien Zeitslot gedrückt und ziehe nach unten, um eine Zeitspanne auszuwählen. Der blaue Bereich zeigt dir Startzeit, Endzeit und Dauer.</Li>
           <Li><strong>Tätigkeit wählen:</strong> Im erscheinenden Formular wählst du die passende Tätigkeit. Die Auswahl ist nach Tätigkeitsgruppe gruppiert (Einzelarbeit, Zu zweit/zu dritt physisch, In Gruppen physisch, Extern).</Li>
+          <Li><strong>Alles ausser Pausen:</strong> Erfasse alle Tätigkeiten deines Arbeitstags lückenlos. Nur (Mittags-)Pausen lässt du frei.</Li>
+          <Li><strong>Teilzeit &amp; Abwesenheit:</strong> Regulär freie Zeit bei Teilzeitpensum trägst du als <strong>Teilzeit</strong> ein. Für Ferien, Krankheit oder Feiertage gibt es die Tätigkeit <strong>Abwesend</strong> (beide unter „Extern"). So ist deine Woche vollständig.</Li>
           <Li><strong>Eintrag bearbeiten / löschen:</strong> Klicke auf einen bestehenden farbigen Block, um ihn zu bearbeiten oder zu löschen.</Li>
         </ul>
       </Section>
@@ -58,7 +61,7 @@ export default function HilfePageTn() {
         <P><strong>Was ist eine Erhebung?</strong> Eine Erhebung ist ein definierter Zeitraum, in dem du deine Tätigkeiten erfasst. Du kannst mehreren Erhebungen zugeordnet sein.</P>
         <P><strong>Was passiert nach dem Abschluss?</strong> Wenn die Erhebung vom Administrator abgeschlossen wird, können keine neuen Einträge mehr gemacht werden. Du siehst deine Einträge noch als Archiv.</P>
         <P><strong>Ich habe meinen PIN vergessen.</strong> Bitte wende dich an den Administrator, der deinen PIN zurücksetzen kann.</P>
-        <P><strong>Welche Zeitspannen soll ich erfassen?</strong> Erfasse alle Tätigkeiten, für die es eine passende Option gibt. Zeiträume ohne passende Tätigkeit (z. B. Pausen) musst du nicht zwingend eintragen.</P>
+        <P><strong>Welche Zeitspannen soll ich erfassen?</strong> Erfasse <strong>alle Tätigkeiten</strong> deines Arbeitstags. Nur (Mittags-)Pausen lässt du frei. Bei Teilzeitpensum trägst du die regulär freie Zeit als <strong>Teilzeit</strong> ein, für Ferien/Krankheit/Feiertage die Tätigkeit <strong>Abwesend</strong>. Am Ende sollte deine Woche vollständig erfasst sein (rund 8,4 h pro Arbeitstag).</P>
         <P><strong>Wie erhalte ich Zugang?</strong> Der Administrator erfasst dich für die Erhebung und sendet dir den <strong>Link zur App</strong> per E-Mail.</P>
         <P><strong>Erstanmeldung:</strong> Öffne den Link, melde dich mit deiner Kantons-E-Mail und dem temporären PIN <strong>0000</strong> an und wähle danach einen eigenen PIN.</P>
         <P><strong>Meine Erhebungen:</strong> Nach dem Login erscheinen deine Erhebungen als Tabs in der blauen Titelleiste – dort wechselst du zwischen Dashboard und Kalender.</P>

@@ -39,9 +39,25 @@ def create_app(config_class=None) -> Flask:
     _register_blueprints(app)
     _register_cli(app)
     _register_api_errors(app)
+    _register_security_headers(app)
     _register_spa(app)
 
     return app
+
+
+def _register_security_headers(app: Flask) -> None:
+    """Add conservative security headers to every response.
+
+    These work over plain HTTP and do not affect LAN access. A Content-Security-
+    Policy is intentionally omitted here to avoid breaking the bundled SPA.
+    """
+
+    @app.after_request
+    def _set_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        return response
 
 
 def _register_api_errors(app: Flask) -> None:

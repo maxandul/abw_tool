@@ -83,11 +83,11 @@ export default function AdminDashboard() {
         {data.gruppen.map(g => {
           const counts      = g.stats.status_counts;
           const anz         = g.stats.anzahl_teilnehmer;
-          const fte         = g.stats.fte_summe ?? anz;     // sum of employment levels (FTE); fallback: headcount
-          const tage        = workingDays(g.zeitraum_von, g.zeitraum_bis);
-          const erwartetMin = fte * tage * 8.4 * 60;        // 8.4h per FTE per working day
-          const erfasstMin  = g.stats.total_minuten_erfasst ?? 0;
-          const pct         = erwartetMin > 0 ? Math.min(100, Math.round((erfasstMin / erwartetMin) * 100)) : 0;
+          const tage        = g.stats.arbeitstage ?? workingDays(g.zeitraum_von, g.zeitraum_bis);
+          const erwartetMin = g.stats.erwartete_minuten ?? 0;
+          const erfasstMin  = g.stats.total_minuten_erfasst ?? 0;       // actual recorded time
+          const angerechnet = g.stats.erfasste_minuten_gedeckelt ?? 0;  // per-participant capped at own soll
+          const pct         = erwartetMin > 0 ? Math.round((angerechnet / erwartetMin) * 100) : 0;
           return (
             <div key={g.id} className="card">
               <div className="flex items-start justify-between mb-3">
@@ -138,17 +138,20 @@ export default function AdminDashboard() {
                 <div>
                   <div className="flex justify-between items-baseline mb-1">
                     <span className="text-xs text-slate-500">
-                      Erfasste Zeit: <strong>{fmtMinuten(erfasstMin)}</strong>
-                      <span className="text-slate-400"> / {fmtMinuten(Math.round(erwartetMin))} erwartet</span>
+                      Vollständigkeit: <strong>{fmtMinuten(erfasstMin)}</strong> erfasst
+                      <span className="text-slate-400"> · Soll {fmtMinuten(Math.round(erwartetMin))}</span>
                     </span>
                     <span className="text-xs font-semibold text-slate-600">{pct}%</span>
                   </div>
                   <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-brand-500 rounded-full transition-all"
-                      style={{ width: `${pct}%` }}
+                      style={{ width: `${Math.min(100, pct)}%` }}
                     />
                   </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Übererfassung wird je Teilnehmer auf 100% begrenzt, damit Lücken sichtbar bleiben.
+                  </p>
                 </div>
               )}
             </div>

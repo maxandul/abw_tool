@@ -11,8 +11,25 @@ by an opaque index. Only submitted ("eingereicht") participants' entries are
 included.
 """
 
+import html as html_lib
 import json
 from datetime import date
+
+
+def _json_for_script(value) -> str:
+    """Serialise to JSON safe for embedding inside an inline <script> block.
+
+    Escapes the characters that could otherwise terminate the script element or
+    inject markup (``<``, ``>``, ``&``) and the JS line separators U+2028/U+2029.
+    """
+    raw = json.dumps(value, ensure_ascii=False, default=str)
+    return (
+        raw.replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
 
 
 _EXPORT_TEMPLATE = """\
@@ -159,6 +176,11 @@ _EXPORT_TEMPLATE = """\
     const r2 = v => Math.round(v * 100) / 100;
     const r3 = v => Math.round(v * 1000) / 1000;
     const fmtGrad = g => (g % 1 === 0 ? g : g.toFixed(1)) + '%';
+    // Escape any text/colour value before it is placed into innerHTML so that
+    // category names, function/OE labels etc. can never inject markup.
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+      {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+    ));
 
     // ── Filter helpers ────────────────────────────────────────────────────────
     function matchTn(t) {
@@ -298,14 +320,19 @@ _EXPORT_TEMPLATE = """\
       for (const e of D.eintraege) erfasstByT[e.t] = (erfasstByT[e.t] || 0) + (e.bis - e.von);
       const tagessoll = D.soll_stunden_pro_tag * 60;
       const schwelle = D.schwelle_prozent / 100;
-      let fte = 0, erf = 0, erw = 0;
+      let fte = 0, erf = 0, erfCap = 0, erw = 0;
       const unter = [];
+      // Expected hours are uniform (working days × 8.4h): part-time staff record
+      // their non-working time as "Teilzeit". FTE sum stays as info only.
+      const soll = D.arbeitstage * tagessoll;
       for (const m of eingereicht) {
         const grad = (m.grad || 100) / 100;
         fte += grad;
-        const soll = D.arbeitstage * tagessoll * grad;
         const ist = erfasstByT[m.i] || 0;
         erw += soll; erf += ist;
+        // Cap each participant at their own expected hours so over-recording
+        // cannot mask others' gaps in the aggregate completeness.
+        erfCap += Math.min(ist, soll);
         if (soll > 0) {
           const q = ist / soll;
           if (q < schwelle) unter.push({ grad: m.grad, vollstaendigkeit_prozent: r1(q * 100) });
@@ -321,7 +348,7 @@ _EXPORT_TEMPLATE = """\
         anzahl_gruppen: D.anzahl_gruppen,
         erfasste_stunden: r1(erf / 60),
         erwartete_stunden: r1(erw / 60),
-        vollstaendigkeit_prozent: erw ? r1(erf / erw * 100) : 0,
+        vollstaendigkeit_prozent: erw ? r1(erfCap / erw * 100) : 0,
         schwelle_prozent: D.schwelle_prozent,
         teilnehmer_unter_schwelle: unter,
         filter_aktiv: tnFilterActive(),
@@ -347,13 +374,13 @@ _EXPORT_TEMPLATE = """\
       if (!values.length) { el.innerHTML = ''; return; }
       const chips = values.map(v => {
         const active = set.has(v) ? ' active' : '';
-        const lbl = fmt ? fmt(v) : v;
+        const lbl = fmt ? esc(fmt(v)) : esc(v);
         // Escape the double quotes that JSON.stringify adds for strings so they
         // don't terminate the double-quoted onclick attribute.
         const arg = JSON.stringify(v).replace(/"/g, '&quot;');
         return `<button class="chip${active}" onclick="toggleFilter('${elId}', ${arg})">${lbl}</button>`;
       }).join('');
-      el.innerHTML = `<p>${label}</p><div class="chips">${chips}</div>`;
+      el.innerHTML = `<p>${esc(label)}</p><div class="chips">${chips}</div>`;
     }
 
     function toggleFilter(elId, value) {
@@ -394,9 +421,9 @@ _EXPORT_TEMPLATE = """\
         if (!items.length) continue;
         const chips = items.map(k => {
           const active = state.kategorie_ids.has(k.id) ? ' active' : '';
-          return `<button class="chip${active}" onclick="toggleKat(${k.id})">${k.name}</button>`;
+          return `<button class="chip${active}" onclick="toggleKat(${k.id})">${esc(k.name)}</button>`;
         }).join('');
-        html += `<div class="chip-group-label">${TG_LABELS[tg]}</div><div class="chips">${chips}</div>`;
+        html += `<div class="chip-group-label">${esc(TG_LABELS[tg])}</div><div class="chips">${chips}</div>`;
       }
       el.innerHTML = html;
     }
@@ -423,7 +450,7 @@ _EXPORT_TEMPLATE = """\
           <span style="font-weight:600;color:${vColor}">${v}%</span>
         </div>
         <div class="bar-track" style="margin-top:.35rem;height:10px"><div class="bar-fill" style="width:${Math.min(100, v)}%;background:${vColor}"></div></div>
-        <p class="note">Nur eingereichte Teilnehmer fliessen in die Auswertung ein (Soll: Arbeitstage × ${D.soll_stunden_pro_tag}h × Beschäftigungsgrad).</p>
+        <p class="note">Nur eingereichte Teilnehmer fliessen in die Auswertung ein (Soll: Arbeitstage × ${D.soll_stunden_pro_tag}h pro Person). Übererfassung wird je Teilnehmer auf 100% begrenzt, damit Lücken sichtbar bleiben.</p>
       </div>`;
       if (unter.length) {
         const rows = unter.map(t => `<tr>
@@ -488,7 +515,7 @@ _EXPORT_TEMPLATE = """\
         return;
       }
       const rows = d.taetigkeiten.map(r => `<tr>
-        <td style="color:${r.farbe || '#1e293b'};font-weight:500">${r.name}</td>
+        <td style="color:${esc(r.farbe || '#1e293b')};font-weight:500">${esc(r.name)}</td>
         <td class="right">${r.avg_nutzung}</td>
         <td class="right">${r.peak_nutzung}</td>
         <td class="right"><strong>${r.einheiten_avg}</strong></td>
@@ -513,9 +540,9 @@ _EXPORT_TEMPLATE = """\
 
     function barChart(items, maxH, fallbackColor) {
       return items.map(r => {
-        const color = r.farbe || fallbackColor;
+        const color = esc(r.farbe || fallbackColor);
         return `<div class="bar-row">
-          <div class="bar-label" style="color:${color}">${r.name}</div>
+          <div class="bar-label" style="color:${color}">${esc(r.name)}</div>
           <div class="bar-track"><div class="bar-fill" style="width:${(r.stunden / maxH * 100).toFixed(1)}%;background:${color}"></div></div>
           <div class="bar-value">${r.stunden}h (${r.anteil_prozent}%)</div>
         </div>`;
@@ -565,15 +592,15 @@ def generiere_export_html(
     gruppen_namen = rohdaten.get("gruppen_namen", [])
 
     ersetzungen = {
-        "__TITEL__": " + ".join(gruppen_namen),
+        # Group names are admin-entered free text → HTML-escape before placing
+        # them into the document header.
+        "__TITEL__": html_lib.escape(" + ".join(gruppen_namen)),
         "__EXPORT_DATUM__": date.today().strftime("%d.%m.%Y"),
-        "__GRUPPEN_NAMEN__": ", ".join(gruppen_namen),
+        "__GRUPPEN_NAMEN__": html_lib.escape(", ".join(gruppen_namen)),
         "__ZEITRAUM_VON__": datum_von.strftime("%d.%m.%Y"),
         "__ZEITRAUM_BIS__": datum_bis.strftime("%d.%m.%Y"),
-        "__DATEN_JSON__": json.dumps(rohdaten, ensure_ascii=False, default=str),
-        "__INITIAL_FILTER_JSON__": json.dumps(
-            initial_filter, ensure_ascii=False, default=str
-        ),
+        "__DATEN_JSON__": _json_for_script(rohdaten),
+        "__INITIAL_FILTER_JSON__": _json_for_script(initial_filter),
     }
 
     html = _EXPORT_TEMPLATE

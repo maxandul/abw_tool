@@ -2,7 +2,7 @@
 
 from flask import Blueprint, request
 
-from app.helpers import err, login_required, ok
+from app.helpers import err, login_required, ok, pin_final_required
 from app.utils import ValidationError, parse_date
 from services import auth_service, eintrag_service, kategorie_service
 from models import Gruppe, GruppenMitglied, User
@@ -38,6 +38,7 @@ def get_eintraege():
 
 @teilnehmer_bp.route("/eintraege", methods=["POST"])
 @login_required
+@pin_final_required
 def post_eintrag():
     """Create a new entry."""
     user = auth_service.current_user()
@@ -57,6 +58,7 @@ def post_eintrag():
 
 @teilnehmer_bp.route("/eintraege/<int:eintrag_id>", methods=["PUT"])
 @login_required
+@pin_final_required
 def put_eintrag(eintrag_id: int):
     """Update an existing entry."""
     user = auth_service.current_user()
@@ -71,6 +73,7 @@ def put_eintrag(eintrag_id: int):
 
 @teilnehmer_bp.route("/eintraege/<int:eintrag_id>", methods=["DELETE"])
 @login_required
+@pin_final_required
 def delete_eintrag(eintrag_id: int):
     """Delete an entry."""
     user = auth_service.current_user()
@@ -109,6 +112,7 @@ def get_luecken():
 
 @teilnehmer_bp.route("/einreichung/einreichen", methods=["POST"])
 @login_required
+@pin_final_required
 def einreichen():
     """Submit entries (OFFEN → EINGEREICHT, IN_BEARBEITUNG → ABGESCHLOSSEN)."""
     user = auth_service.current_user()
@@ -125,6 +129,7 @@ def einreichen():
 
 @teilnehmer_bp.route("/einreichung/entsperren", methods=["POST"])
 @login_required
+@pin_final_required
 def entsperren():
     """Unlock entries for editing (EINGEREICHT → IN_BEARBEITUNG, self-service)."""
     user = auth_service.current_user()

@@ -531,17 +531,23 @@ def berechne_sample(
 
     fte_summe = 0.0
     erfasste_minuten = 0.0
+    erfasste_minuten_gedeckelt = 0.0
     erwartete_minuten = 0.0
     unter_schwelle = []
 
-    # FTE / completeness / threshold checks only consider submitted participants.
+    # Expected hours are the same for everyone (working days × 8.4h): part-time
+    # staff record their non-working time as the "Teilzeit" activity, so they
+    # also fill the whole week. FTE sum is kept purely as descriptive info.
+    soll = arbeitstage * tagessoll_min
     for m in eingereicht_mitglieder:
         grad = (m.beschaeftigungsgrad or 100.0) / 100.0
         fte_summe += grad
-        soll = arbeitstage * tagessoll_min * grad
         ist = erfasst_pro_mitglied.get((m.gruppe_id, m.user_id), 0.0)
         erwartete_minuten += soll
         erfasste_minuten += ist
+        # Cap each participant at their own expected hours so over-recording by
+        # some cannot mask gaps of others in the aggregate completeness.
+        erfasste_minuten_gedeckelt += min(ist, soll)
         if soll > 0:
             quote = ist / soll
             if quote < VOLLSTAENDIGKEIT_SCHWELLE:
@@ -556,7 +562,7 @@ def berechne_sample(
     unter_schwelle.sort(key=lambda r: r["vollstaendigkeit_prozent"])
 
     vollstaendigkeit = (
-        round(erfasste_minuten / erwartete_minuten * 100, 1)
+        round(erfasste_minuten_gedeckelt / erwartete_minuten * 100, 1)
         if erwartete_minuten
         else 0.0
     )

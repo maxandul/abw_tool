@@ -53,7 +53,6 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [info, setInfo] = useState(null);
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
   const selKat = sorted.find(k => k.id === Number(form.kategorie_id));
 
@@ -95,20 +94,13 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
         </div>
         <div>
           <label className="label">Tätigkeit</label>
-          <div className="flex gap-2 items-center">
-            <select className="input flex-1" value={form.kategorie_id} onChange={set("kategorie_id")}>
-              {groups.map(g => (
-                <optgroup key={g.key} label={g.label}>
-                  {g.items.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
-                </optgroup>
-              ))}
-            </select>
-            {selKat?.beschreibung && (
-              <button type="button" className="btn-ghost text-xs px-2" title="Info"
-                onClick={() => setInfo(info ? null : selKat.beschreibung)}>ℹ</button>
-            )}
-          </div>
-          {info && <p className="text-xs text-slate-500 mt-1 bg-slate-50 p-2 rounded">{info}</p>}
+          <select className="input w-full" value={form.kategorie_id} onChange={set("kategorie_id")}>
+            {groups.map(g => (
+              <optgroup key={g.key} label={g.label}>
+                {g.items.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+              </optgroup>
+            ))}
+          </select>
           {selKat && (
             <div className="flex items-center gap-1.5 mt-1">
               <span className="inline-block w-3 h-3 rounded-sm" style={{ background: selKat.farbe ?? "#ccc" }} />
@@ -116,6 +108,9 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
                 {[selKat.taetigkeitsgruppe_label, formatTaetigkeitMeta(selKat)].filter(Boolean).join(" · ")}
               </span>
             </div>
+          )}
+          {selKat?.beschreibung && (
+            <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 p-2 rounded">{selKat.beschreibung}</p>
           )}
         </div>
         <div className="flex gap-3 justify-between pt-2">
@@ -474,6 +469,18 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
           )}
         </div>
       </div>
+
+      {/* Hinweis zur Erfassung */}
+      {!readonly && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm">
+          <p className="font-semibold text-blue-900 mb-1">So erfasst du deine Tätigkeiten</p>
+          <ul className="list-disc list-inside space-y-0.5 text-blue-800">
+            <li>Im Kalender ein Zeitfenster <strong>markieren</strong> (klicken und nach unten ziehen).</li>
+            <li>Im Formular die passende <strong>Tätigkeit wählen</strong>.</li>
+            <li>Erfasse <strong>alle Tätigkeiten</strong> – nur (Mittags-)Pausen lässt du frei.</li>
+          </ul>
+        </div>
+      )}
 
       {/* Stacked week grids */}
       <div className="space-y-6"

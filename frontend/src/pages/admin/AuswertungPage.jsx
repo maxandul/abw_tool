@@ -388,7 +388,7 @@ function SampleCard({ data, loading }) {
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-sm">
-          <span className="text-slate-600">Vollständigkeit der Eingereichten (erfasst / erwartet)</span>
+          <span className="text-slate-600">Vollständigkeit der Eingereichten</span>
           <span className="font-semibold" style={{ color: vColor }}>{v}%</span>
         </div>
         <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
@@ -397,7 +397,8 @@ function SampleCard({ data, loading }) {
         </div>
         <p className="text-xs text-slate-400">
           Nur eingereichte Teilnehmer fliessen in die Auswertung ein
-          {" "}(Soll: Arbeitstage × 8,4h × Beschäftigungsgrad).
+          {" "}(Soll: Arbeitstage × 8,4h pro Person).
+          {" "}Übererfassung wird je Teilnehmer auf 100% begrenzt, damit Lücken sichtbar bleiben.
         </p>
       </div>
 
