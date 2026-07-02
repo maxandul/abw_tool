@@ -2,7 +2,7 @@
 
 from app.utils import ValidationError
 from extensions import db
-from models import Eintrag, Kategorie, Planung, Stoerung, Taetigkeitsgruppe
+from models import Eintrag, Kategorie, Taetigkeitsgruppe
 
 
 def _eintrag_count(kategorie_id: int) -> int:
@@ -44,45 +44,7 @@ def _validate(data: dict, partial: bool = False) -> dict:
             raise ValidationError(f"Ungültige Tätigkeitsgruppe: {gruppe_raw}") from exc
         cleaned["taetigkeitsgruppe"] = gruppe
 
-    stoerung_raw = data.get("stoerung")
-    planung_raw = data.get("planung")
-    if not partial or "stoerung" in data or "planung" in data or "taetigkeitsgruppe" in data:
-        gruppe = cleaned.get("taetigkeitsgruppe")
-        if gruppe is None and partial:
-            # Will be merged with existing row in update path
-            pass
-        stoerung = None
-        planung = None
-        if stoerung_raw not in (None, ""):
-            try:
-                stoerung = Stoerung(stoerung_raw)
-            except ValueError as exc:
-                raise ValidationError(f"Ungültige Störung: {stoerung_raw}") from exc
-        if planung_raw not in (None, ""):
-            try:
-                planung = Planung(planung_raw)
-            except ValueError as exc:
-                raise ValidationError(f"Ungültige Planung: {planung_raw}") from exc
-        cleaned["stoerung"] = stoerung
-        cleaned["planung"] = planung
-
     return cleaned
-
-
-def _validate_gruppe_fields(gruppe: Taetigkeitsgruppe, stoerung, planung) -> None:
-    """Ensure stoerung/planung match the selected Tätigkeitsgruppe."""
-    if gruppe == Taetigkeitsgruppe.EXTERN:
-        if stoerung or planung:
-            raise ValidationError("Externe Tätigkeiten haben keine Störung/Planung.")
-        return
-    if gruppe == Taetigkeitsgruppe.EINZELARBEIT:
-        if not stoerung and not planung:
-            raise ValidationError(
-                "Einzelarbeit erfordert Störung (Call/Still) oder Planung (Call ohne Zuhörer)."
-            )
-        return
-    if not stoerung or not planung:
-        raise ValidationError("Diese Tätigkeitsgruppe erfordert Störung und Planung.")
 
 
 def list_kategorien(nur_aktiv: bool = False) -> list[dict]:
@@ -97,9 +59,6 @@ def list_kategorien(nur_aktiv: bool = False) -> list[dict]:
 
 def create_kategorie(data: dict) -> Kategorie:
     cleaned = _validate(data)
-    _validate_gruppe_fields(
-        cleaned["taetigkeitsgruppe"], cleaned.get("stoerung"), cleaned.get("planung")
-    )
     kategorie = Kategorie(**cleaned)
     db.session.add(kategorie)
     db.session.commit()
@@ -120,12 +79,9 @@ def update_kategorie(kategorie_id: int, data: dict, modus: str = "ueberschreiben
             "farbe": cleaned.get("farbe", kategorie.farbe),
             "sort_order": cleaned.get("sort_order", kategorie.sort_order),
             "taetigkeitsgruppe": cleaned.get("taetigkeitsgruppe", kategorie.taetigkeitsgruppe),
-            "stoerung": cleaned.get("stoerung", kategorie.stoerung),
-            "planung": cleaned.get("planung", kategorie.planung),
+            "stoerung": kategorie.stoerung,
+            "planung": kategorie.planung,
         }
-        _validate_gruppe_fields(
-            merged["taetigkeitsgruppe"], merged["stoerung"], merged["planung"]
-        )
         neue = Kategorie(**merged)
         db.session.add(neue)
         db.session.commit()
@@ -134,9 +90,6 @@ def update_kategorie(kategorie_id: int, data: dict, modus: str = "ueberschreiben
     for key, value in cleaned.items():
         setattr(kategorie, key, value)
 
-    _validate_gruppe_fields(
-        kategorie.taetigkeitsgruppe, kategorie.stoerung, kategorie.planung
-    )
     db.session.commit()
     return kategorie
 

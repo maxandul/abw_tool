@@ -10,12 +10,6 @@ import Farbauswahl from "../../components/Farbauswahl";
 import {
   TAETIGKEITSGRUPPE_LABELS,
   TAETIGKEITSGRUPPE_ORDER,
-  STOERUNG_OPTS,
-  PLANUNG_OPTS,
-  formatTaetigkeitMeta,
-  needsStoerung,
-  showPlanung,
-  planungRequired,
   defaultFarbeForGruppe,
 } from "../../utils/taetigkeiten";
 
@@ -30,8 +24,6 @@ function TaetigkeitForm({ initial, onSave, onCancel }) {
     beschreibung: initial?.beschreibung ?? "",
     farbe: initial?.farbe ?? defaultFarbeForGruppe(initial?.taetigkeitsgruppe ?? "EINZELARBEIT"),
     taetigkeitsgruppe: initial?.taetigkeitsgruppe ?? "EINZELARBEIT",
-    stoerung: initial?.stoerung ?? "ERLAUBT",
-    planung: initial?.planung ?? "GEPLANT",
     sort_order: initial?.sort_order ?? 0,
   }));
   const [loading, setLoading] = useState(false);
@@ -44,8 +36,6 @@ function TaetigkeitForm({ initial, onSave, onCancel }) {
       ...f,
       taetigkeitsgruppe: gruppe,
       farbe: defaultFarbeForGruppe(gruppe),
-      stoerung: gruppe === "EXTERN" ? "" : (f.stoerung || "ERLAUBT"),
-      planung: showPlanung(gruppe) ? (f.planung || (planungRequired(gruppe) ? "GEPLANT" : "")) : "",
     }));
   };
 
@@ -53,12 +43,7 @@ function TaetigkeitForm({ initial, onSave, onCancel }) {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const payload = {
-      ...form,
-      stoerung: needsStoerung(form.taetigkeitsgruppe) ? (form.stoerung || null) : null,
-      planung: showPlanung(form.taetigkeitsgruppe) && form.planung ? form.planung : null,
-    };
-    const { error: err } = await onSave(payload);
+    const { error: err } = await onSave(form);
     setLoading(false);
     if (err) setError(err);
   };
@@ -88,25 +73,6 @@ function TaetigkeitForm({ initial, onSave, onCancel }) {
           {GRUPPE_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
-      {needsStoerung(form.taetigkeitsgruppe) && (
-        <div>
-          <label className="label">Störung</label>
-          <select className="input" value={form.stoerung} onChange={set("stoerung")}>
-            {STOERUNG_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-      )}
-      {showPlanung(form.taetigkeitsgruppe) && (
-        <div>
-          <label className="label">Planung{!planungRequired(form.taetigkeitsgruppe) ? " (optional)" : ""}</label>
-          <select className="input" value={form.planung ?? ""} onChange={set("planung")}>
-            {!planungRequired(form.taetigkeitsgruppe) && (
-              <option value="">—</option>
-            )}
-            {PLANUNG_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-      )}
       <div>
         <label className="label">Sortierung</label>
         <input className="input" type="number" value={form.sort_order ?? 0} onChange={set("sort_order")} />
@@ -210,9 +176,6 @@ export default function KategorienPage() {
                 <td className="table-td font-medium sticky left-10 z-10 bg-white border-r border-slate-100">{k.name}</td>
                 <td className="table-td text-xs text-slate-500">
                   <div>{k.taetigkeitsgruppe_label ?? TAETIGKEITSGRUPPE_LABELS[k.taetigkeitsgruppe]}</div>
-                  {formatTaetigkeitMeta(k) && (
-                    <div className="text-slate-400">{formatTaetigkeitMeta(k)}</div>
-                  )}
                 </td>
                 <td className="table-td text-xs text-slate-500 whitespace-normal min-w-[220px]">
                   {k.beschreibung || "–"}

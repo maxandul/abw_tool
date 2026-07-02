@@ -1,14 +1,22 @@
 import { useEffect, useState } from "react";
 import { getKontakt } from "../../api/auth";
+import { getKategorien } from "../../api/teilnehmer";
+import { groupByTaetigkeitsgruppe } from "../../utils/taetigkeiten";
 
 export default function HilfePageTn() {
   const [admins, setAdmins] = useState([]);
+  const [kategorien, setKategorien] = useState([]);
 
   useEffect(() => {
     getKontakt().then(({ data }) => {
       if (data?.admins) setAdmins(data.admins);
     });
+    getKategorien().then(({ data }) => {
+      if (data) setKategorien(data);
+    });
   }, []);
+
+  const taetigkeitsGruppen = groupByTaetigkeitsgruppe(kategorien);
 
   const Section = ({ title, children }) => (
     <section className="card space-y-3">
@@ -47,6 +55,38 @@ export default function HilfePageTn() {
           <Li><strong>Eintrag bearbeiten / löschen:</strong> Klicke auf einen bestehenden farbigen Block, um ihn zu bearbeiten oder zu löschen.</Li>
         </ul>
       </Section>
+
+      {taetigkeitsGruppen.length > 0 && (
+        <Section title="Übersicht der Tätigkeiten">
+          <P>Hier findest du alle Tätigkeiten mit ihrer Beschreibung – gruppiert wie im Erfassungsformular. So siehst du auf einen Blick, welche Tätigkeit wann passt.</P>
+          {taetigkeitsGruppen.map(g => (
+            <div key={g.key} className="space-y-1">
+              <h3 className="text-sm font-semibold text-slate-700 mt-3">{g.label}</h3>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 text-left">
+                    <th className="table-th w-1/3">Tätigkeit</th>
+                    <th className="table-th">Beschreibung</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {g.items.map(k => (
+                    <tr key={k.id} className="align-top">
+                      <td className="table-td">
+                        <span className="flex items-center gap-2">
+                          <span className="inline-block w-3 h-3 rounded-sm shrink-0" style={{ background: k.farbe ?? "#ccc" }} />
+                          <span className="font-medium text-slate-700">{k.name}</span>
+                        </span>
+                      </td>
+                      <td className="table-td text-slate-600">{k.beschreibung || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </Section>
+      )}
 
       <Section title="Einreichen">
         <P>Wenn du alle Tätigkeiten für den Erhebungszeitraum erfasst hast, kannst du deine Einträge einreichen:</P>

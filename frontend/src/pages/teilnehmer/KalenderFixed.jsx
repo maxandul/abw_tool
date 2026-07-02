@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { format, startOfWeek, addDays, addWeeks, parseISO, isBefore, isAfter, isSameDay, isWithinInterval } from "date-fns";
 import { de } from "date-fns/locale";
 import {
@@ -10,7 +11,7 @@ import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
 import Modal from "../../components/Modal";
 import { fmtDate } from "../../utils/format";
-import { groupByTaetigkeitsgruppe, sortTaetigkeiten, formatTaetigkeitMeta } from "../../utils/taetigkeiten";
+import { groupByTaetigkeitsgruppe, sortTaetigkeiten } from "../../utils/taetigkeiten";
 
 const HOUR_START = 7;
 const HOUR_END   = 19;
@@ -101,14 +102,6 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
               </optgroup>
             ))}
           </select>
-          {selKat && (
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className="inline-block w-3 h-3 rounded-sm" style={{ background: selKat.farbe ?? "#ccc" }} />
-              <span className="text-xs text-slate-400">
-                {[selKat.taetigkeitsgruppe_label, formatTaetigkeitMeta(selKat)].filter(Boolean).join(" · ")}
-              </span>
-            </div>
-          )}
           {selKat?.beschreibung && (
             <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 p-2 rounded">{selKat.beschreibung}</p>
           )}
@@ -237,8 +230,8 @@ function WeekGrid({ weekStart, periodStart, periodEnd, eintraege, readonly, kate
           );
         })}
       </div>
-      {/* Body */}
-      <div className="overflow-y-auto" style={{ maxHeight: "400px" }} ref={gridRef}>
+      {/* Body – volle Tageshöhe, kein interner Scroll */}
+      <div ref={gridRef}>
         <div className="grid" style={{ gridTemplateColumns: "3rem repeat(5, 1fr)", height: GRID_H }}>
           {/* Time axis */}
           <div className="border-r border-slate-200 relative select-none">
@@ -478,6 +471,11 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
             <li>Im Kalender ein Zeitfenster <strong>markieren</strong> (klicken und nach unten ziehen).</li>
             <li>Im Formular die passende <strong>Tätigkeit wählen</strong>.</li>
             <li>Erfasse <strong>alle Tätigkeiten</strong> – nur (Mittags-)Pausen lässt du frei.</li>
+            {!adminMode && (
+              <li>Eine <strong>Übersicht aller Tätigkeiten</strong> mit Beschreibung findest du unter{" "}
+                <Link to="/tn/hilfe" className="font-semibold underline hover:text-blue-900">Hilfe</Link>.
+              </li>
+            )}
           </ul>
         </div>
       )}
