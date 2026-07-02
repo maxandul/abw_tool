@@ -272,17 +272,22 @@ def pruefe_luecken(user_id: int, gruppe_id: int) -> list[dict]:
 
 _TN_STATUS_UEBERGAENGE: dict[EinreichungStatus, EinreichungStatus] = {
     EinreichungStatus.OFFEN: EinreichungStatus.EINGEREICHT,
-    EinreichungStatus.IN_BEARBEITUNG: EinreichungStatus.ABGESCHLOSSEN,
+    EinreichungStatus.IN_BEARBEITUNG: EinreichungStatus.EINGEREICHT,
     EinreichungStatus.EINGEREICHT: EinreichungStatus.IN_BEARBEITUNG,
 }
 
 
 def einreichen(user_id: int, gruppe_id: int) -> Einreichung:
-    """Submit entries (OFFEN → EINGEREICHT, IN_BEARBEITUNG → ABGESCHLOSSEN)."""
+    """Submit entries (OFFEN/IN_BEARBEITUNG → EINGEREICHT).
+
+    Participants always land in EINGEREICHT and can self-unlock again as long
+    as the Erhebung is open. ABGESCHLOSSEN is only ever set by an admin, so a
+    participant can never lock themselves out.
+    """
     einreichung = _get_or_create_einreichung(user_id, gruppe_id)
 
     ziel = _TN_STATUS_UEBERGAENGE.get(einreichung.status)
-    if ziel not in (EinreichungStatus.EINGEREICHT, EinreichungStatus.ABGESCHLOSSEN):
+    if ziel != EinreichungStatus.EINGEREICHT:
         raise ValidationError(
             f"Einreichen ist im Status {einreichung.status.value} nicht möglich."
         )
