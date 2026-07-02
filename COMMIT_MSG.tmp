@@ -1,8 +1,0 @@
-Teilnehmer-Hilfe, Erfassungs-UI und Admin-Tätigkeiten vereinfachen
-
-- Tätigkeitsübersicht (Name + Beschreibung) in der Teilnehmer-Hilfe ergänzt.
-- Kalender ohne internen Scroll, Infobox mit Link zur Hilfe, im Formular nur
-  noch die Beschreibung (ohne Farbe/Meta-Zeile).
-- Footer auf «HR Projekte & Entwicklung» korrigiert.
-- Störung/Planung aus Admin-Masken entfernt; Backend-Validierung gelockert,
-  da die Attribute in der Auswertung nicht genutzt werden.
