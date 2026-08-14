@@ -175,6 +175,11 @@ def get_export():
             ),
             "beschaeftigungsgrade": teilnehmer_filter.get("beschaeftigungsgrade", []),
             "kategorie_ids": initial_kategorie_ids,
+            "anzeige": (
+                request.args.get("anzeige")
+                if request.args.get("anzeige") in {"mittelwert", "maximum"}
+                else "mittelwert"
+            ),
         }
 
         gruppen_namen = [g.name for g in gruppen]
