@@ -84,6 +84,19 @@ const LABEL_W = "14rem";
 function TaetigkeitenBedarf({ data }) {
   return (
     <div>
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 mb-4 text-sm text-slate-600 space-y-1">
+        <p>
+          Die Karte zeigt, wie viele Personen eine Tätigkeit in den ausgewählten Erhebungen
+          gleichzeitig ausübten. Grundlage sind 15-Minuten-Zeitfenster und ausschliesslich
+          eingereichte Erhebungen.
+        </p>
+        <p className="text-xs text-slate-500">
+          <strong>Ø Nutzung:</strong> mittlere gleichzeitige Nutzung in den Zeitfenstern, in denen
+          die Tätigkeit vorkam. <strong>Peak:</strong> höchste gleichzeitige Nutzung in einem
+          einzelnen Zeitfenster. <strong>Einheiten:</strong> jeweilige Nutzung auf die nächste
+          ganze Einheit aufgerundet (eine Einheit pro Person).
+        </p>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead className="bg-slate-50 border-b border-slate-200">
@@ -117,7 +130,9 @@ function TaetigkeitenBedarf({ data }) {
         </table>
       </div>
       <p className="text-xs text-slate-500 mt-3">
-        Empfohlene Einheiten basieren auf Ø- bzw. Peak-Nutzung (aufgerundet). Ø-Werte sind kosteneffizienter, Peak-Werte decken Spitzenlastzeiten ab. Externe Tätigkeiten (Homeoffice, Teilzeit usw.) sind nicht enthalten.
+        Ø-Werte bilden den typischen Bedarf während der tatsächlichen Nutzung ab; Peak-Werte
+        decken die höchste beobachtete Spitzenlast ab. Externe Tätigkeiten wie Homeoffice und
+        Teilzeit sind nicht enthalten.
       </p>
     </div>
   );
@@ -573,7 +588,7 @@ export default function AuswertungPage() {
             </select>
           </div>
           {(rb || ant) && (
-            <a href={getExportUrl(buildLpParams())} download className="btn-secondary">
+            <a href={getExportUrl(`${buildLpParams()}&anzeige=${anzeige}`)} download className="btn-secondary">
               Exportieren (HTML)
             </a>
           )}
