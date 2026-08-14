@@ -155,3 +155,17 @@ Die Applikation ist für den Betrieb im **internen Netzwerk** ausgelegt – die 
 ### Bewusst akzeptiertes Restrisiko
 
 Da der Zugriff über **HTTP** (ohne Verschlüsselung) im lokalen Netz erfolgt, werden Anmelde-PIN und Sitzungscookie unverschlüsselt übertragen. Wer den Netzwerkverkehr im selben Netz mitlesen kann, könnte diese abgreifen. Für eine zeitlich begrenzte, interne Erhebung ist dies eine bewusste Abwägung zugunsten der einfachen Erreichbarkeit (`http://<pc-name>:5000`). Eine Umstellung auf HTTPS würde diesen Zugriffsweg verändern und ist daher nicht vorgesehen.
+
+
+---
+
+## Produktiv- und Read-only-Modus
+
+Mit `START_APP.bat` kann dieselbe Codebasis wahlweise produktiv oder als
+Read-only-Kopie gestartet werden. Im Produktivmodus werden konsistente SQLite-
+Backups automatisch in einen konfigurierten Netzwerkordner geschrieben. Der
+Read-only-Modus kopiert das neuste vollständige Backup zuerst auf die lokale
+Festplatte und sperrt alle Änderungen serverseitig.
+
+Einrichtung, Konfiguration und Sicherheitsgrenzen sind in
+[`BETRIEBSMODI.md`](BETRIEBSMODI.md) beschrieben.
