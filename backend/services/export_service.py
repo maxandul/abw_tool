@@ -145,7 +145,9 @@ _EXPORT_TEMPLATE = """\
           <strong>Ø Nutzung:</strong> mittlere gleichzeitige Nutzung in den Zeitfenstern, in denen
           die Tätigkeit vorkam. <strong>Peak:</strong> höchste gleichzeitige Nutzung in einem
           einzelnen Zeitfenster. <strong>Einheiten:</strong> jeweilige Nutzung auf die nächste
-          ganze Einheit aufgerundet (eine Einheit pro Person).
+          ganze Einheit aufgerundet (eine Einheit pro Person). <strong>Anwesend total:</strong>
+          gleichzeitig anwesende Personen über alle internen Tätigkeiten, pro Zeitfenster
+          nur einmal gezählt.
         </p>
       </div>
       <div id="raumbedarf-container"></div>
