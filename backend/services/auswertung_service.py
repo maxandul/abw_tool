@@ -604,8 +604,13 @@ def export_rohdaten(
     ).all()
     eingereicht_paare = _eingereichte_paare(gruppe_ids)
 
-    # Stable anonymous index per membership (gruppe_id, user_id).
+    # One index identifies a membership for filtering/sample calculations; a
+    # second opaque index identifies the same person across multiple selected
+    # groups. This mirrors the live calculations without exposing user IDs.
     index_map: dict[tuple[int, int], int] = {}
+    user_index_map = {
+        user_id: idx for idx, user_id in enumerate(sorted({m.user_id for m in mitglieder}))
+    }
     teilnehmer = []
     for m in mitglieder:
         key = (m.gruppe_id, m.user_id)
@@ -613,6 +618,7 @@ def export_rohdaten(
         index_map[key] = idx
         teilnehmer.append({
             "i": idx,
+            "u": user_index_map[m.user_id],
             "funktion": m.funktion or "",
             "oe": m.organisationseinheit or "",
             "grad": m.beschaeftigungsgrad if m.beschaeftigungsgrad is not None else 100.0,
@@ -636,6 +642,7 @@ def export_rohdaten(
             continue
         eintraege.append({
             "t": idx,
+            "u": user_index_map[e.user_id],
             "k": e.kategorie_id,
             "wd": e.datum.weekday(),
             "kw": _iso_kw(e.datum),
@@ -653,11 +660,10 @@ def export_rohdaten(
                 k.taetigkeitsgruppe, k.taetigkeitsgruppe.value
             ),
             "sort_order": k.sort_order,
+            "aktiv": k.aktiv,
             "anwesend": k.taetigkeitsgruppe in ANWESEND_GRUPPEN,
         }
-        for k in Kategorie.query.filter_by(aktiv=True)
-        .order_by(Kategorie.sort_order)
-        .all()
+        for k in Kategorie.query.order_by(Kategorie.sort_order).all()
     ]
 
     return {
