@@ -135,7 +135,23 @@ _EXPORT_TEMPLATE = """\
 
     <section id="raumbedarf">
       <h2>Bedarf nach Tätigkeit</h2>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.5rem;padding:.75rem 1rem;margin-bottom:1rem">
+        <p class="muted" style="margin:0 0 .35rem">
+          Die Karte zeigt, wie viele Personen eine Tätigkeit in den ausgewählten Erhebungen
+          gleichzeitig ausübten. Grundlage sind 15-Minuten-Zeitfenster und ausschliesslich
+          eingereichte Erhebungen.
+        </p>
+        <p class="note" style="margin:0">
+          <strong>Ø Nutzung:</strong> mittlere gleichzeitige Nutzung in den Zeitfenstern, in denen
+          die Tätigkeit vorkam. <strong>Peak:</strong> höchste gleichzeitige Nutzung in einem
+          einzelnen Zeitfenster. <strong>Einheiten:</strong> jeweilige Nutzung auf die nächste
+          ganze Einheit aufgerundet (eine Einheit pro Person).
+        </p>
+      </div>
       <div id="raumbedarf-container"></div>
+      <p class="note">Ø-Werte bilden den typischen Bedarf während der tatsächlichen Nutzung ab;
+      Peak-Werte decken die höchste beobachtete Spitzenlast ab. Externe Tätigkeiten wie
+      Homeoffice und Teilzeit sind nicht enthalten.</p>
     </section>
 
     <section id="anteile">
@@ -169,7 +185,7 @@ _EXPORT_TEMPLATE = """\
       oe: new Set(INIT.organisationseinheiten || []),
       grade: new Set((INIT.beschaeftigungsgrade || []).map(Number)),
       kategorie_ids: new Set((INIT.kategorie_ids || []).map(Number)),
-      anzeige: 'mittelwert',
+      anzeige: INIT.anzeige === 'maximum' ? 'maximum' : 'mittelwert',
     };
 
     const r1 = v => Math.round(v * 10) / 10;
@@ -205,9 +221,9 @@ _EXPORT_TEMPLATE = """\
       const katSet = new Set(katIds);
       const all = D.eintraege.filter(e => tnSet.has(e.t));
       const katE = all.filter(e => katSet.has(e.k));
-      const allUsers = new Set(all.map(e => e.t));
+      const allUsers = new Set(all.map(e => e.u));
       const tnWochen = {};
-      for (const e of all) (tnWochen[e.t] = tnWochen[e.t] || new Set()).add(e.kw);
+      for (const e of all) (tnWochen[e.u] = tnWochen[e.u] || new Set()).add(e.kw);
 
       const tsk = {};
       const slotTn = {};
@@ -216,10 +232,10 @@ _EXPORT_TEMPLATE = """\
           if (slot >= TAG_START && slot < TAG_END) {
             const off = slot - TAG_START;
             const key = e.wd + '_' + off;
-            const a = (tsk[e.t] = tsk[e.t] || {});
+            const a = (tsk[e.u] = tsk[e.u] || {});
             const b = (a[key] = a[key] || {});
             (b[e.k] = b[e.k] || new Set()).add(e.kw);
-            (slotTn[key] = slotTn[key] || new Set()).add(e.t);
+            (slotTn[key] = slotTn[key] || new Set()).add(e.u);
           }
         }
       }
@@ -253,7 +269,7 @@ _EXPORT_TEMPLATE = """\
           if (slot >= TAG_START && slot < TAG_END) {
             const key = e.wd + '_' + (slot - TAG_START);
             const a = (kst[e.k] = kst[e.k] || {});
-            (a[key] = a[key] || new Set()).add(e.t);
+            (a[key] = a[key] || new Set()).add(e.u);
           }
         }
       }
@@ -263,7 +279,7 @@ _EXPORT_TEMPLATE = """\
         kst[k][key].forEach(u => ast[key].add(u));
       }
       const anwesendCats = D.kategorien
-        .filter(k => k.anwesend)
+        .filter(k => k.anwesend && k.aktiv)
         .sort((a, b) => a.sort_order - b.sort_order);
       const taetigkeiten = [];
       for (const k of anwesendCats) {
@@ -306,6 +322,7 @@ _EXPORT_TEMPLATE = """\
       }
       const katAnteile = [];
       for (const k of D.kategorien) {
+        if (!k.aktiv) continue;
         const m = katMin[k.id] || 0;
         if (!m) continue;
         katAnteile.push({ id: k.id, name: k.name, farbe: k.farbe, stunden: r1(m / 60), anteil_prozent: gesamt ? r1(m / gesamt * 100) : 0 });
@@ -414,7 +431,9 @@ _EXPORT_TEMPLATE = """\
     function renderKatFilter() {
       const el = document.getElementById('filter-kat');
       const groups = {};
-      D.kategorien.forEach(k => { (groups[k.taetigkeitsgruppe] = groups[k.taetigkeitsgruppe] || []).push(k); });
+      D.kategorien.filter(k => k.aktiv).forEach(k => {
+        (groups[k.taetigkeitsgruppe] = groups[k.taetigkeitsgruppe] || []).push(k);
+      });
       let html = '';
       for (const tg of TG_ORDER) {
         const items = (groups[tg] || []).sort((a, b) => a.sort_order - b.sort_order);
@@ -575,6 +594,8 @@ _EXPORT_TEMPLATE = """\
 
     renderFilters();
     renderKatFilter();
+    document.getElementById('tb-mittelwert').classList.toggle('active', state.anzeige === 'mittelwert');
+    document.getElementById('tb-maximum').classList.toggle('active', state.anzeige === 'maximum');
     renderAll();
   </script>
 </body>
