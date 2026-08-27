@@ -15,9 +15,9 @@ from constants import (
     VOLLSTAENDIGKEIT_SCHWELLE,
 )
 from extensions import db
-from models import Eintrag, Gruppe, GruppenMitglied, Kategorie, Taetigkeitsgruppe
+from models import Arbeitsform, Eintrag, Gruppe, GruppenMitglied, Kategorie, Taetigkeitsgruppe
 from models.einreichung import Einreichung, EinreichungStatus
-from models.kategorie import TAETIGKEITSGRUPPE_LABELS
+from models.kategorie import ARBEITSFORM_LABELS, TAETIGKEITSGRUPPE_LABELS
 
 TeilnehmerFilter = dict[str, list]
 
@@ -143,6 +143,8 @@ ANWESEND_GRUPPEN = (
     Taetigkeitsgruppe.GRUPPE_4PLUS,
 )
 
+ANWESEND_ARBEITSFORMEN = (Arbeitsform.EINZELARBEIT, Arbeitsform.MEETING)
+
 
 def _get_gruppen(gruppe_ids: list[int]) -> list[Gruppe]:
     gruppen = []
@@ -166,17 +168,42 @@ def _iso_kw(d: date) -> str:
 
 
 def _is_anwesend(kategorie: Kategorie | None) -> bool:
+    """Whether a Kategorie counts as "arbeitet" (present/working).
+
+    Kategorien from the current (Arbeitsform-based) structure and Kategorien
+    from the superseded pre-restructure system are each judged by their own
+    classification – the two are never cross-mapped.
+    """
     if kategorie is None:
         return False
+    if kategorie.arbeitsform is not None:
+        return kategorie.arbeitsform in ANWESEND_ARBEITSFORMEN
     return kategorie.taetigkeitsgruppe in ANWESEND_GRUPPEN
 
 
-def _hauptgruppe(gruppe: Taetigkeitsgruppe) -> str:
-    if gruppe == Taetigkeitsgruppe.EINZELARBEIT:
+def _hauptgruppe(kategorie: Kategorie) -> str:
+    """Coarse 3-bucket grouping ("Stille"/"Kommunikative"/"Abwesenheit &
+    Sonstiges"), shared across both structures for the weekday breakdown."""
+    if kategorie.arbeitsform is not None:
+        if kategorie.arbeitsform == Arbeitsform.EINZELARBEIT:
+            return "Stille Tätigkeiten"
+        if kategorie.arbeitsform == Arbeitsform.MEETING:
+            return "Kommunikative Tätigkeiten"
+        return "Abwesenheit & Sonstiges"
+    if kategorie.taetigkeitsgruppe == Taetigkeitsgruppe.EINZELARBEIT:
         return "Stille Tätigkeiten"
-    if gruppe in (Taetigkeitsgruppe.ZU_ZWEIT_DREIT, Taetigkeitsgruppe.GRUPPE_4PLUS):
+    if kategorie.taetigkeitsgruppe in (Taetigkeitsgruppe.ZU_ZWEIT_DREIT, Taetigkeitsgruppe.GRUPPE_4PLUS):
         return "Kommunikative Tätigkeiten"
     return "Abwesenheit & Sonstiges"
+
+
+def _gruppen_label(kategorie: Kategorie) -> str:
+    """Top-level grouping label for the "Anteile" bar chart: the 3 current
+    Arbeitsform labels, or (for legacy Kategorien) the 4 old
+    Tätigkeitsgruppe labels – never merged between the two structures."""
+    if kategorie.arbeitsform is not None:
+        return ARBEITSFORM_LABELS[kategorie.arbeitsform]
+    return TAETIGKEITSGRUPPE_LABELS[kategorie.taetigkeitsgruppe]
 
 
 def _load_eintraege(
@@ -325,7 +352,7 @@ def berechne_raumbedarf(
     kategorien = {
         k.id: k
         for k in Kategorie.query.filter_by(aktiv=True).order_by(Kategorie.sort_order).all()
-        if k.taetigkeitsgruppe in ANWESEND_GRUPPEN
+        if _is_anwesend(k)
     }
 
     taetigkeiten_result = []
@@ -369,7 +396,11 @@ def berechne_anteile(
         gruppe_ids, datum_von, datum_bis, teilnehmer_filter=teilnehmer_filter
     )
 
-    tg_minuten: dict[Taetigkeitsgruppe, float] = defaultdict(float)
+    # Keyed by the human label (current Arbeitsform or legacy
+    # Tätigkeitsgruppe label) rather than the enum, since a report can only
+    # ever contain entries from one of the two structures in practice but
+    # both need a bucket to land in.
+    tg_minuten: dict[str, float] = defaultdict(float)
     hauptgruppe_wt: dict[str, dict[int, float]] = {
         "Stille Tätigkeiten": defaultdict(float),
         "Kommunikative Tätigkeiten": defaultdict(float),
@@ -382,23 +413,30 @@ def berechne_anteile(
         if not e.kategorie:
             continue
         dauer = time_to_minutes(e.zeit_bis) - time_to_minutes(e.zeit_von)
-        tg = e.kategorie.taetigkeitsgruppe
-        tg_minuten[tg] += dauer
+        tg_minuten[_gruppen_label(e.kategorie)] += dauer
         kat_minuten[e.kategorie_id] += dauer
         gesamt_minuten += dauer
-        hg = _hauptgruppe(tg)
+        hg = _hauptgruppe(e.kategorie)
         hauptgruppe_wt[hg][e.datum.weekday()] += dauer
 
+    _label_order = list(dict.fromkeys(
+        [ARBEITSFORM_LABELS[a] for a in Arbeitsform]
+        + [TAETIGKEITSGRUPPE_LABELS[t] for t in Taetigkeitsgruppe]
+    ))
+    _ordered_labels = [l for l in _label_order if l in tg_minuten] + [
+        l for l in tg_minuten if l not in _label_order
+    ]
+
     tg_anteile = []
-    for tg in list(Taetigkeitsgruppe):
-        minuten = tg_minuten.get(tg, 0.0)
+    for label in _ordered_labels:
+        minuten = tg_minuten[label]
         if minuten == 0:
             continue
         stunden = round(minuten / 60, 1)
         anteil = round(minuten / gesamt_minuten * 100, 1) if gesamt_minuten else 0.0
         tg_anteile.append({
-            "gruppe": tg.value,
-            "name": TAETIGKEITSGRUPPE_LABELS[tg],
+            "gruppe": label,
+            "name": label,
             "stunden": stunden,
             "anteil_prozent": anteil,
         })
@@ -454,12 +492,12 @@ def berechne_kennzahlen(
             continue
         dauer = time_to_minutes(e.zeit_bis) - time_to_minutes(e.zeit_von)
         total_min += dauer
-        tg = e.kategorie.taetigkeitsgruppe
         if _is_anwesend(e.kategorie):
             anwesend_min += dauer
-        if tg == Taetigkeitsgruppe.EINZELARBEIT:
+        hg = _hauptgruppe(e.kategorie)
+        if hg == "Stille Tätigkeiten":
             stille_min += dauer
-        elif tg in (Taetigkeitsgruppe.ZU_ZWEIT_DREIT, Taetigkeitsgruppe.GRUPPE_4PLUS):
+        elif hg == "Kommunikative Tätigkeiten":
             kommunikativ_min += dauer
 
     slot_counts: dict[tuple, int] = defaultdict(int)
@@ -648,12 +686,13 @@ def export_rohdaten(
             "id": k.id,
             "name": k.name,
             "farbe": k.farbe,
-            "taetigkeitsgruppe": k.taetigkeitsgruppe.value,
-            "taetigkeitsgruppe_label": TAETIGKEITSGRUPPE_LABELS.get(
-                k.taetigkeitsgruppe, k.taetigkeitsgruppe.value
-            ),
+            # "Top group" key/label for the export's own grouping – the
+            # Arbeitsform for current Kategorien, or the legacy
+            # Tätigkeitsgruppe for Kategorien from the superseded system.
+            "taetigkeitsgruppe": k.arbeitsform.value if k.arbeitsform else k.taetigkeitsgruppe.value,
+            "taetigkeitsgruppe_label": _gruppen_label(k),
             "sort_order": k.sort_order,
-            "anwesend": k.taetigkeitsgruppe in ANWESEND_GRUPPEN,
+            "anwesend": _is_anwesend(k),
         }
         for k in Kategorie.query.filter_by(aktiv=True)
         .order_by(Kategorie.sort_order)

@@ -1,8 +1,8 @@
-import { GRUPPE_FARBEN } from "../utils/taetigkeiten";
+import { ARBEITSFORM_FARBEN } from "../utils/taetigkeiten";
 
 /** Preset swatches + native color picker (no hex typing required). */
-export default function Farbauswahl({ gruppe, value, onChange }) {
-  const palette = GRUPPE_FARBEN[gruppe] ?? GRUPPE_FARBEN.EINZELARBEIT;
+export default function Farbauswahl({ arbeitsform, value, onChange }) {
+  const palette = ARBEITSFORM_FARBEN[arbeitsform] ?? ARBEITSFORM_FARBEN.EINZELARBEIT;
   const current = value || palette[0];
 
   return (

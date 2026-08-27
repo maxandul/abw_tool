@@ -153,9 +153,14 @@ _EXPORT_TEMPLATE = """\
     const SLOT = D.slot_minuten;
     const SLOTS = Math.floor((TAG_END - TAG_START) / SLOT);
     const TAGE = ['Mo','Di','Mi','Do','Fr'];
-    const TG_ORDER = ['EINZELARBEIT','ZU_ZWEIT_DREIT','GRUPPE_4PLUS','EXTERN'];
+    // EINZELARBEIT is shared between the current (Arbeitsform) and the
+    // legacy (Tätigkeitsgruppe) structure – the others are structure-specific
+    // and never mixed within one dataset in practice.
+    const TG_ORDER = ['EINZELARBEIT','MEETING','ABWESENHEIT','ZU_ZWEIT_DREIT','GRUPPE_4PLUS','EXTERN'];
     const TG_LABELS = {
       EINZELARBEIT: 'Einzelarbeit',
+      MEETING: 'Besprechung/Meeting',
+      ABWESENHEIT: 'Abwesenheit',
       ZU_ZWEIT_DREIT: 'Zu zweit/zu dritt (physisch)',
       GRUPPE_4PLUS: 'In Gruppen (4+, physisch)',
       EXTERN: 'Extern',

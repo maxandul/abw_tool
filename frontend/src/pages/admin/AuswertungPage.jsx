@@ -4,7 +4,7 @@ import {
   getGruppen, getKategorien, getTeilnehmerFilter, getSample,
   getLastprofil, getRaumbedarf, getAnteile, getExportUrl
 } from "../../api/admin";
-import { groupByTaetigkeitsgruppe } from "../../utils/taetigkeiten";
+import { groupKategorien } from "../../utils/taetigkeiten";
 import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
 
@@ -286,7 +286,7 @@ function TeilnehmerFilterCard({ options, filters, onChange, onClear }) {
 
 // ── Tätigkeiten-Filter ───────────────────────────────────────────────────────
 function TaetigkeitFilter({ kategorien, aktiveIds, onToggle }) {
-  const groups = groupByTaetigkeitsgruppe(kategorien);
+  const groups = groupKategorien(kategorien);
 
   const chip = k => (
     <button key={k.id} type="button" onClick={() => onToggle(k.id)}

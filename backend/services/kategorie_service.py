@@ -2,15 +2,34 @@
 
 from app.utils import ValidationError
 from extensions import db
-from models import Eintrag, Kategorie, Taetigkeitsgruppe
+from models import (
+    AbwesenheitGrund,
+    Arbeitsform,
+    Arbeitsort,
+    Eintrag,
+    Gruppengroesse,
+    Kategorie,
+    Rueckzugsbedarf,
+    Teilnehmerkreis,
+)
 
 
 def _eintrag_count(kategorie_id: int) -> int:
     return Eintrag.query.filter_by(kategorie_id=kategorie_id).count()
 
 
+def _enum_or_400(enum_cls, raw, feldname: str):
+    try:
+        return enum_cls(raw)
+    except ValueError as exc:
+        raise ValidationError(f"Ungültiger Wert für {feldname}: {raw}") from exc
+
+
 def _validate(data: dict, partial: bool = False) -> dict:
-    """Validate and normalise Tätigkeit input."""
+    """Validate and normalise Tätigkeit input for the current (Arbeitsform-based)
+    structure. Legacy fields (taetigkeitsgruppe/stoerung/planung) are never
+    written here – they only exist on Kategorien from before the restructure.
+    """
     cleaned = {}
 
     if not partial or "name" in data:
@@ -34,23 +53,63 @@ def _validate(data: dict, partial: bool = False) -> dict:
         except (TypeError, ValueError) as exc:
             raise ValidationError("Sortierung muss eine Zahl sein.") from exc
 
-    gruppe_raw = data.get("taetigkeitsgruppe")
-    if "taetigkeitsgruppe" in data or not partial:
-        if not gruppe_raw:
-            raise ValidationError("Tätigkeitsgruppe ist erforderlich.")
-        try:
-            gruppe = Taetigkeitsgruppe(gruppe_raw)
-        except ValueError as exc:
-            raise ValidationError(f"Ungültige Tätigkeitsgruppe: {gruppe_raw}") from exc
-        cleaned["taetigkeitsgruppe"] = gruppe
+    arbeitsform_raw = data.get("arbeitsform")
+    if "arbeitsform" in data or not partial:
+        if not arbeitsform_raw:
+            raise ValidationError("Arbeitsform ist erforderlich.")
+        arbeitsform = _enum_or_400(Arbeitsform, arbeitsform_raw, "Arbeitsform")
+        cleaned["arbeitsform"] = arbeitsform
+
+        # Reset every attribute field first, then only fill in what applies
+        # to the chosen Arbeitsform – prevents stale leftovers from a
+        # previous form state ending up on the saved row.
+        cleaned["arbeitsort"] = None
+        cleaned["gruppengroesse"] = None
+        cleaned["teilnehmerkreis"] = None
+        cleaned["rueckzugsbedarf"] = None
+        cleaned["abwesenheit_grund"] = None
+
+        if arbeitsform == Arbeitsform.EINZELARBEIT:
+            if not data.get("arbeitsort"):
+                raise ValidationError("Arbeitsort ist für Einzelarbeit erforderlich.")
+            cleaned["arbeitsort"] = _enum_or_400(Arbeitsort, data["arbeitsort"], "Arbeitsort")
+            if not data.get("rueckzugsbedarf"):
+                raise ValidationError("Rückzugsbedarf ist für Einzelarbeit erforderlich.")
+            cleaned["rueckzugsbedarf"] = _enum_or_400(
+                Rueckzugsbedarf, data["rueckzugsbedarf"], "Rückzugsbedarf"
+            )
+        elif arbeitsform == Arbeitsform.MEETING:
+            if not data.get("gruppengroesse"):
+                raise ValidationError("Gruppengrösse ist für Meeting erforderlich.")
+            cleaned["gruppengroesse"] = _enum_or_400(
+                Gruppengroesse, data["gruppengroesse"], "Gruppengrösse"
+            )
+            if not data.get("teilnehmerkreis"):
+                raise ValidationError("Teilnehmendenkreis ist für Meeting erforderlich.")
+            cleaned["teilnehmerkreis"] = _enum_or_400(
+                Teilnehmerkreis, data["teilnehmerkreis"], "Teilnehmendenkreis"
+            )
+            if not data.get("rueckzugsbedarf"):
+                raise ValidationError("Rückzugsbedarf ist für Meeting erforderlich.")
+            cleaned["rueckzugsbedarf"] = _enum_or_400(
+                Rueckzugsbedarf, data["rueckzugsbedarf"], "Rückzugsbedarf"
+            )
+        elif arbeitsform == Arbeitsform.ABWESENHEIT:
+            if not data.get("abwesenheit_grund"):
+                raise ValidationError("Grund ist für Abwesenheit erforderlich.")
+            cleaned["abwesenheit_grund"] = _enum_or_400(
+                AbwesenheitGrund, data["abwesenheit_grund"], "Grund"
+            )
 
     return cleaned
 
 
-def list_kategorien(nur_aktiv: bool = False) -> list[dict]:
+def list_kategorien(nur_aktiv: bool = False, nur_neu: bool = False) -> list[dict]:
     query = Kategorie.query
     if nur_aktiv:
         query = query.filter_by(aktiv=True)
+    if nur_neu:
+        query = query.filter(Kategorie.arbeitsform.isnot(None))
     kategorien = query.order_by(Kategorie.sort_order, Kategorie.id).all()
     return [
         {**k.to_dict(), "anzahl_eintraege": _eintrag_count(k.id)} for k in kategorien
@@ -69,6 +128,10 @@ def update_kategorie(kategorie_id: int, data: dict, modus: str = "ueberschreiben
     kategorie = db.session.get(Kategorie, kategorie_id)
     if kategorie is None:
         raise ValidationError("Tätigkeit nicht gefunden.")
+    if kategorie.ist_legacy:
+        raise ValidationError(
+            "Tätigkeiten aus dem bisherigen System können nicht mehr bearbeitet werden."
+        )
 
     cleaned = _validate(data, partial=True)
 
@@ -78,9 +141,12 @@ def update_kategorie(kategorie_id: int, data: dict, modus: str = "ueberschreiben
             "beschreibung": cleaned.get("beschreibung", kategorie.beschreibung),
             "farbe": cleaned.get("farbe", kategorie.farbe),
             "sort_order": cleaned.get("sort_order", kategorie.sort_order),
-            "taetigkeitsgruppe": cleaned.get("taetigkeitsgruppe", kategorie.taetigkeitsgruppe),
-            "stoerung": kategorie.stoerung,
-            "planung": kategorie.planung,
+            "arbeitsform": cleaned.get("arbeitsform", kategorie.arbeitsform),
+            "arbeitsort": cleaned.get("arbeitsort", kategorie.arbeitsort),
+            "gruppengroesse": cleaned.get("gruppengroesse", kategorie.gruppengroesse),
+            "teilnehmerkreis": cleaned.get("teilnehmerkreis", kategorie.teilnehmerkreis),
+            "rueckzugsbedarf": cleaned.get("rueckzugsbedarf", kategorie.rueckzugsbedarf),
+            "abwesenheit_grund": cleaned.get("abwesenheit_grund", kategorie.abwesenheit_grund),
         }
         neue = Kategorie(**merged)
         db.session.add(neue)
@@ -101,3 +167,24 @@ def set_aktiv(kategorie_id: int, aktiv: bool) -> Kategorie:
     kategorie.aktiv = aktiv
     db.session.commit()
     return kategorie
+
+
+def reorder_kategorien(arbeitsform: str, ids: list[int]) -> None:
+    """Persist a new manual order for all Kategorien of one Arbeitsform.
+
+    ``ids`` must be exactly the set of (current) Kategorie IDs for that
+    Arbeitsform, in the desired order.
+    """
+    form = _enum_or_400(Arbeitsform, arbeitsform, "Arbeitsform")
+
+    vorhanden = Kategorie.query.filter_by(arbeitsform=form).all()
+    vorhanden_ids = {k.id for k in vorhanden}
+    if set(ids) != vorhanden_ids:
+        raise ValidationError(
+            "Die Sortierliste muss genau die Tätigkeiten dieser Arbeitsform enthalten."
+        )
+
+    by_id = {k.id: k for k in vorhanden}
+    for index, kategorie_id in enumerate(ids):
+        by_id[kategorie_id].sort_order = (index + 1) * 10
+    db.session.commit()

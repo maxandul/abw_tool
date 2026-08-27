@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getKontakt } from "../../api/auth";
 import { getKategorien } from "../../api/teilnehmer";
-import { groupByTaetigkeitsgruppe } from "../../utils/taetigkeiten";
+import { groupKategorien } from "../../utils/taetigkeiten";
 
 export default function HilfePageTn() {
   const [admins, setAdmins] = useState([]);
@@ -16,7 +16,7 @@ export default function HilfePageTn() {
     });
   }, []);
 
-  const taetigkeitsGruppen = groupByTaetigkeitsgruppe(kategorien);
+  const taetigkeitsGruppen = groupKategorien(kategorien);
 
   const Section = ({ title, children }) => (
     <section className="card space-y-3">
@@ -49,9 +49,9 @@ export default function HilfePageTn() {
         <P>Im Kalender sind alle Kalenderwochen des Erhebungszeitraums fest untereinander dargestellt. Tage ausserhalb des Erhebungszeitraums sind ausgegraut und nicht bearbeitbar.</P>
         <ul className="list-disc list-inside space-y-1 pl-2">
           <Li><strong>Klicken und Ziehen:</strong> Halte die Maustaste auf einem freien Zeitslot gedrückt und ziehe nach unten, um eine Zeitspanne auszuwählen. Der blaue Bereich zeigt dir Startzeit, Endzeit und Dauer.</Li>
-          <Li><strong>Tätigkeit wählen:</strong> Im erscheinenden Formular wählst du die passende Tätigkeit. Die Auswahl ist nach Tätigkeitsgruppe gruppiert (Einzelarbeit, Zu zweit/zu dritt physisch, In Gruppen physisch, Extern).</Li>
+          <Li><strong>Tätigkeit wählen:</strong> Im erscheinenden Formular wählst du die passende Tätigkeit. Die Auswahl ist nach Arbeitsform gruppiert (Einzelarbeit, Besprechung/Meeting, Abwesenheit).</Li>
           <Li><strong>Alles ausser Pausen:</strong> Erfasse alle Tätigkeiten deines Arbeitstags lückenlos. Nur (Mittags-)Pausen lässt du frei.</Li>
-          <Li><strong>Teilzeit &amp; Abwesenheit:</strong> Regulär freie Zeit bei Teilzeitpensum trägst du als <strong>Teilzeit</strong> ein. Für Ferien, Krankheit oder Feiertage gibt es die Tätigkeit <strong>Abwesend</strong> (beide unter „Extern"). So ist deine Woche vollständig.</Li>
+          <Li><strong>Teilzeit &amp; Abwesenheit:</strong> Regulär freie Zeit bei Teilzeitpensum trägst du als Abwesenheit mit Grund <strong>Teilzeit</strong> ein. Für Ferien, Krankheit oder Feiertage gibt es eine Abwesenheit mit Grund <strong>Sonstiges</strong>. So ist deine Woche vollständig.</Li>
           <Li><strong>Eintrag bearbeiten / löschen:</strong> Klicke auf einen bestehenden farbigen Block, um ihn zu bearbeiten oder zu löschen.</Li>
         </ul>
       </Section>
@@ -101,7 +101,7 @@ export default function HilfePageTn() {
         <P><strong>Was ist eine Erhebung?</strong> Eine Erhebung ist ein definierter Zeitraum, in dem du deine Tätigkeiten erfasst. Du kannst mehreren Erhebungen zugeordnet sein.</P>
         <P><strong>Was passiert nach dem Abschluss?</strong> Wenn die Erhebung vom Administrator abgeschlossen wird, können keine neuen Einträge mehr gemacht werden. Du siehst deine Einträge noch als Archiv.</P>
         <P><strong>Ich habe meinen PIN vergessen.</strong> Bitte wende dich an den Administrator, der deinen PIN zurücksetzen kann.</P>
-        <P><strong>Welche Zeitspannen soll ich erfassen?</strong> Erfasse <strong>alle Tätigkeiten</strong> deines Arbeitstags. Nur (Mittags-)Pausen lässt du frei. Bei Teilzeitpensum trägst du die regulär freie Zeit als <strong>Teilzeit</strong> ein, für Ferien/Krankheit/Feiertage die Tätigkeit <strong>Abwesend</strong>. Am Ende sollte deine Woche vollständig erfasst sein (rund 8,4 h pro Arbeitstag).</P>
+        <P><strong>Welche Zeitspannen soll ich erfassen?</strong> Erfasse <strong>alle Tätigkeiten</strong> deines Arbeitstags. Nur (Mittags-)Pausen lässt du frei. Bei Teilzeitpensum trägst du die regulär freie Zeit als Abwesenheit mit Grund <strong>Teilzeit</strong> ein, für Ferien/Krankheit/Feiertage als Abwesenheit mit Grund <strong>Sonstiges</strong>. Am Ende sollte deine Woche vollständig erfasst sein (rund 8,4 h pro Arbeitstag).</P>
         <P><strong>Wie erhalte ich Zugang?</strong> Der Administrator erfasst dich für die Erhebung und sendet dir den <strong>Link zur App</strong> per E-Mail.</P>
         <P><strong>Erstanmeldung:</strong> Öffne den Link, melde dich mit deiner Kantons-E-Mail und dem temporären PIN <strong>0000</strong> an und wähle danach einen eigenen PIN.</P>
         <P><strong>Meine Erhebungen:</strong> Nach dem Login erscheinen deine Erhebungen als Tabs in der blauen Titelleiste – dort wechselst du zwischen Dashboard und Kalender.</P>

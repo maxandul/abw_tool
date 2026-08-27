@@ -188,5 +188,6 @@ def get_dashboard():
 @teilnehmer_bp.route("/kategorien", methods=["GET"])
 @login_required
 def get_kategorien():
-    """Return all active categories (for the entry dropdown and info box)."""
-    return ok(kategorie_service.list_kategorien(nur_aktiv=True))
+    """Return active, current-structure categories (Kategorien from the
+    superseded Arbeitsform-less system are not offered for new entries)."""
+    return ok(kategorie_service.list_kategorien(nur_aktiv=True, nur_neu=True))

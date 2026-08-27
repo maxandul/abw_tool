@@ -11,7 +11,7 @@ import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
 import Modal from "../../components/Modal";
 import { fmtDate } from "../../utils/format";
-import { groupByTaetigkeitsgruppe, sortTaetigkeiten } from "../../utils/taetigkeiten";
+import { groupKategorien } from "../../utils/taetigkeiten";
 
 const HOUR_START = 7;
 const HOUR_END   = 19;
@@ -39,13 +39,15 @@ const TIME_OPTIONS = Array.from({ length: SLOTS + 1 }, (_, i) => {
 });
 
 
-function sortKategorien(ks) {
-  return sortTaetigkeiten(ks);
-}
-
 // ── Entry form modal ──────────────────────────────────────────────────────────
 function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose }) {
-  const sorted = sortKategorien(kategorien);
+  // Safety net: if the entry's current Tätigkeit isn't in the offered list
+  // (e.g. it was assigned under the previous, now-archived structure), keep
+  // it selectable so saving without changing the selection doesn't silently
+  // reassign it.
+  const sorted = initial?.kategorie_id && !kategorien.some(k => k.id === initial.kategorie_id) && initial.kategorie
+    ? [...kategorien, initial.kategorie]
+    : kategorien;
   const [form, setForm] = useState({
     datum: initial?.datum ?? "",
     zeit_von: initial?.zeit_von ?? "08:00",
@@ -73,7 +75,7 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
     </Modal>
   );
 
-  const groups = groupByTaetigkeitsgruppe(sorted);
+  const groups = groupKategorien(sorted);
 
   return (
     <Modal title={initial?.id ? "Eintrag bearbeiten" : "Neuer Eintrag"} onClose={onClose}>
@@ -514,7 +516,7 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
             datum: modal.datum,
             zeit_von: modal.zeitVon ?? "08:00",
             zeit_bis: modal.zeitBis ?? "09:00",
-            kategorie_id: sortKategorien(kategorien)[0]?.id ?? "",
+            kategorie_id: kategorien[0]?.id ?? "",
           }}
           kategorien={kategorien}
           readonly={readonly}

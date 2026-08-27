@@ -360,6 +360,21 @@ def post_kategorie():
         return err(str(exc), 400)
 
 
+@admin_bp.route("/kategorien/reorder", methods=["PUT"])
+@admin_required
+def put_kategorien_reorder():
+    """Persist a new manual order for all Tätigkeiten of one Arbeitsform.
+
+    Body: {"arbeitsform": "EINZELARBEIT", "ids": [3, 1, 2]}
+    """
+    body = request.get_json(silent=True) or {}
+    try:
+        kategorie_service.reorder_kategorien(body.get("arbeitsform"), body.get("ids") or [])
+        return ok({"message": "Sortierung gespeichert."})
+    except ValidationError as exc:
+        return err(str(exc), 400)
+
+
 @admin_bp.route("/kategorien/<int:kategorie_id>", methods=["PUT"])
 @admin_required
 def put_kategorie(kategorie_id: int):

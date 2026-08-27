@@ -44,6 +44,8 @@ export const updateKategorie    = (id, b, m)   =>
   put(`/api/admin/kategorien/${id}?modus=${m ?? "ueberschreiben"}`, b);
 export const deleteKategorie    = (id)         => del(`/api/admin/kategorien/${id}`);
 export const reactivateKategorie = (id)        => post(`/api/admin/kategorien/${id}/reaktivieren`, {});
+export const reorderKategorien  = (arbeitsform, ids) =>
+  put("/api/admin/kategorien/reorder", { arbeitsform, ids });
 
 // Raumtypen
 export const getRaumtypen       = ()       => get("/api/admin/raumtypen");

@@ -1,15 +1,101 @@
 """Seed default Tätigkeiten (activity types).
 
-Runs on app start when the kategorie table is empty, or replaces legacy
-seed data when there are no Einträge yet.  Existing databases are upgraded
-in-place via ``_ensure_catalog`` (renames + missing rows).
+Runs on every app start. A brand-new (empty) ``kategorie`` table gets the
+current Arbeitsform-based starter catalog. An existing, populated table is
+only ever upgraded in-place for its *legacy* (pre-Arbeitsform-restructure)
+rows via ``_ensure_catalog`` (renames + missing rows) – current-structure
+Kategorien created by an admin are never touched by this module.
 """
 
 from extensions import db
-from models import Eintrag, Kategorie, Planung, Stoerung, Taetigkeitsgruppe
+from models import (
+    AbwesenheitGrund,
+    Arbeitsform,
+    Arbeitsort,
+    Eintrag,
+    Gruppengroesse,
+    Kategorie,
+    Planung,
+    Rueckzugsbedarf,
+    Stoerung,
+    Taetigkeitsgruppe,
+    Teilnehmerkreis,
+)
+
+# (sort_order, name, farbe, arbeitsform, arbeitsort, gruppengroesse,
+#  teilnehmerkreis, rueckzugsbedarf, abwesenheit_grund, beschreibung)
+ARBEITSFORM_DEFAULT_TAETIGKEITEN = [
+    # Einzelarbeit – Grüntöne
+    (1, "Einzelarbeit am Arbeitsplatz, Rückzug erforderlich", "#58D68D",
+     Arbeitsform.EINZELARBEIT, Arbeitsort.UEBLICHER_ARBEITSPLATZ, None, None,
+     Rueckzugsbedarf.ERFORDERLICH, None,
+     "Konzentrierte Einzelarbeit am üblichen Arbeitsplatz/Standort, die einen ruhigen Rückzugsort braucht."),
+    (2, "Einzelarbeit am Arbeitsplatz, gemeinsames Umfeld möglich", "#2ECC71",
+     Arbeitsform.EINZELARBEIT, Arbeitsort.UEBLICHER_ARBEITSPLATZ, None, None,
+     Rueckzugsbedarf.GEMEINSAM_MOEGLICH, None,
+     "Einzelarbeit am üblichen Arbeitsplatz/Standort, die auch in einem offenen/gemeinsamen Umfeld möglich ist."),
+    (3, "Homeoffice, Rückzug erforderlich", "#27AE60",
+     Arbeitsform.EINZELARBEIT, Arbeitsort.HOMEOFFICE, None, None,
+     Rueckzugsbedarf.ERFORDERLICH, None,
+     "Konzentrierte Einzelarbeit im Homeoffice, die einen ruhigen Rückzugsort braucht."),
+    (4, "Homeoffice, gemeinsames Umfeld möglich", "#1E8449",
+     Arbeitsform.EINZELARBEIT, Arbeitsort.HOMEOFFICE, None, None,
+     Rueckzugsbedarf.GEMEINSAM_MOEGLICH, None,
+     "Einzelarbeit im Homeoffice ohne besonderen Rückzugsbedarf."),
+    (5, "Anderer VD-Standort", "#145A32",
+     Arbeitsform.EINZELARBEIT, Arbeitsort.ANDERER_VD_STANDORT, None, None,
+     Rueckzugsbedarf.GEMEINSAM_MOEGLICH, None,
+     "Einzelarbeit an einem anderen Standort der Verwaltungsdirektion."),
+    (6, "Mobil/extern", "#0B5A2E",
+     Arbeitsform.EINZELARBEIT, Arbeitsort.MOBIL_EXTERN, None, None,
+     Rueckzugsbedarf.GEMEINSAM_MOEGLICH, None,
+     "Einzelarbeit unterwegs, im Aussendienst oder an einem externen Ort."),
+    # Besprechung/Meeting – Blautöne
+    (10, "Meeting 2-4 Personen, standortintern, Rückzug erforderlich", "#85C1E9",
+     Arbeitsform.MEETING, None, Gruppengroesse.ZWEI_BIS_VIER, Teilnehmerkreis.STANDORTINTERN,
+     Rueckzugsbedarf.ERFORDERLICH, None,
+     "Besprechung mit 2-4 standortinternen Personen, die einen separaten Raum braucht."),
+    (11, "Meeting 2-4 Personen, standortintern, gemeinsames Umfeld möglich", "#5DADE2",
+     Arbeitsform.MEETING, None, Gruppengroesse.ZWEI_BIS_VIER, Teilnehmerkreis.STANDORTINTERN,
+     Rueckzugsbedarf.GEMEINSAM_MOEGLICH, None,
+     "Besprechung mit 2-4 standortinternen Personen, auch in offener Umgebung möglich."),
+    (12, "Meeting 2-4 Personen, standortübergreifend/extern", "#3498DB",
+     Arbeitsform.MEETING, None, Gruppengroesse.ZWEI_BIS_VIER,
+     Teilnehmerkreis.STANDORTUEBERGREIFEND_EXTERN, Rueckzugsbedarf.GEMEINSAM_MOEGLICH, None,
+     "Besprechung mit 2-4 Personen unter Beteiligung anderer Standorte oder Externer."),
+    (13, "Meeting 5-8 Personen, standortintern", "#2874A6",
+     Arbeitsform.MEETING, None, Gruppengroesse.FUENF_BIS_ACHT, Teilnehmerkreis.STANDORTINTERN,
+     Rueckzugsbedarf.GEMEINSAM_MOEGLICH, None,
+     "Sitzung mit 5-8 standortinternen Personen."),
+    (14, "Meeting 5-8 Personen, standortübergreifend/extern", "#1A5276",
+     Arbeitsform.MEETING, None, Gruppengroesse.FUENF_BIS_ACHT,
+     Teilnehmerkreis.STANDORTUEBERGREIFEND_EXTERN, Rueckzugsbedarf.GEMEINSAM_MOEGLICH, None,
+     "Sitzung mit 5-8 Personen unter Beteiligung anderer Standorte oder Externer."),
+    (15, "Meeting 9-12 Personen, standortintern", "#154360",
+     Arbeitsform.MEETING, None, Gruppengroesse.NEUN_BIS_ZWOELF, Teilnehmerkreis.STANDORTINTERN,
+     Rueckzugsbedarf.GEMEINSAM_MOEGLICH, None,
+     "Grössere Sitzung oder Workshop mit 9-12 standortinternen Personen."),
+    (16, "Meeting 13+ Personen, standortintern", "#0E2F44",
+     Arbeitsform.MEETING, None, Gruppengroesse.DREIZEHN_PLUS, Teilnehmerkreis.STANDORTINTERN,
+     Rueckzugsbedarf.GEMEINSAM_MOEGLICH, None,
+     "Grossveranstaltung, Workshop oder Info-Anlass mit 13 oder mehr standortinternen Personen."),
+    # Abwesenheit – Grautöne
+    (30, "Teilzeit", "#D5D8DC",
+     Arbeitsform.ABWESENHEIT, None, None, None, None, AbwesenheitGrund.TEILZEIT,
+     "Vereinbarte freie Zeit aufgrund eines Teilzeitpensums (regulär nicht gearbeitet)."),
+    (31, "Abwesend (Ferien, Krankheit, Feiertag etc.)", "#7F8C8D",
+     Arbeitsform.ABWESENHEIT, None, None, None, None, AbwesenheitGrund.SONSTIGES,
+     "Abwesend wegen Ferien, Krankheit, Feiertag oder Ähnlichem."),
+]
+
+# ---------------------------------------------------------------------------
+# Legacy (pre-Arbeitsform-restructure) catalog – kept only to upgrade
+# existing installs' legacy Kategorien in-place (renames, missing rows).
+# Never used for new installs and never touches current-structure rows.
+# ---------------------------------------------------------------------------
 
 # (sort_order, name, farbe, gruppe, stoerung, planung, beschreibung)
-DEFAULT_TAETIGKEITEN = [
+LEGACY_DEFAULT_TAETIGKEITEN = [
     # Einzelarbeit – Grüntöne
     (1, "Call, Zuhörer erlaubt", "#58D68D", Taetigkeitsgruppe.EINZELARBEIT, Stoerung.ERLAUBT, None,
      "Telefon- oder Video-Call, bei dem andere mithören dürfen."),
@@ -71,16 +157,24 @@ _CATALOG_RENAMES: list[tuple[Taetigkeitsgruppe, str, str]] = [
 
 
 def _insert_default_taetigkeiten() -> None:
-    for row in DEFAULT_TAETIGKEITEN:
-        sort_order, name, farbe, gruppe, stoerung, planung, beschreibung = row
+    """Insert the current (Arbeitsform-based) starter catalog. Only called
+    for a truly empty ``kategorie`` table – i.e. a fresh install."""
+    for row in ARBEITSFORM_DEFAULT_TAETIGKEITEN:
+        (
+            sort_order, name, farbe, arbeitsform, arbeitsort, gruppengroesse,
+            teilnehmerkreis, rueckzugsbedarf, abwesenheit_grund, beschreibung,
+        ) = row
         db.session.add(
             Kategorie(
                 name=name,
                 farbe=farbe,
                 beschreibung=beschreibung,
-                taetigkeitsgruppe=gruppe,
-                stoerung=stoerung,
-                planung=planung,
+                arbeitsform=arbeitsform,
+                arbeitsort=arbeitsort,
+                gruppengroesse=gruppengroesse,
+                teilnehmerkreis=teilnehmerkreis,
+                rueckzugsbedarf=rueckzugsbedarf,
+                abwesenheit_grund=abwesenheit_grund,
                 sort_order=sort_order,
             )
         )
@@ -99,10 +193,16 @@ def _apply_renames() -> None:
 
 
 def _ensure_catalog() -> None:
-    """Bring an existing DB in line with the current default catalog."""
+    """Bring an existing DB's *legacy* Kategorien in line with the legacy
+    default catalog. Never touches current-structure (Arbeitsform-based)
+    Kategorien, and does nothing at all on an install that has no legacy
+    Kategorien in the first place (e.g. a fresh, new-structure-only install)."""
+    if Kategorie.query.filter(Kategorie.taetigkeitsgruppe.isnot(None)).count() == 0:
+        return
+
     _apply_renames()
 
-    for row in DEFAULT_TAETIGKEITEN:
+    for row in LEGACY_DEFAULT_TAETIGKEITEN:
         sort_order, name, farbe, gruppe, stoerung, planung, beschreibung = row
         kat = Kategorie.query.filter_by(taetigkeitsgruppe=gruppe, name=name).first()
         if kat is None:
@@ -133,10 +233,13 @@ def _ensure_catalog() -> None:
 
 
 def _needs_legacy_reseed() -> bool:
-    """Detect pre-Tätigkeiten category seed (no stoerung/planung fields set)."""
+    """Detect a pre-Tätigkeiten category seed (neither the legacy nor the
+    current structure's classification fields are set anywhere)."""
     if Kategorie.query.count() == 0:
         return False
     if Eintrag.query.count() > 0:
+        return False
+    if Kategorie.query.filter(Kategorie.arbeitsform.isnot(None)).count() > 0:
         return False
     return Kategorie.query.filter(Kategorie.stoerung.isnot(None)).count() == 0
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  getKategorien, createKategorie, updateKategorie, deleteKategorie, reactivateKategorie
+  getKategorien, createKategorie, updateKategorie, deleteKategorie,
+  reactivateKategorie, reorderKategorien,
 } from "../../api/admin";
 import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
@@ -8,34 +9,51 @@ import Modal from "../../components/Modal";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import Farbauswahl from "../../components/Farbauswahl";
 import {
-  TAETIGKEITSGRUPPE_LABELS,
-  TAETIGKEITSGRUPPE_ORDER,
-  defaultFarbeForGruppe,
+  ARBEITSFORM_ORDER, ARBEITSFORM_LABELS, ARBEITSORT_OPTS, GRUPPENGROESSE_OPTS,
+  TEILNEHMERKREIS_OPTS, RUECKZUGSBEDARF_OPTS, ABWESENHEIT_GRUND_OPTS,
+  showArbeitsort, showGruppengroesse, showTeilnehmerkreis, showRueckzugsbedarf,
+  showAbwesenheitGrund, defaultFarbeForArbeitsform, formatTaetigkeitMeta,
+  groupKategorien,
 } from "../../utils/taetigkeiten";
 
-const GRUPPE_OPTS = TAETIGKEITSGRUPPE_ORDER.map(v => ({
-  value: v,
-  label: TAETIGKEITSGRUPPE_LABELS[v],
-}));
+const ARBEITSFORM_OPTS = ARBEITSFORM_ORDER.map(v => ({ value: v, label: ARBEITSFORM_LABELS[v] }));
 
-function TaetigkeitForm({ initial, onSave, onCancel }) {
+function Select({ label, value, onChange, options }) {
+  return (
+    <div>
+      <label className="label">{label} *</label>
+      <select className="input" value={value ?? ""} onChange={onChange}>
+        <option value="" disabled>– auswählen –</option>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function TaetigkeitForm({ initial, defaultArbeitsform, onSave, onCancel }) {
   const [form, setForm] = useState(() => ({
     name: initial?.name ?? "",
     beschreibung: initial?.beschreibung ?? "",
-    farbe: initial?.farbe ?? defaultFarbeForGruppe(initial?.taetigkeitsgruppe ?? "EINZELARBEIT"),
-    taetigkeitsgruppe: initial?.taetigkeitsgruppe ?? "EINZELARBEIT",
-    sort_order: initial?.sort_order ?? 0,
+    farbe: initial?.farbe ?? defaultFarbeForArbeitsform(initial?.arbeitsform ?? defaultArbeitsform),
+    arbeitsform: initial?.arbeitsform ?? defaultArbeitsform,
+    arbeitsort: initial?.arbeitsort ?? "",
+    gruppengroesse: initial?.gruppengroesse ?? "",
+    teilnehmerkreis: initial?.teilnehmerkreis ?? "",
+    rueckzugsbedarf: initial?.rueckzugsbedarf ?? "",
+    abwesenheit_grund: initial?.abwesenheit_grund ?? "",
   }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
-  const onGruppeChange = (e) => {
-    const gruppe = e.target.value;
+  const onArbeitsformChange = (e) => {
+    const arbeitsform = e.target.value;
     setForm(f => ({
       ...f,
-      taetigkeitsgruppe: gruppe,
-      farbe: defaultFarbeForGruppe(gruppe),
+      arbeitsform,
+      farbe: defaultFarbeForArbeitsform(arbeitsform),
+      arbeitsort: "", gruppengroesse: "", teilnehmerkreis: "",
+      rueckzugsbedarf: "", abwesenheit_grund: "",
     }));
   };
 
@@ -62,21 +80,34 @@ function TaetigkeitForm({ initial, onSave, onCancel }) {
       <div>
         <label className="label">Farbe</label>
         <Farbauswahl
-          gruppe={form.taetigkeitsgruppe}
+          arbeitsform={form.arbeitsform}
           value={form.farbe}
           onChange={hex => setForm(f => ({ ...f, farbe: hex }))}
         />
       </div>
       <div>
-        <label className="label">Tätigkeitsgruppe *</label>
-        <select className="input" value={form.taetigkeitsgruppe} onChange={onGruppeChange}>
-          {GRUPPE_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        <label className="label">Arbeitsform *</label>
+        <select className="input" value={form.arbeitsform} onChange={onArbeitsformChange}>
+          {ARBEITSFORM_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
-      <div>
-        <label className="label">Sortierung</label>
-        <input className="input" type="number" value={form.sort_order ?? 0} onChange={set("sort_order")} />
-      </div>
+
+      {showArbeitsort(form.arbeitsform) && (
+        <Select label="Arbeitsort" value={form.arbeitsort} onChange={set("arbeitsort")} options={ARBEITSORT_OPTS} />
+      )}
+      {showGruppengroesse(form.arbeitsform) && (
+        <Select label="Gruppengrösse" value={form.gruppengroesse} onChange={set("gruppengroesse")} options={GRUPPENGROESSE_OPTS} />
+      )}
+      {showTeilnehmerkreis(form.arbeitsform) && (
+        <Select label="Teilnehmendenkreis" value={form.teilnehmerkreis} onChange={set("teilnehmerkreis")} options={TEILNEHMERKREIS_OPTS} />
+      )}
+      {showRueckzugsbedarf(form.arbeitsform) && (
+        <Select label="Rückzugsbedarf" value={form.rueckzugsbedarf} onChange={set("rueckzugsbedarf")} options={RUECKZUGSBEDARF_OPTS} />
+      )}
+      {showAbwesenheitGrund(form.arbeitsform) && (
+        <Select label="Grund" value={form.abwesenheit_grund} onChange={set("abwesenheit_grund")} options={ABWESENHEIT_GRUND_OPTS} />
+      )}
+
       <div className="flex gap-3 justify-end pt-2">
         <button type="button" className="btn-secondary" onClick={onCancel}>Abbrechen</button>
         <button type="submit" className="btn-primary" disabled={loading}>
@@ -87,30 +118,117 @@ function TaetigkeitForm({ initial, onSave, onCancel }) {
   );
 }
 
+function KategorieRow({ k, draggable, dragHandlers, dragOver, onEdit, onDeactivate, onReactivate }) {
+  return (
+    <tr
+      draggable={draggable}
+      onDragStart={draggable ? dragHandlers.onDragStart(k.id) : undefined}
+      onDragOver={draggable ? dragHandlers.onDragOver(k.id) : undefined}
+      onDrop={draggable ? dragHandlers.onDrop(k.id) : undefined}
+      className={`${!k.aktiv ? "opacity-50" : ""} ${dragOver ? "bg-brand-50" : ""} ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
+    >
+      <td className="table-td w-10 sticky left-0 z-10 bg-white">
+        <span className="inline-block w-5 h-5 rounded" style={{ background: k.farbe ?? "#ccc" }} />
+      </td>
+      <td className="table-td font-medium sticky left-10 z-10 bg-white border-r border-slate-100">{k.name}</td>
+      <td className="table-td text-xs text-slate-500 whitespace-normal min-w-[220px]">{formatTaetigkeitMeta(k)}</td>
+      <td className="table-td text-xs text-slate-500 whitespace-normal min-w-[220px]">{k.beschreibung || "–"}</td>
+      <td className="table-td">{k.anzahl_eintraege}</td>
+      <td className="table-td">
+        <span className={`badge ${k.aktiv ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
+          {k.aktiv ? "Aktiv" : "Inaktiv"}
+        </span>
+      </td>
+      <td className="table-td">
+        <div className="flex gap-2">
+          {onEdit && <button className="btn-ghost text-xs" onClick={() => onEdit(k)}>Bearbeiten</button>}
+          {k.aktiv ? (
+            <button className="btn-ghost text-xs text-red-600" onClick={() => onDeactivate(k)}>Deaktivieren</button>
+          ) : (
+            <button className="btn-ghost text-xs text-green-700" onClick={() => onReactivate(k.id)}>Reaktivieren</button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function KategorienTable({ groups, draggableGroups, onReorderGroup, onEdit, onDeactivate, onReactivate }) {
+  const dragId = useRef(null);
+  const [overId, setOverId] = useState(null);
+
+  const makeHandlers = (groupItems, groupKey) => ({
+    onDragStart: (id) => (e) => { dragId.current = id; e.dataTransfer.effectAllowed = "move"; },
+    onDragOver: (id) => (e) => { e.preventDefault(); setOverId(id); },
+    onDrop: (id) => (e) => {
+      e.preventDefault();
+      const fromId = dragId.current;
+      dragId.current = null;
+      setOverId(null);
+      if (fromId == null || fromId === id) return;
+      const ids = groupItems.map(i => i.id);
+      const fromIdx = ids.indexOf(fromId);
+      const toIdx = ids.indexOf(id);
+      ids.splice(fromIdx, 1);
+      ids.splice(toIdx, 0, fromId);
+      onReorderGroup(groupKey, ids);
+    },
+  });
+
+  if (!groups.length) return <p className="text-sm text-slate-400 px-4 py-6">Keine Tätigkeiten vorhanden.</p>;
+
+  return (
+    <div className="space-y-6">
+      {groups.map(g => {
+        const handlers = makeHandlers(g.items, g.key);
+        return (
+          <div key={g.key}>
+            <h3 className="text-sm font-semibold text-slate-600 px-1 mb-1">{g.label}</h3>
+            <div className="card overflow-x-auto p-0">
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="table-th w-10 sticky left-0 z-20 bg-slate-50" />
+                    <th className="table-th sticky left-10 z-20 bg-slate-50">Name</th>
+                    <th className="table-th min-w-[200px]">Merkmale</th>
+                    <th className="table-th min-w-[220px]">Beschreibung</th>
+                    <th className="table-th">Einträge</th>
+                    <th className="table-th">Status</th>
+                    <th className="table-th" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {g.items.map(k => (
+                    <KategorieRow
+                      key={k.id}
+                      k={k}
+                      draggable={draggableGroups}
+                      dragHandlers={handlers}
+                      dragOver={overId === k.id}
+                      onEdit={draggableGroups ? onEdit : null}
+                      onDeactivate={onDeactivate}
+                      onReactivate={onReactivate}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+      {draggableGroups && (
+        <p className="text-xs text-slate-400 px-1">Ziehe eine Zeile, um die Reihenfolge innerhalb einer Arbeitsform zu ändern.</p>
+      )}
+    </div>
+  );
+}
+
 export default function KategorienPage() {
   const [kategorien, setKategorien] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [modal, setModal] = useState(null);
   const [confirm, setConfirm] = useState(null);
-
-  const scrollRef = useRef(null);
-  const drag = useRef({ active: false, startX: 0, scrollLeft: 0 });
-
-  const onDragStart = (e) => {
-    if (e.button !== 0) return;
-    drag.current = { active: true, startX: e.clientX, scrollLeft: scrollRef.current.scrollLeft };
-    scrollRef.current.style.cursor = "grabbing";
-  };
-  const onDragMove = (e) => {
-    if (!drag.current.active) return;
-    e.preventDefault();
-    scrollRef.current.scrollLeft = drag.current.scrollLeft - (e.clientX - drag.current.startX);
-  };
-  const onDragEnd = () => {
-    drag.current.active = false;
-    if (scrollRef.current) scrollRef.current.style.cursor = "";
-  };
 
   const load = () => {
     setLoading(true);
@@ -122,8 +240,14 @@ export default function KategorienPage() {
   };
   useEffect(load, []);
 
+  const aktuelle = kategorien.filter(k => !k.ist_legacy);
+  const legacy = kategorien.filter(k => k.ist_legacy);
+  const aktuelleGruppen = groupKategorien(aktuelle);
+  const legacyGruppen = groupKategorien(legacy);
+
   const handleCreate = async (form) => {
-    const { error: err } = await createKategorie(form);
+    const anzahlInGruppe = aktuelle.filter(k => k.arbeitsform === form.arbeitsform).length;
+    const { error: err } = await createKategorie({ ...form, sort_order: (anzahlInGruppe + 1) * 10 });
     if (err) return { error: err };
     setModal(null); load(); return {};
   };
@@ -134,12 +258,23 @@ export default function KategorienPage() {
     setModal(null); load(); return {};
   };
 
-  const handleDeactivate = async (id) => {
-    await deleteKategorie(id); setConfirm(null); load();
+  const handleDeactivate = async (k) => {
+    await deleteKategorie(k.id); setConfirm(null); load();
   };
-
   const handleReactivate = async (id) => {
     await reactivateKategorie(id); load();
+  };
+  const handleReorder = async (arbeitsform, ids) => {
+    // Optimistic local reorder so the drag feels instant.
+    setKategorien(prev => {
+      const order = new Map(ids.map((id, i) => [id, i]));
+      return [...prev].sort((a, b) => {
+        if (a.arbeitsform !== arbeitsform || b.arbeitsform !== arbeitsform) return 0;
+        return (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0);
+      }).map(k => (k.arbeitsform === arbeitsform ? { ...k, sort_order: (order.get(k.id) ?? 0) * 10 } : k));
+    });
+    await reorderKategorien(arbeitsform, ids);
+    load();
   };
 
   if (loading) return <div className="flex justify-center mt-12"><Spinner size="lg" /></div>;
@@ -152,66 +287,39 @@ export default function KategorienPage() {
       </div>
       {error && <Alert>{error}</Alert>}
 
-      <div className="card overflow-x-auto p-0 select-none" ref={scrollRef}
-        onMouseDown={onDragStart} onMouseMove={onDragMove}
-        onMouseUp={onDragEnd} onMouseLeave={onDragEnd}>
-        <table className="w-full">
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th className="table-th w-10 sticky left-0 z-20 bg-slate-50" />
-              <th className="table-th sticky left-10 z-20 bg-slate-50">Name</th>
-              <th className="table-th min-w-[200px]">Gruppe</th>
-              <th className="table-th min-w-[220px]">Beschreibung</th>
-              <th className="table-th">Einträge</th>
-              <th className="table-th">Status</th>
-              <th className="table-th" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {kategorien.map(k => (
-              <tr key={k.id} className={!k.aktiv ? "opacity-50" : ""}>
-                <td className="table-td sticky left-0 z-10 bg-white">
-                  <span className="inline-block w-5 h-5 rounded" style={{ background: k.farbe ?? "#ccc" }} />
-                </td>
-                <td className="table-td font-medium sticky left-10 z-10 bg-white border-r border-slate-100">{k.name}</td>
-                <td className="table-td text-xs text-slate-500">
-                  <div>{k.taetigkeitsgruppe_label ?? TAETIGKEITSGRUPPE_LABELS[k.taetigkeitsgruppe]}</div>
-                </td>
-                <td className="table-td text-xs text-slate-500 whitespace-normal min-w-[220px]">
-                  {k.beschreibung || "–"}
-                </td>
-                <td className="table-td">{k.anzahl_eintraege}</td>
-                <td className="table-td">
-                  <span className={`badge ${k.aktiv ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
-                    {k.aktiv ? "Aktiv" : "Inaktiv"}
-                  </span>
-                </td>
-                <td className="table-td">
-                  <div className="flex gap-2">
-                    <button className="btn-ghost text-xs"
-                      onClick={() => setModal({ id: k.id, kategorie: k })}>Bearbeiten</button>
-                    {k.aktiv ? (
-                      <button className="btn-ghost text-xs text-red-600"
-                        onClick={() => setConfirm({ id: k.id, name: k.name, count: k.anzahl_eintraege })}>
-                        Deaktivieren
-                      </button>
-                    ) : (
-                      <button className="btn-ghost text-xs text-green-700"
-                        onClick={() => handleReactivate(k.id)}>
-                        Reaktivieren
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <KategorienTable
+        groups={aktuelleGruppen}
+        draggableGroups
+        onReorderGroup={handleReorder}
+        onEdit={(k) => setModal({ id: k.id, kategorie: k })}
+        onDeactivate={(k) => setConfirm({ id: k.id, name: k.name, count: k.anzahl_eintraege })}
+        onReactivate={handleReactivate}
+      />
+
+      {legacyGruppen.length > 0 && (
+        <details className="pt-2">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-500 select-none">
+            Archiv (bisheriges System) – {legacy.length} Tätigkeit{legacy.length === 1 ? "" : "en"}
+          </summary>
+          <p className="text-xs text-slate-400 mt-2 mb-3">
+            Diese Tätigkeiten stammen aus der ersten Erhebung (altes System). Sie können nicht mehr bearbeitet
+            und für neue Einträge nicht mehr ausgewählt werden – bestehende Einträge und Auswertungen bleiben
+            davon unberührt.
+          </p>
+          <div className="mt-2">
+            <KategorienTable
+              groups={legacyGruppen}
+              draggableGroups={false}
+              onDeactivate={(k) => setConfirm({ id: k.id, name: k.name, count: k.anzahl_eintraege })}
+              onReactivate={handleReactivate}
+            />
+          </div>
+        </details>
+      )}
 
       {modal === "create" && (
         <Modal title="Neue Tätigkeit" onClose={() => setModal(null)}>
-          <TaetigkeitForm onSave={handleCreate} onCancel={() => setModal(null)} />
+          <TaetigkeitForm defaultArbeitsform="EINZELARBEIT" onSave={handleCreate} onCancel={() => setModal(null)} />
         </Modal>
       )}
       {modal?.id && !modal.modus && (
@@ -243,7 +351,7 @@ export default function KategorienPage() {
         <ConfirmDialog
           title="Tätigkeit deaktivieren"
           message={`«${confirm.name}» deaktivieren? ${confirm.count > 0 ? `${confirm.count} Einträge verweisen auf diese Tätigkeit und bleiben unverändert.` : ""}`}
-          onConfirm={() => handleDeactivate(confirm.id)}
+          onConfirm={() => handleDeactivate(confirm)}
           onCancel={() => setConfirm(null)}
         />
       )}
