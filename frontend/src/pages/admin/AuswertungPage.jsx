@@ -78,8 +78,6 @@ function Heatmap({ data, anzeige }) {
   );
 }
 
-const LABEL_W = "14rem";
-
 // ── Bedarf nach Tätigkeit ────────────────────────────────────────────────────
 function TaetigkeitenBedarf({ data }) {
   return (
@@ -124,59 +122,89 @@ function TaetigkeitenBedarf({ data }) {
 }
 
 // ── Anteile ──────────────────────────────────────────────────────────────────
-function BarRow({ name, stunden, anteil, max, barColor = "#1e3a5f", labelColor }) {
-  const pct = Math.min(100, (stunden / max) * 100);
-  const textColor = labelColor || barColor;
+// Fixed palette for Tätigkeitsgruppe/Arbeitsform segments, which (unlike
+// einzelne Tätigkeiten) have no admin-assigned colour of their own.
+const GRUPPE_PALETTE = ["#1e3a5f", "#3b82f6", "#94a3b8", "#f59e0b", "#8b5cf6", "#0ea5e9"];
+
+/** One 100%-stacked horizontal bar: each item is a coloured segment sized by
+ * its own anteil_prozent, so shares are directly comparable at a glance. */
+function StackedBar({ items, colorFor, emptyLabel }) {
+  if (!items.length) {
+    return <p className="text-xs text-slate-400">{emptyLabel ?? "Keine Daten."}</p>;
+  }
   return (
-    <div className="flex items-center gap-3 w-full">
-      <span
-        className="text-sm break-words leading-snug shrink-0"
-        style={{ width: LABEL_W, color: textColor }}
-      >
-        {name}
-      </span>
-      <div className="flex-1 min-w-0 bg-slate-100 rounded-full h-3.5 overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${pct}%`, backgroundColor: barColor }}
-        />
+    <div>
+      <div className="flex w-full h-6 rounded-md overflow-hidden bg-slate-100">
+        {items.map((it, i) => (
+          <div
+            key={it.id ?? i}
+            title={`${it.name}: ${it.stunden}h (${it.anteil_prozent}%)`}
+            style={{ width: `${it.anteil_prozent}%`, backgroundColor: colorFor(it, i) }}
+            className="h-full first:rounded-l-md last:rounded-r-md"
+          />
+        ))}
       </div>
-      <span className="text-xs text-slate-500 shrink-0 whitespace-nowrap text-right min-w-[5.5rem]">
-        {stunden}h ({anteil}%)
-      </span>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+        {items.map((it, i) => (
+          <span key={it.id ?? i} className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+            <span
+              className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+              style={{ backgroundColor: colorFor(it, i) }}
+            />
+            {it.name} · {it.stunden}h ({it.anteil_prozent}%)
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AnteileBlock({ title, all, arbeit, colorFor, gesamtLabel, arbeitLabel }) {
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-slate-700 mb-3">{title}</h3>
+      <div className="space-y-4">
+        <div>
+          <p className="text-xs text-slate-500 mb-1.5">{gesamtLabel}</p>
+          <StackedBar items={all} colorFor={colorFor} />
+        </div>
+        <div>
+          <p className="text-xs text-slate-500 mb-1.5">{arbeitLabel}</p>
+          <StackedBar items={arbeit} colorFor={colorFor} emptyLabel="Keine Arbeitszeit erfasst." />
+        </div>
+      </div>
     </div>
   );
 }
 
 function Anteile({ data }) {
-  const tgAnteile = data.taetigkeitsgruppe_anteile ?? [];
-  const maxTg = Math.max(1, ...tgAnteile.map(r => r.stunden));
-  const maxKat = data.kategorie_anteile?.length
-    ? Math.max(1, ...data.kategorie_anteile.map(k => k.stunden))
-    : 1;
+  const tgAll = (data.taetigkeitsgruppe_anteile ?? []).filter(r => r.stunden > 0);
+  const tgArbeit = (data.taetigkeitsgruppe_anteile_arbeitszeit ?? []).filter(r => r.stunden > 0);
+  const katAll = (data.kategorie_anteile ?? []).filter(r => r.stunden > 0);
+  const katArbeit = (data.kategorie_anteile_arbeitszeit ?? []).filter(r => r.stunden > 0);
+
+  const gruppeColor = (_item, i) => GRUPPE_PALETTE[i % GRUPPE_PALETTE.length];
+  const katColor = (item) => item.farbe || "#64748b";
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">Nach Tätigkeitsgruppe</h3>
-        <div className="space-y-1.5">
-          {tgAnteile.filter(r => r.stunden > 0).map(r => (
-            <BarRow key={r.gruppe} name={r.name} stunden={r.stunden}
-              anteil={r.anteil_prozent} max={maxTg} barColor="#1e3a5f" labelColor="#475569" />
-          ))}
-          <p className="text-xs text-slate-400 pt-1">Gesamt: {data.gesamt_stunden}h</p>
-        </div>
-      </div>
-      {data.kategorie_anteile?.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-slate-700 mb-3">Nach Tätigkeit</h3>
-          <div className="space-y-1.5">
-            {data.kategorie_anteile.map(k => (
-              <BarRow key={k.id} name={k.name} stunden={k.stunden}
-                anteil={k.anteil_prozent} max={maxKat}
-                barColor={k.farbe || "#64748b"} />
-            ))}
-          </div>
-        </div>
+    <div className="space-y-8">
+      <AnteileBlock
+        title="Nach Tätigkeitsgruppe"
+        all={tgAll}
+        arbeit={tgArbeit}
+        colorFor={gruppeColor}
+        gesamtLabel={`Anteil an der gesamten Zeit (${data.gesamt_stunden}h)`}
+        arbeitLabel={`Anteil an der Arbeitszeit, ohne Abwesenheit (${data.arbeitszeit_stunden}h)`}
+      />
+      {katAll.length > 0 && (
+        <AnteileBlock
+          title="Nach Tätigkeit"
+          all={katAll}
+          arbeit={katArbeit}
+          colorFor={katColor}
+          gesamtLabel={`Anteil an der gesamten Zeit (${data.gesamt_stunden}h)`}
+          arbeitLabel={`Anteil an der Arbeitszeit, ohne Abwesenheit (${data.arbeitszeit_stunden}h)`}
+        />
       )}
     </div>
   );

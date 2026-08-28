@@ -14,6 +14,8 @@ import {
   resetPin,
   setEinreichungStatus,
   getGruppe,
+  getTnLuecken,
+  einreichenTn,
 } from "../../api/admin";
 import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
@@ -126,6 +128,8 @@ export default function TeilnehmerPage() {
   const [importPreview, setImportPreview] = useState(null);
   const [importResult, setImportResult] = useState(null);
   const [importLoading, setImportLoading] = useState(false);
+  const [einreichenModal, setEinreichenModal] = useState(null);
+  const [einreichenLoading, setEinreichenLoading] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -169,6 +173,26 @@ export default function TeilnehmerPage() {
 
   const handleStatus = async (uId, status) => {
     const { error: err } = await setEinreichungStatus(uId, gruppeId, { status });
+    if (err) setError(err);
+    else load();
+  };
+
+  const handleEinreichenStart = async (tn) => {
+    setError("");
+    const { data: luecken } = await getTnLuecken(gruppeId, tn.user_id);
+    if (luecken && luecken.length > 0) {
+      setEinreichenModal({ tn, step: "luecken", luecken });
+    } else {
+      setEinreichenModal({ tn, step: "bestaetigen", luecken: [] });
+    }
+  };
+
+  const handleEinreichenConfirm = async () => {
+    if (!einreichenModal) return;
+    setEinreichenLoading(true);
+    const { error: err } = await einreichenTn(gruppeId, einreichenModal.tn.user_id);
+    setEinreichenLoading(false);
+    setEinreichenModal(null);
     if (err) setError(err);
     else load();
   };
@@ -363,6 +387,14 @@ export default function TeilnehmerPage() {
                     >
                       PIN reset
                     </button>
+                    {(tn.status === "OFFEN" || tn.status === "IN_BEARBEITUNG") && (
+                      <button
+                        className="btn-ghost text-xs text-brand-600"
+                        onClick={() => handleEinreichenStart(tn)}
+                      >
+                        Einreichen
+                      </button>
+                    )}
                     {tn.status === "EINGEREICHT" && (
                       <button
                         className="btn-ghost text-xs text-amber-600"
@@ -490,6 +522,54 @@ export default function TeilnehmerPage() {
           onConfirm={() => handleRemove(confirm.id)}
           onCancel={() => setConfirm(null)}
         />
+      )}
+      {einreichenModal?.step === "luecken" && (
+        <Modal title="Mögliche Lücken gefunden" onClose={() => setEinreichenModal(null)} wide>
+          <p className="text-sm text-slate-600 mb-4">
+            Für <strong>{displayName(einreichenModal.tn) !== "–" ? displayName(einreichenModal.tn) : einreichenModal.tn.email}</strong>{" "}
+            wurden folgende mögliche Lücken gefunden. Trotzdem im Namen dieser Person einreichen?
+          </p>
+          <table className="w-full text-sm mb-6">
+            <thead>
+              <tr className="bg-slate-50">
+                <th className="table-th">Tag</th>
+                <th className="table-th">Datum</th>
+                <th className="table-th">Lücke</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {einreichenModal.luecken.map((l, i) => (
+                <tr key={i}>
+                  <td className="table-td">{l.tag}</td>
+                  <td className="table-td">{fmtDate(l.datum)}</td>
+                  <td className="table-td">{l.luecke}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="flex gap-3 justify-end">
+            <button className="btn-secondary" onClick={() => setEinreichenModal(null)}>Abbrechen</button>
+            <button className="btn-primary" disabled={einreichenLoading} onClick={handleEinreichenConfirm}>
+              {einreichenLoading ? <Spinner size="sm" /> : "Trotzdem einreichen"}
+            </button>
+          </div>
+        </Modal>
+      )}
+      {einreichenModal?.step === "bestaetigen" && (
+        <Modal title="Im Namen des Teilnehmers einreichen" onClose={() => setEinreichenModal(null)}>
+          <p className="text-sm text-slate-600 mb-6">
+            Einträge von{" "}
+            <strong>{displayName(einreichenModal.tn) !== "–" ? displayName(einreichenModal.tn) : einreichenModal.tn.email}</strong>{" "}
+            jetzt definitiv einreichen? Die Person kann die Einreichung danach selbst wieder entsperren,
+            solange die Erhebung nicht abgeschlossen ist.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <button className="btn-secondary" onClick={() => setEinreichenModal(null)}>Abbrechen</button>
+            <button className="btn-primary" disabled={einreichenLoading} onClick={handleEinreichenConfirm}>
+              {einreichenLoading ? <Spinner size="sm" /> : "Einreichen"}
+            </button>
+          </div>
+        </Modal>
       )}
       {confirm?.type === "pin" && (
         <ConfirmDialog

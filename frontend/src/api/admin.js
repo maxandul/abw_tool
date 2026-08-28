@@ -36,6 +36,10 @@ export const updateTnEintrag    = (gId, uId, eId, body) =>
   put(`/api/admin/gruppen/${gId}/teilnehmer/${uId}/eintraege/${eId}`, body);
 export const deleteTnEintrag    = (gId, uId, eId) =>
   del(`/api/admin/gruppen/${gId}/teilnehmer/${uId}/eintraege/${eId}`);
+export const getTnLuecken       = (gId, uId) =>
+  get(`/api/admin/gruppen/${gId}/teilnehmer/${uId}/luecken`);
+export const einreichenTn       = (gId, uId) =>
+  post(`/api/admin/gruppen/${gId}/teilnehmer/${uId}/einreichen`, {});
 
 // Kategorien
 export const getKategorien      = ()           => get("/api/admin/kategorien");

@@ -274,6 +274,35 @@ def admin_eintraege_kontext(gruppe_id: int, user_id: int):
 
 
 @admin_bp.route(
+    "/gruppen/<int:gruppe_id>/teilnehmer/<int:user_id>/luecken", methods=["GET"]
+)
+@admin_required
+def admin_get_luecken(gruppe_id: int, user_id: int):
+    """Check a participant's entries for gaps (used before an admin submits
+    on their behalf)."""
+    try:
+        _get_mitglied(gruppe_id, user_id)
+    except ValidationError as exc:
+        return err(str(exc), 404)
+    return ok(eintrag_service.pruefe_luecken(user_id, gruppe_id))
+
+
+@admin_bp.route(
+    "/gruppen/<int:gruppe_id>/teilnehmer/<int:user_id>/einreichen", methods=["POST"]
+)
+@admin_required
+def admin_einreichen(gruppe_id: int, user_id: int):
+    """Submit a participant's entries on their behalf (e.g. they finished
+    recording but forgot to submit and can't currently be reached)."""
+    try:
+        _get_mitglied(gruppe_id, user_id)
+        einreichung = eintrag_service.einreichen(user_id, gruppe_id)
+        return ok(einreichung.to_dict())
+    except ValidationError as exc:
+        return err(str(exc), 400)
+
+
+@admin_bp.route(
     "/gruppen/<int:gruppe_id>/teilnehmer/<int:user_id>/eintraege", methods=["GET"]
 )
 @admin_required

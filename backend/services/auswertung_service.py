@@ -385,13 +385,54 @@ def berechne_raumbedarf(
     }
 
 
+def _tg_label_order(vorhanden: dict[str, float]) -> list[str]:
+    """Canonical display order for Tätigkeitsgruppe/Arbeitsform labels –
+    current Arbeitsform labels first, then legacy Tätigkeitsgruppe labels,
+    with anything unexpected appended at the end."""
+    order = list(dict.fromkeys(
+        [ARBEITSFORM_LABELS[a] for a in Arbeitsform]
+        + [TAETIGKEITSGRUPPE_LABELS[t] for t in Taetigkeitsgruppe]
+    ))
+    return [l for l in order if l in vorhanden] + [
+        l for l in vorhanden if l not in order
+    ]
+
+
+def _anteile_liste(
+    minuten_map: dict, nenner_minuten: float, labels: dict, farben: dict | None = None
+) -> list[dict]:
+    """Build a list of {key, name, farbe, stunden, anteil_prozent} rows, with
+    anteil_prozent relative to ``nenner_minuten`` (not each row's own total)."""
+    result = []
+    for key, minuten in minuten_map.items():
+        if minuten == 0:
+            continue
+        stunden = round(minuten / 60, 1)
+        anteil = round(minuten / nenner_minuten * 100, 1) if nenner_minuten else 0.0
+        result.append({
+            "gruppe": key,
+            "id": key,
+            "name": labels[key],
+            "farbe": (farben or {}).get(key),
+            "stunden": stunden,
+            "anteil_prozent": anteil,
+        })
+    return result
+
+
 def berechne_anteile(
     gruppe_ids: list[int],
     datum_von: date,
     datum_bis: date,
     teilnehmer_filter: TeilnehmerFilter | None = None,
 ) -> dict:
-    """Compute time shares per Tätigkeitsgruppe and per Tätigkeit, by weekday."""
+    """Compute time shares per Tätigkeitsgruppe and per Tätigkeit, by weekday.
+
+    Each breakdown is returned twice: once with shares relative to the total
+    recorded time (including Abwesenheit), and once with Abwesenheit entries
+    excluded entirely – both from the numerators and from the denominator –
+    so the distribution *within* actual working time is legible on its own.
+    """
     eintraege = _load_eintraege(
         gruppe_ids, datum_von, datum_bis, teilnehmer_filter=teilnehmer_filter
     )
@@ -401,6 +442,7 @@ def berechne_anteile(
     # ever contain entries from one of the two structures in practice but
     # both need a bucket to land in.
     tg_minuten: dict[str, float] = defaultdict(float)
+    tg_minuten_arbeit: dict[str, float] = defaultdict(float)
     hauptgruppe_wt: dict[str, dict[int, float]] = {
         "Stille Tätigkeiten": defaultdict(float),
         "Kommunikative Tätigkeiten": defaultdict(float),
@@ -408,54 +450,34 @@ def berechne_anteile(
     }
 
     kat_minuten: dict[int, float] = defaultdict(float)
+    kat_minuten_arbeit: dict[int, float] = defaultdict(float)
     gesamt_minuten = 0.0
+    arbeitszeit_minuten = 0.0
     for e in eintraege:
         if not e.kategorie:
             continue
         dauer = time_to_minutes(e.zeit_bis) - time_to_minutes(e.zeit_von)
-        tg_minuten[_gruppen_label(e.kategorie)] += dauer
+        label = _gruppen_label(e.kategorie)
+        tg_minuten[label] += dauer
         kat_minuten[e.kategorie_id] += dauer
         gesamt_minuten += dauer
+        if _is_anwesend(e.kategorie):
+            tg_minuten_arbeit[label] += dauer
+            kat_minuten_arbeit[e.kategorie_id] += dauer
+            arbeitszeit_minuten += dauer
         hg = _hauptgruppe(e.kategorie)
         hauptgruppe_wt[hg][e.datum.weekday()] += dauer
 
-    _label_order = list(dict.fromkeys(
-        [ARBEITSFORM_LABELS[a] for a in Arbeitsform]
-        + [TAETIGKEITSGRUPPE_LABELS[t] for t in Taetigkeitsgruppe]
-    ))
-    _ordered_labels = [l for l in _label_order if l in tg_minuten] + [
-        l for l in tg_minuten if l not in _label_order
-    ]
-
-    tg_anteile = []
-    for label in _ordered_labels:
-        minuten = tg_minuten[label]
-        if minuten == 0:
-            continue
-        stunden = round(minuten / 60, 1)
-        anteil = round(minuten / gesamt_minuten * 100, 1) if gesamt_minuten else 0.0
-        tg_anteile.append({
-            "gruppe": label,
-            "name": label,
-            "stunden": stunden,
-            "anteil_prozent": anteil,
-        })
+    tg_labels = {l: l for l in set(tg_minuten) | set(tg_minuten_arbeit)}
+    order = _tg_label_order(tg_minuten)
+    tg_minuten_geordnet = {l: tg_minuten.get(l, 0.0) for l in order}
+    tg_minuten_arbeit_geordnet = {l: tg_minuten_arbeit.get(l, 0.0) for l in order}
 
     all_kategorien = Kategorie.query.filter_by(aktiv=True).order_by(Kategorie.sort_order).all()
-    kategorie_anteile = []
-    for kat in all_kategorien:
-        minuten = kat_minuten.get(kat.id, 0.0)
-        if minuten == 0:
-            continue
-        stunden = round(minuten / 60, 1)
-        anteil = round(minuten / gesamt_minuten * 100, 1) if gesamt_minuten else 0.0
-        kategorie_anteile.append({
-            "id": kat.id,
-            "name": kat.name,
-            "farbe": kat.farbe,
-            "stunden": stunden,
-            "anteil_prozent": anteil,
-        })
+    kat_labels = {k.id: k.name for k in all_kategorien}
+    kat_farben = {k.id: k.farbe for k in all_kategorien}
+    kat_minuten_geordnet = {k.id: kat_minuten.get(k.id, 0.0) for k in all_kategorien}
+    kat_minuten_arbeit_geordnet = {k.id: kat_minuten_arbeit.get(k.id, 0.0) for k in all_kategorien}
 
     wochentag_daten = []
     for wt in range(5):
@@ -465,10 +487,17 @@ def berechne_anteile(
         wochentag_daten.append(row)
 
     return {
-        "taetigkeitsgruppe_anteile": tg_anteile,
-        "kategorie_anteile": kategorie_anteile,
+        "taetigkeitsgruppe_anteile": _anteile_liste(tg_minuten_geordnet, gesamt_minuten, tg_labels),
+        "taetigkeitsgruppe_anteile_arbeitszeit": _anteile_liste(
+            tg_minuten_arbeit_geordnet, arbeitszeit_minuten, tg_labels
+        ),
+        "kategorie_anteile": _anteile_liste(kat_minuten_geordnet, gesamt_minuten, kat_labels, kat_farben),
+        "kategorie_anteile_arbeitszeit": _anteile_liste(
+            kat_minuten_arbeit_geordnet, arbeitszeit_minuten, kat_labels, kat_farben
+        ),
         "hauptgruppen_wochentag": wochentag_daten,
         "gesamt_stunden": round(gesamt_minuten / 60, 1),
+        "arbeitszeit_stunden": round(arbeitszeit_minuten / 60, 1),
     }
 
 

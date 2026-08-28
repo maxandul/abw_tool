@@ -83,6 +83,12 @@ _EXPORT_TEMPLATE = """\
     .bar-track { flex: 1; min-width: 0; background: #f1f5f9; border-radius: 9999px; height: 14px; overflow: hidden; }
     .bar-fill { height: 100%; border-radius: 9999px; }
     .bar-value { font-size: .75rem; color: #64748b; white-space: nowrap; width: 6.5rem; text-align: right; flex-shrink: 0; }
+    .anteile-label { font-size: .75rem; color: #64748b; margin-bottom: .375rem; }
+    .stacked-bar { display: flex; width: 100%; height: 1.5rem; border-radius: .375rem; overflow: hidden; background: #f1f5f9; }
+    .stacked-seg { height: 100%; }
+    .legend { display: flex; flex-wrap: wrap; gap: .25rem 1rem; margin-top: .5rem; }
+    .legend-item { display: inline-flex; align-items: center; gap: .375rem; font-size: .75rem; color: #475569; }
+    .legend-swatch { width: .6rem; height: .6rem; border-radius: .15rem; flex-shrink: 0; }
     .note { font-size: .8rem; color: #64748b; margin-top: .75rem; }
     details { margin-top: 1rem; border: 1px solid #fde68a; background: #fffbeb; border-radius: .5rem; padding: .5rem .75rem; }
     summary { cursor: pointer; font-size: .85rem; color: #92400e; }
@@ -294,7 +300,9 @@ _EXPORT_TEMPLATE = """\
 
     function computeAnteile(tnSet) {
       const ents = D.eintraege.filter(e => tnSet.has(e.t));
-      const tgMin = {}; const katMin = {}; let gesamt = 0;
+      const tgMin = {}; const tgMinArbeit = {};
+      const katMin = {}; const katMinArbeit = {};
+      let gesamt = 0; let arbeitszeit = 0;
       for (const e of ents) {
         const k = katById[e.k];
         if (!k) continue;
@@ -302,20 +310,33 @@ _EXPORT_TEMPLATE = """\
         tgMin[k.taetigkeitsgruppe] = (tgMin[k.taetigkeitsgruppe] || 0) + d;
         katMin[e.k] = (katMin[e.k] || 0) + d;
         gesamt += d;
+        if (k.anwesend) {
+          tgMinArbeit[k.taetigkeitsgruppe] = (tgMinArbeit[k.taetigkeitsgruppe] || 0) + d;
+          katMinArbeit[e.k] = (katMinArbeit[e.k] || 0) + d;
+          arbeitszeit += d;
+        }
       }
-      const tgAnteile = [];
-      for (const tg of TG_ORDER) {
-        const m = tgMin[tg] || 0;
-        if (!m) continue;
-        tgAnteile.push({ gruppe: tg, name: TG_LABELS[tg], stunden: r1(m / 60), anteil_prozent: gesamt ? r1(m / gesamt * 100) : 0 });
-      }
-      const katAnteile = [];
-      for (const k of D.kategorien) {
-        const m = katMin[k.id] || 0;
-        if (!m) continue;
-        katAnteile.push({ id: k.id, name: k.name, farbe: k.farbe, stunden: r1(m / 60), anteil_prozent: gesamt ? r1(m / gesamt * 100) : 0 });
-      }
-      return { taetigkeitsgruppe_anteile: tgAnteile, kategorie_anteile: katAnteile, gesamt_stunden: r1(gesamt / 60) };
+      const build = (minMap, nenner, order, nameOf, idOf, farbeOf) => {
+        const out = [];
+        for (const key of order) {
+          const m = minMap[key] || 0;
+          if (!m) continue;
+          out.push({ gruppe: key, id: idOf(key), name: nameOf(key), farbe: farbeOf ? farbeOf(key) : undefined,
+            stunden: r1(m / 60), anteil_prozent: nenner ? r1(m / nenner * 100) : 0 });
+        }
+        return out;
+      };
+      const katOrder = D.kategorien.map(k => k.id);
+      const katName = id => (katById[id] || {}).name;
+      const katFarbe = id => (katById[id] || {}).farbe;
+      return {
+        taetigkeitsgruppe_anteile: build(tgMin, gesamt, TG_ORDER, tg => TG_LABELS[tg], tg => tg),
+        taetigkeitsgruppe_anteile_arbeitszeit: build(tgMinArbeit, arbeitszeit, TG_ORDER, tg => TG_LABELS[tg], tg => tg),
+        kategorie_anteile: build(katMin, gesamt, katOrder, katName, id => id, katFarbe),
+        kategorie_anteile_arbeitszeit: build(katMinArbeit, arbeitszeit, katOrder, katName, id => id, katFarbe),
+        gesamt_stunden: r1(gesamt / 60),
+        arbeitszeit_stunden: r1(arbeitszeit / 60),
+      };
     }
 
     function computeSample() {
@@ -543,31 +564,41 @@ _EXPORT_TEMPLATE = """\
         <p class="note">Empfohlene Einheiten basieren auf Ø- bzw. Peak-Nutzung (aufgerundet). Externe Tätigkeiten sind nicht enthalten.</p>`;
     }
 
-    function barChart(items, maxH, fallbackColor) {
-      return items.map(r => {
-        const color = esc(r.farbe || fallbackColor);
-        return `<div class="bar-row">
-          <div class="bar-label" style="color:${color}">${esc(r.name)}</div>
-          <div class="bar-track"><div class="bar-fill" style="width:${(r.stunden / maxH * 100).toFixed(1)}%;background:${color}"></div></div>
-          <div class="bar-value">${r.stunden}h (${r.anteil_prozent}%)</div>
-        </div>`;
-      }).join('');
+    // Fixed palette for Tätigkeitsgruppe/Arbeitsform segments, which (unlike
+    // einzelne Tätigkeiten) have no admin-assigned colour of their own.
+    const GRUPPE_PALETTE = ['#1e3a5f', '#3b82f6', '#94a3b8', '#f59e0b', '#8b5cf6', '#0ea5e9'];
+
+    function stackedBar(items, fallbackPalette) {
+      if (!items.length) return '<p class="note">Keine Daten.</p>';
+      const colorOf = (r, i) => esc(r.farbe || (fallbackPalette ? fallbackPalette[i % fallbackPalette.length] : '#64748b'));
+      const segs = items.map((r, i) => `<div class="stacked-seg" style="width:${r.anteil_prozent}%;background:${colorOf(r, i)}" title="${esc(r.name)}: ${r.stunden}h (${r.anteil_prozent}%)"></div>`).join('');
+      const legend = items.map((r, i) => `<span class="legend-item"><span class="legend-swatch" style="background:${colorOf(r, i)}"></span>${esc(r.name)} · ${r.stunden}h (${r.anteil_prozent}%)</span>`).join('');
+      return `<div class="stacked-bar">${segs}</div><div class="legend">${legend}</div>`;
+    }
+
+    function anteileBlock(title, all, arbeit, gesamtStunden, arbeitszeitStunden, fallbackPalette) {
+      return `<div>
+        <h3>${title}</h3>
+        <p class="anteile-label">Anteil an der gesamten Zeit (${gesamtStunden}h)</p>
+        ${stackedBar(all, fallbackPalette)}
+        <p class="anteile-label" style="margin-top:.75rem">Anteil an der Arbeitszeit, ohne Abwesenheit (${arbeitszeitStunden}h)</p>
+        ${stackedBar(arbeit, fallbackPalette)}
+      </div>`;
     }
 
     function renderAnteile() {
       const tnSet = sampleTnIdx();
       const d = computeAnteile(tnSet);
       const tg = (d.taetigkeitsgruppe_anteile || []).filter(r => r.stunden > 0);
-      const kat = d.kategorie_anteile || [];
+      const tgArbeit = (d.taetigkeitsgruppe_anteile_arbeitszeit || []).filter(r => r.stunden > 0);
+      const kat = (d.kategorie_anteile || []).filter(r => r.stunden > 0);
+      const katArbeit = (d.kategorie_anteile_arbeitszeit || []).filter(r => r.stunden > 0);
       if (!tg.length && !kat.length) {
         document.getElementById('anteile-container').innerHTML = '<div class="empty">Keine Daten für die aktuelle Auswahl.</div>';
         return;
       }
-      const maxTg = Math.max(1, ...tg.map(r => r.stunden));
-      const maxKat = Math.max(1, ...kat.map(r => r.stunden));
-      let html = '';
-      if (tg.length) html += `<div><h3>Nach Tätigkeitsgruppe</h3>${barChart(tg, maxTg, '#1e3a5f')}<p class="note">Gesamt: ${d.gesamt_stunden}h</p></div>`;
-      if (kat.length) html += `<div style="margin-top:1.25rem"><h3>Nach Tätigkeit</h3>${barChart(kat, maxKat, '#64748b')}</div>`;
+      let html = anteileBlock('Nach Tätigkeitsgruppe', tg, tgArbeit, d.gesamt_stunden, d.arbeitszeit_stunden, GRUPPE_PALETTE);
+      if (kat.length) html += `<div style="margin-top:1.5rem">${anteileBlock('Nach Tätigkeit', kat, katArbeit, d.gesamt_stunden, d.arbeitszeit_stunden)}</div>`;
       document.getElementById('anteile-container').innerHTML = html;
     }
 
