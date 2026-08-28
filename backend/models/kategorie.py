@@ -161,6 +161,20 @@ class Kategorie(db.Model):
         """True for Kategorien from before the Arbeitsform restructure."""
         return self.arbeitsform is None
 
+    @property
+    def offene_merkmale(self) -> list[str]:
+        """Attribute fields applicable to this Arbeitsform that the admin
+        left undefined – the participant must supply these at entry time."""
+        if self.arbeitsform is None:
+            return []
+        if self.arbeitsform == Arbeitsform.EINZELARBEIT:
+            felder = ["arbeitsort", "rueckzugsbedarf"]
+        elif self.arbeitsform == Arbeitsform.MEETING:
+            felder = ["gruppengroesse", "teilnehmerkreis", "rueckzugsbedarf"]
+        else:
+            felder = []
+        return [f for f in felder if getattr(self, f) is None]
+
     def to_dict(self) -> dict:
         """Return a JSON-serialisable representation of the Tätigkeit."""
         return {
@@ -171,6 +185,7 @@ class Kategorie(db.Model):
             "aktiv": self.aktiv,
             "sort_order": self.sort_order,
             "ist_legacy": self.ist_legacy,
+            "offene_merkmale": self.offene_merkmale,
             # Legacy fields (only populated for pre-restructure Kategorien).
             "taetigkeitsgruppe": self.taetigkeitsgruppe.value if self.taetigkeitsgruppe else None,
             "taetigkeitsgruppe_label": TAETIGKEITSGRUPPE_LABELS.get(self.taetigkeitsgruppe)

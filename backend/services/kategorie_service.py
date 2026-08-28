@@ -7,6 +7,7 @@ from models import (
     Arbeitsform,
     Arbeitsort,
     Eintrag,
+    Gruppe,
     Gruppengroesse,
     Kategorie,
     Rueckzugsbedarf,
@@ -92,20 +93,34 @@ def _validate(data: dict, partial: bool = False) -> dict:
                     Rueckzugsbedarf, data["rueckzugsbedarf"], "Rückzugsbedarf"
                 )
         elif arbeitsform == Arbeitsform.ABWESENHEIT:
-            if data.get("abwesenheit_grund"):
-                cleaned["abwesenheit_grund"] = _enum_or_400(
-                    AbwesenheitGrund, data["abwesenheit_grund"], "Grund"
-                )
+            if not data.get("abwesenheit_grund"):
+                raise ValidationError("Grund ist für Abwesenheit erforderlich.")
+            cleaned["abwesenheit_grund"] = _enum_or_400(
+                AbwesenheitGrund, data["abwesenheit_grund"], "Grund"
+            )
 
     return cleaned
 
 
-def list_kategorien(nur_aktiv: bool = False, nur_neu: bool = False) -> list[dict]:
+def list_kategorien(
+    nur_aktiv: bool = False, nur_neu: bool = False, gruppe_id: int | None = None
+) -> list[dict]:
+    """List Tätigkeiten.
+
+    ``gruppe_id``: if that Gruppe has an explicit Tätigkeiten-Zuordnung
+    (``Gruppe.kategorien`` non-empty), only those are returned; otherwise
+    (the default – no restriction configured) behaves as if omitted.
+    """
     query = Kategorie.query
     if nur_aktiv:
         query = query.filter_by(aktiv=True)
     if nur_neu:
         query = query.filter(Kategorie.arbeitsform.isnot(None))
+    if gruppe_id is not None:
+        gruppe = db.session.get(Gruppe, gruppe_id)
+        if gruppe is not None and gruppe.kategorien:
+            erlaubte_ids = {k.id for k in gruppe.kategorien}
+            query = query.filter(Kategorie.id.in_(erlaubte_ids))
     kategorien = query.order_by(Kategorie.sort_order, Kategorie.id).all()
     return [
         {**k.to_dict(), "anzahl_eintraege": _eintrag_count(k.id)} for k in kategorien

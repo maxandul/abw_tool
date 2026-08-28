@@ -37,6 +37,14 @@ export const ABWESENHEIT_GRUND_OPTS = [
   { value: "SONSTIGES", label: "Sonstiges (Ferien, Krankheit, Feiertag etc.)" },
 ];
 
+/** Attribute fields applicable to an Arbeitsform (mirrors the backend's
+ * Kategorie.offene_merkmale field list). */
+export function applicableFelder(arbeitsform) {
+  if (arbeitsform === "EINZELARBEIT") return ["arbeitsort", "rueckzugsbedarf"];
+  if (arbeitsform === "MEETING") return ["gruppengroesse", "teilnehmerkreis", "rueckzugsbedarf"];
+  return [];
+}
+
 export const showArbeitsort = (arbeitsform) => arbeitsform === "EINZELARBEIT";
 export const showGruppengroesse = (arbeitsform) => arbeitsform === "MEETING";
 export const showTeilnehmerkreis = (arbeitsform) => arbeitsform === "MEETING";
@@ -99,7 +107,9 @@ export function groupKategorien(items) {
       }
     });
 
-  const order = [...ARBEITSFORM_ORDER, ...TAETIGKEITSGRUPPE_ORDER];
+  // EINZELARBEIT is shared between the current and legacy structure (both
+  // enums use the same value) – dedupe so it isn't listed twice.
+  const order = [...new Set([...ARBEITSFORM_ORDER, ...TAETIGKEITSGRUPPE_ORDER])];
   return order
     .filter((key) => byGroup.has(key))
     .map((key) => byGroup.get(key));

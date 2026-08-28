@@ -4,13 +4,14 @@ import {
   getGruppen, getKategorien, getTeilnehmerFilter, getSample,
   getLastprofil, getRaumbedarf, getAnteile, getExportUrl
 } from "../../api/admin";
-import { groupKategorien } from "../../utils/taetigkeiten";
+import {
+  groupKategorien, ARBEITSFORM_ORDER, ARBEITSFORM_LABELS, ARBEITSORT_OPTS,
+  GRUPPENGROESSE_OPTS, TEILNEHMERKREIS_OPTS, RUECKZUGSBEDARF_OPTS,
+} from "../../utils/taetigkeiten";
 import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
 
-const WT_NAMEN = ["Mo", "Di", "Mi", "Do", "Fr"];
 const SLOT_START_H = 7;
-const SLOTS_PER_H = 4;
 const TOTAL_SLOTS = 12 * 4; // 07:00–19:00
 
 function slotLabel(slotMin) {
@@ -18,11 +19,14 @@ function slotLabel(slotMin) {
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
-// ── Heatmap grid ─────────────────────────────────────────────────────────────
+// ── Heatmap: einzelner kollabierter Tag ─────────────────────────────────────
+// Der gesamte Erhebungszeitraum (alle Wochentage, alle Wochen) wird auf einen
+// einzigen generischen Arbeitstag heruntergebrochen; pro Zeit-Slot zeigt die
+// Spalte den Mittelwert bzw. das Maximum über diesen Tag.
 function Heatmap({ data, anzeige }) {
   const { slots } = data;
   const map = {};
-  slots.forEach(s => { map[`${s.wochentag}_${s.slot_start_minuten}`] = s; });
+  slots.forEach(s => { map[s.slot_start_minuten] = s; });
 
   const allVals = slots.map(s => anzeige === "maximum" ? s.maximum : s.mittelwert);
   const globalMax = Math.max(0.001, ...allVals);
@@ -30,7 +34,7 @@ function Heatmap({ data, anzeige }) {
   const maxLabel = anzeige === "maximum" ? `${Math.round(globalMax)} Pers.` : globalMax.toFixed(2);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 max-w-xs">
       <div className="flex items-center gap-2">
         <span className="text-xs text-slate-400 shrink-0">0</span>
         <div className="flex-1 h-2 rounded-full" style={{
@@ -42,33 +46,29 @@ function Heatmap({ data, anzeige }) {
         <thead>
           <tr>
             <th className="text-slate-400 font-normal pr-2 text-right pb-1" style={{ width: "3rem" }}>Zeit</th>
-            {WT_NAMEN.map(d => <th key={d} className="text-center text-slate-600 pb-1 font-semibold">{d}</th>)}
+            <th className="text-center text-slate-600 pb-1 font-semibold">Ø Tag</th>
           </tr>
         </thead>
         <tbody>
           {Array.from({ length: TOTAL_SLOTS }, (_, si) => {
             const slotMin = si * 15;
+            const s = map[slotMin];
+            const val = s ? (anzeige === "maximum" ? s.maximum : s.mittelwert) : 0;
+            const intensity = val / globalMax;
+            const bg = val > 0 ? `rgba(30,58,95,${Math.max(0.07, intensity).toFixed(2)})` : "#f8fafc";
+            const fg = intensity > 0.45 ? "#fff" : "#475569";
+            const tip = s ? `${slotLabel(slotMin)} · Ø ${s.mittelwert.toFixed(2)} · Max ${s.maximum}` : "";
             return (
               <tr key={si}>
                 <td className="pr-2 text-slate-400 text-right leading-none"
                   style={{ fontSize: "0.6rem", width: "3rem", height: "1.1rem" }}>
                   {slotMin % 60 === 0 ? slotLabel(slotMin) : ""}
                 </td>
-                {[0, 1, 2, 3, 4].map(wt => {
-                  const s = map[`${wt}_${slotMin}`];
-                  const val = s ? (anzeige === "maximum" ? s.maximum : s.mittelwert) : 0;
-                  const intensity = val / globalMax;
-                  const bg = val > 0 ? `rgba(30,58,95,${Math.max(0.07, intensity).toFixed(2)})` : "#f8fafc";
-                  const fg = intensity > 0.45 ? "#fff" : "#475569";
-                  const tip = s ? `${WT_NAMEN[wt]} ${slotLabel(slotMin)} · Ø ${s.mittelwert.toFixed(2)} · Max ${s.maximum}` : "";
-                  return (
-                    <td key={wt} className="text-center cursor-default"
-                      style={{ background: bg, color: fg, fontSize: "0.58rem", height: "1.1rem" }}
-                      title={tip}>
-                      {val > 0 ? fmtVal(val) : ""}
-                    </td>
-                  );
-                })}
+                <td className="text-center cursor-default"
+                  style={{ background: bg, color: fg, fontSize: "0.58rem", height: "1.1rem" }}
+                  title={tip}>
+                  {val > 0 ? fmtVal(val) : ""}
+                </td>
               </tr>
             );
           })}
@@ -212,6 +212,9 @@ function Anteile({ data }) {
 
 // ── Teilnehmer-Filter ────────────────────────────────────────────────────────
 const EMPTY_TN_FILTER = { funktionen: [], organisationseinheiten: [], beschaeftigungsgrade: [] };
+const EMPTY_MERKMAL_FILTER = {
+  arbeitsformen: [], arbeitsorte: [], gruppengroessen: [], teilnehmerkreise: [], rueckzugsbedarfe: [],
+};
 
 function FilterChipGroup({ label, items, selected, onToggle, formatLabel }) {
   if (!items?.length) return null;
@@ -312,6 +315,61 @@ function TeilnehmerFilterCard({ options, filters, onChange, onClear }) {
   );
 }
 
+// ── Merkmal-Filter (Arbeitsform, Arbeitsort, Rückzugsbedarf, Gruppengrösse,
+// Teilnehmendenkreis) ────────────────────────────────────────────────────────
+const MERKMAL_FILTER_META = [
+  { key: "arbeitsformen", label: "Arbeitsform", opts: ARBEITSFORM_ORDER.map(v => ({ value: v, label: ARBEITSFORM_LABELS[v] })) },
+  { key: "arbeitsorte", label: "Arbeitsort", opts: ARBEITSORT_OPTS },
+  { key: "gruppengroessen", label: "Gruppengrösse", opts: GRUPPENGROESSE_OPTS },
+  { key: "teilnehmerkreise", label: "Teilnehmendenkreis", opts: TEILNEHMERKREIS_OPTS },
+  { key: "rueckzugsbedarfe", label: "Rückzugsbedarf", opts: RUECKZUGSBEDARF_OPTS },
+];
+
+function MerkmalFilterCard({ filters, onChange, onClear }) {
+  const activeCount = MERKMAL_FILTER_META.reduce((n, m) => n + filters[m.key].length, 0);
+
+  const toggle = (key, value) => {
+    onChange({
+      ...filters,
+      [key]: filters[key].includes(value)
+        ? filters[key].filter(v => v !== value)
+        : [...filters[key], value],
+    });
+  };
+
+  return (
+    <div className="card space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold text-slate-800">Merkmal-Filter</h2>
+        {activeCount > 0 && (
+          <button type="button" onClick={onClear}
+            className="text-xs text-slate-400 hover:text-slate-600 underline">
+            Alle Filter zurücksetzen
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-slate-500">
+        Optional einschränken nach Arbeitsform und Merkmalen (Arbeitsort, Gruppengrösse,
+        Teilnehmendenkreis, Rückzugsbedarf) der erfassten Tätigkeiten.
+        Wirkt auf Lastprofil, Bedarf nach Tätigkeit und Anteilsübersicht.
+        {activeCount > 0 && (
+          <span className="text-brand-600"> ({activeCount} Filter aktiv)</span>
+        )}
+      </p>
+      {MERKMAL_FILTER_META.map(m => (
+        <FilterChipGroup
+          key={m.key}
+          label={m.label}
+          items={m.opts.map(o => o.value)}
+          selected={filters[m.key]}
+          onToggle={v => toggle(m.key, v)}
+          formatLabel={v => m.opts.find(o => o.value === v)?.label ?? v}
+        />
+      ))}
+    </div>
+  );
+}
+
 // ── Tätigkeiten-Filter ───────────────────────────────────────────────────────
 function TaetigkeitFilter({ kategorien, aktiveIds, onToggle }) {
   const groups = groupKategorien(kategorien);
@@ -351,8 +409,8 @@ function TaetigkeitFilter({ kategorien, aktiveIds, onToggle }) {
 }
 
 const LP_HINTS = {
-  mittelwert: "Mittelwert (Ø Personen): Pro Teilnehmer und gewählter Tätigkeit wird berechnet, in wie vielen der erfassten Wochen ein Eintrag vorhanden war – geteilt durch die Anzahl Wochen. Diese Anteile werden über alle Tätigkeiten und Teilnehmenden summiert. Das Ergebnis gibt an, wie viele Personen diesen Slot pro Woche im Durchschnitt belegt haben.",
-  maximum:    "Maximum (Personen): Anzahl unterschiedlicher Teilnehmender, die diesen Slot über die gesamte Erhebungsdauer mindestens einmal mit einer der gewählten Tätigkeiten belegt haben. Pro Teilnehmer und Slot wird maximal 1 gezählt, unabhängig von Anzahl Wochen oder Tätigkeiten.",
+  mittelwert: "Mittelwert (Ø Personen pro Tag): Der gesamte Erhebungszeitraum (alle Wochentage, alle Wochen) wird auf einen einzigen, generischen Arbeitstag heruntergebrochen. Pro Teilnehmer wird berechnet, an welchem Anteil seiner erfassten Arbeitstage dieser Slot mit einer der gewählten Tätigkeiten belegt war; diese Anteile werden über alle Teilnehmenden summiert. 1 bedeutet: der Slot wird an jedem Arbeitstag gebraucht (fixer Bedarf); 0.2 (= 1/5) bedeutet: im Schnitt nur an einem von fünf Tagen.",
+  maximum:    "Maximum (Personen): Grösste Anzahl unterschiedlicher Teilnehmender, die diesen Slot an ein und demselben Tag mit einer der gewählten Tätigkeiten belegt haben – über den gesamten Erhebungszeitraum gepoolt (alle Wochentage, alle Wochen).",
 };
 
 // ── Sample-Info ──────────────────────────────────────────────────────────────
@@ -473,7 +531,8 @@ export default function AuswertungPage() {
   const [kategorieIds, setKategorieIds] = useState([]);
   const [tnFilterOptions, setTnFilterOptions] = useState(null);
   const [tnFilter, setTnFilter] = useState(EMPTY_TN_FILTER);
-  const [anzeige, setAnzeige] = useState("mittelwert");
+  const [merkmalFilter, setMerkmalFilter] = useState(EMPTY_MERKMAL_FILTER);
+  const [anzeige, setAnzeige] = useState("maximum");
   const [sample, setSample]   = useState(null);
   const [sampleLoading, setSampleLoading] = useState(false);
   const [lp, setLp]           = useState(null);
@@ -510,9 +569,17 @@ export default function AuswertungPage() {
     return q;
   }, [tnFilter]);
 
+  const appendMerkmalFilterParams = useCallback((p) => {
+    let q = p;
+    for (const key of Object.keys(EMPTY_MERKMAL_FILTER)) {
+      if (merkmalFilter[key].length) q += `&${key}=${merkmalFilter[key].join(",")}`;
+    }
+    return q;
+  }, [merkmalFilter]);
+
   const buildParams = useCallback(() =>
-    appendTnFilterParams(`gruppe_ids=${gruppeIds.join(",")}`),
-    [gruppeIds, appendTnFilterParams]);
+    appendMerkmalFilterParams(appendTnFilterParams(`gruppe_ids=${gruppeIds.join(",")}`)),
+    [gruppeIds, appendTnFilterParams, appendMerkmalFilterParams]);
 
   const buildLpParams = useCallback(() => {
     let p = buildParams();
@@ -547,18 +614,18 @@ export default function AuswertungPage() {
   useEffect(() => {
     if (gruppeIds.length) load();
     else { setRb(null); setAnt(null); setLp(null); setSample(null); }
-  }, [gruppeIds.join(","), tnFilter]);
+  }, [gruppeIds.join(","), tnFilter, merkmalFilter]);
 
-  // Load Lastprofil when gruppeIds, kategorieIds or tnFilter change
+  // Load Lastprofil when gruppeIds, kategorieIds, tnFilter or merkmalFilter change
   const reloadLp = useCallback(async () => {
     if (!gruppeIds.length || !kategorieIds.length) { setLp(null); return; }
     setLpLoading(true);
     const { data, error: e } = await getLastprofil(buildLpParams());
     setLpLoading(false);
     if (e) setError(e); else setLp(data);
-  }, [gruppeIds.join(","), kategorieIds.join(","), tnFilter, buildLpParams]);
+  }, [gruppeIds.join(","), kategorieIds.join(","), tnFilter, merkmalFilter, buildLpParams]);
 
-  useEffect(() => { reloadLp(); }, [gruppeIds.join(","), kategorieIds.join(","), tnFilter]);
+  useEffect(() => { reloadLp(); }, [gruppeIds.join(","), kategorieIds.join(","), tnFilter, merkmalFilter]);
 
   const toggleGruppe    = id => setGruppeIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
   const toggleKategorie = id => {
@@ -640,6 +707,14 @@ export default function AuswertungPage() {
           filters={tnFilter}
           onChange={setTnFilter}
           onClear={() => setTnFilter(EMPTY_TN_FILTER)}
+        />
+      )}
+
+      {gruppeIds.length > 0 && (
+        <MerkmalFilterCard
+          filters={merkmalFilter}
+          onChange={setMerkmalFilter}
+          onClear={() => setMerkmalFilter(EMPTY_MERKMAL_FILTER)}
         />
       )}
 

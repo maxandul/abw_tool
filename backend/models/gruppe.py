@@ -11,6 +11,16 @@ def generate_token() -> str:
     return uuid.uuid4().hex
 
 
+# Explicit allow-list of Kategorien offered to participants of a Gruppe. No
+# rows for a given Gruppe means "unrestricted" – all active current-structure
+# Kategorien are offered (the default, backward-compatible behaviour).
+gruppe_kategorie = db.Table(
+    "gruppe_kategorie",
+    db.Column("gruppe_id", db.Integer, db.ForeignKey("gruppe.id"), primary_key=True),
+    db.Column("kategorie_id", db.Integer, db.ForeignKey("kategorie.id"), primary_key=True),
+)
+
+
 class Gruppe(db.Model):
     """A survey group with a defined collection period."""
 
@@ -30,6 +40,9 @@ class Gruppe(db.Model):
     mitglieder = db.relationship(
         "GruppenMitglied", back_populates="gruppe", cascade="all, delete-orphan"
     )
+    kategorien = db.relationship(
+        "Kategorie", secondary=gruppe_kategorie, lazy="selectin"
+    )
 
     def to_dict(self) -> dict:
         """Return a JSON-serialisable representation of the group."""
@@ -41,4 +54,6 @@ class Gruppe(db.Model):
             "aktiv": self.aktiv,
             "abgeschlossen": self.abgeschlossen,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            # None/empty = unrestricted (alle aktiven Tätigkeiten).
+            "kategorie_ids": [k.id for k in self.kategorien] or None,
         }

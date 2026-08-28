@@ -25,6 +25,19 @@ def _parse_teilnehmer_filter(args) -> dict:
     return flt
 
 
+def _parse_merkmal_filter(args) -> dict:
+    """Parse the Arbeitsform/Merkmal filter (Lastprofil, Bedarf, Anteile)."""
+    flt = {}
+    for key in (
+        "arbeitsformen", "arbeitsorte", "rueckzugsbedarfe",
+        "gruppengroessen", "teilnehmerkreise",
+    ):
+        werte = parse_string_list(args.get(key))
+        if werte:
+            flt[key] = werte
+    return flt
+
+
 def _parse_filter(args):
     """Parse shared filter query parameters."""
     gruppe_ids = parse_int_list(args.get("gruppe_ids", ""))
@@ -41,8 +54,9 @@ def _parse_filter(args):
     wochentage = parse_int_list(wochentage_raw) if wochentage_raw else None
 
     teilnehmer_filter = _parse_teilnehmer_filter(args)
+    merkmal_filter = _parse_merkmal_filter(args)
 
-    return gruppe_ids, datum_von, datum_bis, wochentage, gruppen, teilnehmer_filter
+    return gruppe_ids, datum_von, datum_bis, wochentage, gruppen, teilnehmer_filter, merkmal_filter
 
 
 @auswertung_bp.route("/teilnehmer-filter", methods=["GET"])
@@ -63,7 +77,7 @@ def get_teilnehmer_filter():
 def get_sample():
     """Sample description: size, FTE, participation and completeness."""
     try:
-        gruppe_ids, datum_von, datum_bis, wochentage, _, teilnehmer_filter = _parse_filter(
+        gruppe_ids, datum_von, datum_bis, wochentage, _, teilnehmer_filter, _ = _parse_filter(
             request.args
         )
         data = auswertung_service.berechne_sample(
@@ -83,8 +97,8 @@ def get_sample():
 def get_lastprofil():
     """Heatmap data: per-slot mean/max occupancy (requires kategorie_ids)."""
     try:
-        gruppe_ids, datum_von, datum_bis, wochentage, _, teilnehmer_filter = _parse_filter(
-            request.args
+        gruppe_ids, datum_von, datum_bis, wochentage, _, teilnehmer_filter, merkmal_filter = (
+            _parse_filter(request.args)
         )
         kat_raw = request.args.get("kategorie_ids")
         kategorie_ids = parse_int_list(kat_raw) if kat_raw else None
@@ -95,6 +109,7 @@ def get_lastprofil():
             wochentage,
             kategorie_ids,
             teilnehmer_filter=teilnehmer_filter or None,
+            merkmal_filter=merkmal_filter or None,
         )
         return ok(data)
     except ValidationError as exc:
@@ -106,11 +121,13 @@ def get_lastprofil():
 def get_raumbedarf():
     """Demand table: recommended units per Tätigkeit."""
     try:
-        gruppe_ids, datum_von, datum_bis, _, _, teilnehmer_filter = _parse_filter(
+        gruppe_ids, datum_von, datum_bis, _, _, teilnehmer_filter, merkmal_filter = _parse_filter(
             request.args
         )
         data = auswertung_service.berechne_raumbedarf(
-            gruppe_ids, datum_von, datum_bis, teilnehmer_filter=teilnehmer_filter or None
+            gruppe_ids, datum_von, datum_bis,
+            teilnehmer_filter=teilnehmer_filter or None,
+            merkmal_filter=merkmal_filter or None,
         )
         return ok(data)
     except ValidationError as exc:
@@ -122,11 +139,13 @@ def get_raumbedarf():
 def get_anteile():
     """Time share per Tätigkeitsgruppe and individual Tätigkeit."""
     try:
-        gruppe_ids, datum_von, datum_bis, _, _, teilnehmer_filter = _parse_filter(
+        gruppe_ids, datum_von, datum_bis, _, _, teilnehmer_filter, merkmal_filter = _parse_filter(
             request.args
         )
         data = auswertung_service.berechne_anteile(
-            gruppe_ids, datum_von, datum_bis, teilnehmer_filter=teilnehmer_filter or None
+            gruppe_ids, datum_von, datum_bis,
+            teilnehmer_filter=teilnehmer_filter or None,
+            merkmal_filter=merkmal_filter or None,
         )
         return ok(data)
     except ValidationError as exc:
@@ -138,7 +157,7 @@ def get_anteile():
 def get_kennzahlen():
     """Four headline KPI tiles."""
     try:
-        gruppe_ids, datum_von, datum_bis, _, _, teilnehmer_filter = _parse_filter(
+        gruppe_ids, datum_von, datum_bis, _, _, teilnehmer_filter, _ = _parse_filter(
             request.args
         )
         data = auswertung_service.berechne_kennzahlen(
@@ -159,7 +178,7 @@ def get_export():
     Teilnehmer-Filter and Lastprofil-Tätigkeiten without a server.
     """
     try:
-        gruppe_ids, datum_von, datum_bis, _, gruppen, teilnehmer_filter = (
+        gruppe_ids, datum_von, datum_bis, _, gruppen, teilnehmer_filter, merkmal_filter = (
             _parse_filter(request.args)
         )
         rohdaten = auswertung_service.export_rohdaten(
@@ -175,6 +194,11 @@ def get_export():
             ),
             "beschaeftigungsgrade": teilnehmer_filter.get("beschaeftigungsgrade", []),
             "kategorie_ids": initial_kategorie_ids,
+            "arbeitsformen": merkmal_filter.get("arbeitsformen", []),
+            "arbeitsorte": merkmal_filter.get("arbeitsorte", []),
+            "rueckzugsbedarfe": merkmal_filter.get("rueckzugsbedarfe", []),
+            "gruppengroessen": merkmal_filter.get("gruppengroessen", []),
+            "teilnehmerkreise": merkmal_filter.get("teilnehmerkreise", []),
         }
 
         gruppen_namen = [g.name for g in gruppen]

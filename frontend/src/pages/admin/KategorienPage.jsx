@@ -18,12 +18,23 @@ import {
 
 const ARBEITSFORM_OPTS = ARBEITSFORM_ORDER.map(v => ({ value: v, label: ARBEITSFORM_LABELS[v] }));
 
-function Select({ label, value, onChange, options }) {
+const OFFEN_LABELS = {
+  arbeitsort: "Arbeitsort",
+  rueckzugsbedarf: "Rückzugsbedarf",
+  gruppengroesse: "Gruppengrösse",
+  teilnehmerkreis: "Teilnehmendenkreis",
+};
+
+function Select({ label, value, onChange, options, required = false }) {
   return (
     <div>
-      <label className="label">{label} <span className="text-slate-400 font-normal">(optional)</span></label>
-      <select className="input" value={value ?? ""} onChange={onChange}>
-        <option value="">– keine Angabe –</option>
+      <label className="label">
+        {label} {required
+          ? "*"
+          : <span className="text-slate-400 font-normal">(optional – sonst von Teilnehmenden erfasst)</span>}
+      </label>
+      <select className="input" value={value ?? ""} onChange={onChange} required={required}>
+        <option value="" disabled={required}>{required ? "– auswählen –" : "– keine Angabe –"}</option>
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </div>
@@ -105,7 +116,8 @@ function TaetigkeitForm({ initial, defaultArbeitsform, onSave, onCancel }) {
         <Select label="Rückzugsbedarf" value={form.rueckzugsbedarf} onChange={set("rueckzugsbedarf")} options={RUECKZUGSBEDARF_OPTS} />
       )}
       {showAbwesenheitGrund(form.arbeitsform) && (
-        <Select label="Grund" value={form.abwesenheit_grund} onChange={set("abwesenheit_grund")} options={ABWESENHEIT_GRUND_OPTS} />
+        <Select label="Grund" value={form.abwesenheit_grund} onChange={set("abwesenheit_grund")}
+          options={ABWESENHEIT_GRUND_OPTS} required />
       )}
 
       <div className="flex gap-3 justify-end pt-2">
@@ -131,7 +143,14 @@ function KategorieRow({ k, draggable, dragHandlers, dragOver, onEdit, onDeactiva
         <span className="inline-block w-5 h-5 rounded" style={{ background: k.farbe ?? "#ccc" }} />
       </td>
       <td className="table-td font-medium sticky left-10 z-10 bg-white border-r border-slate-100">{k.name}</td>
-      <td className="table-td text-xs text-slate-500 whitespace-normal min-w-[220px]">{formatTaetigkeitMeta(k) || "–"}</td>
+      <td className="table-td text-xs text-slate-500 whitespace-normal min-w-[220px]">
+        {formatTaetigkeitMeta(k) || "–"}
+        {k.offene_merkmale?.length > 0 && (
+          <div className="text-brand-600 mt-0.5">
+            Von Teilnehmenden zu erfassen: {k.offene_merkmale.map(f => OFFEN_LABELS[f]).join(", ")}
+          </div>
+        )}
+      </td>
       <td className="table-td text-xs text-slate-500 whitespace-normal min-w-[220px]">{k.beschreibung || "–"}</td>
       <td className="table-td">{k.anzahl_eintraege}</td>
       <td className="table-td">

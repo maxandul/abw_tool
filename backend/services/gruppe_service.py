@@ -11,6 +11,7 @@ from models import (
     Eintrag,
     Gruppe,
     GruppenMitglied,
+    Kategorie,
     Rolle,
     User,
 )
@@ -114,6 +115,27 @@ def _validate_gruppe_input(data: dict, partial: bool = False) -> dict:
         cleaned["zeitraum_bis"] = bis
 
     return cleaned
+
+
+def _resolve_kategorie_ids(kategorie_ids) -> list[Kategorie] | None:
+    """Resolve a submitted Tätigkeiten-Zuordnung.
+
+    ``None`` means "keine Einschränkung" (alle aktiven Tätigkeiten) and
+    clears any existing restriction. An empty list is rejected – restricting
+    a Gruppe to zero Tätigkeiten would leave participants unable to record
+    anything.
+    """
+    if kategorie_ids is None:
+        return None
+    if not kategorie_ids:
+        raise ValidationError(
+            "Mindestens eine Tätigkeit muss ausgewählt sein, wenn die Auswahl eingeschränkt wird."
+        )
+    ids = {int(i) for i in kategorie_ids}
+    kategorien = Kategorie.query.filter(Kategorie.id.in_(ids)).all()
+    if len(kategorien) != len(ids):
+        raise ValidationError("Eine oder mehrere Tätigkeiten wurden nicht gefunden.")
+    return kategorien
 
 
 def _fortschritt(gruppe: Gruppe) -> dict:
@@ -222,6 +244,8 @@ def create_gruppe(data: dict) -> Gruppe:
     """Create a new group with a generated registration token."""
     cleaned = _validate_gruppe_input(data)
     gruppe = Gruppe(**cleaned)
+    if "kategorie_ids" in data:
+        gruppe.kategorien = _resolve_kategorie_ids(data.get("kategorie_ids")) or []
     db.session.add(gruppe)
     db.session.commit()
     return gruppe
@@ -233,6 +257,8 @@ def update_gruppe(gruppe_id: int, data: dict) -> Gruppe:
     cleaned = _validate_gruppe_input(data, partial=True)
     for key, value in cleaned.items():
         setattr(gruppe, key, value)
+    if "kategorie_ids" in data:
+        gruppe.kategorien = _resolve_kategorie_ids(data.get("kategorie_ids")) or []
     db.session.commit()
     return gruppe
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   getGruppen, createGruppe, updateGruppe, deleteGruppe,
-  abschliessenGruppe, wiederoeffnenGruppe
+  abschliessenGruppe, wiederoeffnenGruppe, getKategorien
 } from "../../api/admin";
 import AppLinkHint from "../../components/AppLinkHint";
 import TeilnehmerPinHint from "../../components/TeilnehmerPinHint";
@@ -11,9 +11,66 @@ import Alert from "../../components/Alert";
 import Modal from "../../components/Modal";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { fmtDate } from "../../utils/format";
+import { groupKategorien } from "../../utils/taetigkeiten";
+
+function TaetigkeitenZuordnung({ modus, setModus, kategorieIds, setKategorieIds }) {
+  const [kategorien, setKategorien] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getKategorien().then(({ data }) => {
+      setLoading(false);
+      if (data) setKategorien(data.filter(k => k.aktiv && !k.ist_legacy));
+    });
+  }, []);
+
+  const groups = groupKategorien(kategorien);
+  const toggle = (id) => setKategorieIds(ids =>
+    ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
+
+  return (
+    <div>
+      <label className="label">Verfügbare Tätigkeiten</label>
+      <div className="flex gap-4 text-sm mb-2">
+        <label className="inline-flex items-center gap-1.5">
+          <input type="radio" checked={modus === "alle"} onChange={() => setModus("alle")} />
+          Alle aktiven Tätigkeiten
+        </label>
+        <label className="inline-flex items-center gap-1.5">
+          <input type="radio" checked={modus === "ausgewaehlt"} onChange={() => setModus("ausgewaehlt")} />
+          Nur ausgewählte
+        </label>
+      </div>
+      {modus === "ausgewaehlt" && (
+        loading ? <Spinner size="sm" /> : (
+          <div className="border border-slate-200 rounded-lg p-3 max-h-56 overflow-y-auto space-y-3">
+            {groups.map(g => (
+              <div key={g.key}>
+                <p className="text-xs font-semibold text-slate-500 mb-1">{g.label}</p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {g.items.map(k => (
+                    <label key={k.id} className="inline-flex items-center gap-1.5 text-sm">
+                      <input type="checkbox" checked={kategorieIds.includes(k.id)} onChange={() => toggle(k.id)} />
+                      {k.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {kategorien.length === 0 && !loading && (
+              <p className="text-xs text-slate-400">Keine aktiven Tätigkeiten vorhanden.</p>
+            )}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
 
 function GruppeForm({ initial, onSave, onCancel }) {
   const [form, setForm] = useState(initial ?? { name: "", zeitraum_von: "", zeitraum_bis: "" });
+  const [modus, setModus] = useState(initial?.kategorie_ids ? "ausgewaehlt" : "alle");
+  const [kategorieIds, setKategorieIds] = useState(initial?.kategorie_ids ?? []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -22,8 +79,13 @@ function GruppeForm({ initial, onSave, onCancel }) {
   const submit = async (e) => {
     e.preventDefault();
     setError("");
+    if (modus === "ausgewaehlt" && kategorieIds.length === 0) {
+      setError("Wähle mindestens eine Tätigkeit aus, oder wechsle zu «Alle aktiven Tätigkeiten».");
+      return;
+    }
     setLoading(true);
-    const { error: err } = await onSave(form);
+    const payload = { ...form, kategorie_ids: modus === "alle" ? null : kategorieIds };
+    const { error: err } = await onSave(payload);
     setLoading(false);
     if (err) setError(err);
   };
@@ -48,6 +110,7 @@ function GruppeForm({ initial, onSave, onCancel }) {
           <input className="input" type="date" value={form.zeitraum_bis} onChange={set("zeitraum_bis")} required />
         </div>
       </div>
+      <TaetigkeitenZuordnung modus={modus} setModus={setModus} kategorieIds={kategorieIds} setKategorieIds={setKategorieIds} />
       <div className="flex gap-3 justify-end pt-2">
         <button type="button" className="btn-secondary" onClick={onCancel}>Abbrechen</button>
         <button type="submit" className="btn-primary" disabled={loading}>

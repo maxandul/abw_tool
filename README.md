@@ -11,20 +11,22 @@ Web-Applikation zur Erhebung von Tätigkeitsprofilen im Rahmen einer arbeitsplat
 ## Funktionsumfang
 
 **Teilnehmer**
-- Erfassen ihre Arbeitszeit in einem Wochenkalender, blockweise pro Tätigkeitskategorie.
+- Erfassen ihre Arbeitszeit in einem Wochenkalender, blockweise pro Tätigkeit. Hat der Admin bei einer Tätigkeit Merkmale (Arbeitsort, Rückzugsbedarf, Gruppengrösse, Teilnehmendenkreis) bewusst offen gelassen, ergänzen Teilnehmende diese beim Erfassen selbst; vom Admin vorgegebene Merkmale sind nicht änderbar.
+- Sehen pro Erhebung nur die dafür freigegebenen Tätigkeiten (siehe Tätigkeiten-Zuordnung unten).
 - Reichen die Erhebung am Ende ein; eingereichte Erhebungen sind gesperrt (Entsperren auf Wunsch möglich).
 
 **Admin**
-- Verwaltet Tätigkeiten (gruppiert nach Arbeitsform: Einzelarbeit, Besprechung/Meeting, Abwesenheit; je mit passenden Merkmalen wie Arbeitsort, Gruppengrösse, Teilnehmendenkreis, Rückzugsbedarf oder Abwesenheitsgrund; per Drag & Drop sortierbar) und Erhebungen inkl. Teilnehmer.
+- Verwaltet Tätigkeiten (gruppiert nach Arbeitsform: Einzelarbeit, Besprechung/Meeting, Abwesenheit; per Drag & Drop sortierbar). Pflicht sind nur Name, Arbeitsform und – bei Abwesenheit – der Grund; alle anderen Merkmale (Arbeitsort, Rückzugsbedarf, Gruppengrösse, Teilnehmendenkreis) können offen gelassen werden, damit Teilnehmende sie selbst erfassen, oder fest vorgegeben werden (z. B. eine standortspezifische Tätigkeit «Beratungsgespräch» mit fest hinterlegter Gruppengrösse/Teilnehmendenkreis/Rückzugsbedarf).
   Tätigkeiten aus der ersten Erhebung (vor dieser Umstrukturierung) bleiben als schreibgeschütztes Archiv erhalten und werden für neue Einträge nicht mehr angeboten.
+- **Tätigkeiten-Zuordnung pro Erhebung**: Beim Anlegen/Bearbeiten einer Erhebung kann festgelegt werden, welche Tätigkeiten den Teilnehmenden zur Auswahl stehen (Standard: alle aktiven Tätigkeiten) – so muss nicht ständig standortfremde Tätigkeiten deaktiviert werden.
 - Dashboard mit Fortschritt pro Erhebung. Das Soll ist für alle Teilnehmer gleich (Arbeitstage × 8,4 h): Auch Teilzeitkräfte erfassen die ganze Woche und tragen ihre regulär freie Zeit als Abwesenheit mit Grund «Teilzeit» ein. Übererfassung Einzelner wird je Teilnehmer auf 100 % begrenzt, damit Lücken anderer sichtbar bleiben.
 - Kann einzelne Teilnehmer-Erhebungen einsehen und im selben Kalender direkt bearbeiten (Admin-Override, unabhängig vom Einreichungsstatus) sowie Einträge im Namen eines Teilnehmers einreichen (inkl. Lücken-Check), falls dieser das vergessen hat und nicht erreichbar ist.
-- **Auswertung** über eine oder mehrere Erhebungen, mit Filtern nach Teilnehmer-Attributen (Funktion, Organisationseinheit, Beschäftigungsgrad), Wochentagen und Tätigkeiten:
+- **Auswertung** über eine oder mehrere Erhebungen, mit Filtern nach Teilnehmer-Attributen (Funktion, Organisationseinheit, Beschäftigungsgrad), Wochentagen, Tätigkeiten sowie nach Arbeitsform/Arbeitsort/Rückzugsbedarf/Gruppengrösse/Teilnehmendenkreis (inkl. der von Teilnehmenden selbst ergänzten Werte):
   - *Stichprobe*: Datenbasis (eingereicht/offen, FTE-Summe, erfasste vs. erwartete Stunden, Vollständigkeit; Hinweis auf Teilnehmer unter 85 %).
-  - *Lastprofil*: Heatmap über die Woche (Mittelwert/Maximum) für gewählte Tätigkeiten.
+  - *Lastprofil*: Der ganze Erhebungszeitraum (alle Wochentage, alle Wochen) wird auf einen einzigen, generischen Arbeitstag heruntergebrochen. Zeigt je Zeit-Slot Maximum (Standardansicht: grösste je an einem Tag gleichzeitig beobachtete Personenzahl) oder Mittelwert (Anteil der erfassten Arbeitstage, an denen der Slot gebraucht wurde – 1 = jeden Tag nötig, 0,2 = im Schnitt an einem von fünf Tagen).
   - *Bedarf nach Tätigkeit* und *Anteilsübersicht* (nach Tätigkeit und Arbeitsform, je als 100%-Balken für die gesamte Zeit sowie für die Arbeitszeit ohne Abwesenheit).
   - In die Auswertung fliessen nur **eingereichte** Teilnehmer ein.
-- **HTML-Export**: eigenständige, anonyme Datei (keine Namen/E-Mail-Adressen) der gewählten Erhebung(en). Sie ist interaktiv – Empfänger können darin selbst nach Attributen filtern und Lastprofile erstellen, ganz ohne Server.
+- **HTML-Export**: eigenständige, anonyme Datei (keine Namen/E-Mail-Adressen) der gewählten Erhebung(en). Sie ist interaktiv – Empfänger können darin selbst nach Attributen und Merkmalen filtern und das Lastprofil erstellen, ganz ohne Server.
 
 ---
 

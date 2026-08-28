@@ -11,7 +11,19 @@ import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
 import Modal from "../../components/Modal";
 import { fmtDate } from "../../utils/format";
-import { groupKategorien } from "../../utils/taetigkeiten";
+import {
+  groupKategorien, ARBEITSORT_OPTS, GRUPPENGROESSE_OPTS,
+  TEILNEHMERKREIS_OPTS, RUECKZUGSBEDARF_OPTS, applicableFelder,
+} from "../../utils/taetigkeiten";
+
+// Metadata for the attribute fields a Kategorie can leave open for
+// participants to fill in themselves at entry time.
+const OFFENE_FELD_META = {
+  arbeitsort: { label: "Arbeitsort", options: ARBEITSORT_OPTS },
+  rueckzugsbedarf: { label: "Rückzugsbedarf", options: RUECKZUGSBEDARF_OPTS },
+  gruppengroesse: { label: "Gruppengrösse", options: GRUPPENGROESSE_OPTS },
+  teilnehmerkreis: { label: "Teilnehmendenkreis", options: TEILNEHMERKREIS_OPTS },
+};
 
 const HOUR_START = 7;
 const HOUR_END   = 19;
@@ -53,11 +65,25 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
     zeit_von: initial?.zeit_von ?? "08:00",
     zeit_bis: initial?.zeit_bis ?? "09:00",
     kategorie_id: initial?.kategorie_id ?? (sorted[0]?.id ?? ""),
+    arbeitsort: initial?.arbeitsort ?? "",
+    rueckzugsbedarf: initial?.rueckzugsbedarf ?? "",
+    gruppengroesse: initial?.gruppengroesse ?? "",
+    teilnehmerkreis: initial?.teilnehmerkreis ?? "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
   const selKat = sorted.find(k => k.id === Number(form.kategorie_id));
+
+  const onKategorieChange = (e) => {
+    const kategorie_id = e.target.value;
+    // A different Tätigkeit may leave different attributes open – reset
+    // them so a locked value from the previous selection can't linger.
+    setForm(f => ({
+      ...f, kategorie_id,
+      arbeitsort: "", rueckzugsbedarf: "", gruppengroesse: "", teilnehmerkreis: "",
+    }));
+  };
 
   const submit = async (e) => {
     e.preventDefault(); setError(""); setLoading(true);
@@ -65,17 +91,31 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
     setLoading(false); if (err) setError(err);
   };
 
-  if (readonly) return (
-    <Modal title="Eintrag" onClose={onClose}>
-      <div className="space-y-2 text-sm">
-        <p><span className="text-slate-500">Datum:</span> {fmtDate(initial?.datum)}</p>
-        <p><span className="text-slate-500">Zeit:</span> {initial?.zeit_von} – {initial?.zeit_bis}</p>
-        <p><span className="text-slate-500">Tätigkeit:</span> {initial?.kategorie?.name}</p>
-      </div>
-    </Modal>
-  );
+  if (readonly) {
+    const merkmale = [
+      initial?.effective_arbeitsort_label,
+      initial?.effective_gruppengroesse_label,
+      initial?.effective_teilnehmerkreis_label,
+      initial?.effective_rueckzugsbedarf_label,
+    ].filter(Boolean);
+    return (
+      <Modal title="Eintrag" onClose={onClose}>
+        <div className="space-y-2 text-sm">
+          <p><span className="text-slate-500">Datum:</span> {fmtDate(initial?.datum)}</p>
+          <p><span className="text-slate-500">Zeit:</span> {initial?.zeit_von} – {initial?.zeit_bis}</p>
+          <p><span className="text-slate-500">Tätigkeit:</span> {initial?.kategorie?.name}</p>
+          {merkmale.length > 0 && (
+            <p><span className="text-slate-500">Merkmale:</span> {merkmale.join(" · ")}</p>
+          )}
+        </div>
+      </Modal>
+    );
+  }
 
   const groups = groupKategorien(sorted);
+  const offen = selKat?.offene_merkmale ?? [];
+  const anwendbar = applicableFelder(selKat?.arbeitsform);
+  const gesperrt = anwendbar.filter(f => !offen.includes(f));
 
   return (
     <Modal title={initial?.id ? "Eintrag bearbeiten" : "Neuer Eintrag"} onClose={onClose}>
@@ -97,7 +137,7 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
         </div>
         <div>
           <label className="label">Tätigkeit</label>
-          <select className="input w-full" value={form.kategorie_id} onChange={set("kategorie_id")}>
+          <select className="input w-full" value={form.kategorie_id} onChange={onKategorieChange}>
             {groups.map(g => (
               <optgroup key={g.key} label={g.label}>
                 {g.items.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
@@ -108,6 +148,22 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
             <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 p-2 rounded">{selKat.beschreibung}</p>
           )}
         </div>
+
+        {gesperrt.length > 0 && (
+          <p className="text-xs text-slate-500 bg-slate-50 p-2 rounded">
+            {gesperrt.map(f => `${OFFENE_FELD_META[f].label}: ${selKat[`${f}_label`]}`).join(" · ")}
+          </p>
+        )}
+        {offen.map(f => (
+          <div key={f}>
+            <label className="label">{OFFENE_FELD_META[f].label} *</label>
+            <select className="input" value={form[f]} onChange={set(f)} required>
+              <option value="" disabled>– auswählen –</option>
+              {OFFENE_FELD_META[f].options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+        ))}
+
         <div className="flex gap-3 justify-between pt-2">
           <div>
             {initial?.id && (
@@ -356,7 +412,7 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
     setLoading(true);
     const [eRes, kRes, eiRes] = await Promise.all([
       A.getEintraege(gId, zeitraumVon, zeitraumBis),
-      kategorien.length ? Promise.resolve({ data: kategorien }) : A.getKategorien(),
+      kategorien.length ? Promise.resolve({ data: kategorien }) : A.getKategorien(gId),
       adminMode ? Promise.resolve({ data: null }) : A.getEinreichung(gId),
     ]);
     setLoading(false);
@@ -406,6 +462,10 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
       zeit_von: form.zeit_von,
       zeit_bis: form.zeit_bis,
       kategorie_id: Number(form.kategorie_id),
+      arbeitsort: form.arbeitsort || null,
+      rueckzugsbedarf: form.rueckzugsbedarf || null,
+      gruppengroesse: form.gruppengroesse || null,
+      teilnehmerkreis: form.teilnehmerkreis || null,
     };
     const { error: err } = modal.eintrag?.id
       ? await A.updateEintrag(modal.eintrag.id, body)

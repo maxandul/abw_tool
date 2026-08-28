@@ -206,6 +206,34 @@ def _gruppen_label(kategorie: Kategorie) -> str:
     return TAETIGKEITSGRUPPE_LABELS[kategorie.taetigkeitsgruppe]
 
 
+MerkmalFilter = dict[str, list[str]]
+
+# Maps a MerkmalFilter key to the Eintrag "effective_*" attribute it filters
+# on. Arbeitsform comes straight from the Kategorie (never overridden).
+_MERKMAL_FILTER_FELDER = {
+    "arbeitsformen": lambda e: e.kategorie.arbeitsform if e.kategorie else None,
+    "arbeitsorte": lambda e: e.effective_arbeitsort,
+    "rueckzugsbedarfe": lambda e: e.effective_rueckzugsbedarf,
+    "gruppengroessen": lambda e: e.effective_gruppengroesse,
+    "teilnehmerkreise": lambda e: e.effective_teilnehmerkreis,
+}
+
+
+def _merkmal_filter_active(flt: MerkmalFilter | None) -> bool:
+    return bool(flt) and any(flt.get(k) for k in _MERKMAL_FILTER_FELDER)
+
+
+def _eintrag_matches_merkmal_filter(e: Eintrag, flt: MerkmalFilter) -> bool:
+    for key, getter in _MERKMAL_FILTER_FELDER.items():
+        erlaubt = flt.get(key)
+        if not erlaubt:
+            continue
+        wert = getter(e)
+        if wert is None or wert.value not in erlaubt:
+            return False
+    return True
+
+
 def _load_eintraege(
     gruppe_ids: list[int],
     datum_von: date,
@@ -213,6 +241,7 @@ def _load_eintraege(
     wochentage: list[int] | None = None,
     kategorie_ids: list[int] | None = None,
     teilnehmer_filter: TeilnehmerFilter | None = None,
+    merkmal_filter: MerkmalFilter | None = None,
 ) -> list[Eintrag]:
     query = (
         db.session.query(Eintrag)
@@ -246,6 +275,9 @@ def _load_eintraege(
             if _eintrag_matches_teilnehmer_filter(e, lookup, teilnehmer_filter)
         ]
 
+    if _merkmal_filter_active(merkmal_filter):
+        eintraege = [e for e in eintraege if _eintrag_matches_merkmal_filter(e, merkmal_filter)]
+
     return eintraege
 
 
@@ -256,57 +288,65 @@ def berechne_lastprofil(
     wochentage: list[int] | None = None,
     kategorie_ids: list[int] | None = None,
     teilnehmer_filter: TeilnehmerFilter | None = None,
+    merkmal_filter: MerkmalFilter | None = None,
 ) -> dict:
+    """Compute occupancy per time-slot, collapsed onto a single generic workday.
+
+    The whole survey period (every weekday, every week) is treated as
+    repeated instances of one workday: "Mittelwert" is, per participant, the
+    share of their recorded workdays on which they needed this slot for one
+    of the selected Tätigkeiten, summed across participants (1.0 = needed
+    literally every workday → a fixed desk is required; 0.2 = on average one
+    day out of five). "Maximum" is the largest number of distinct
+    participants ever recorded needing that slot on any single day, pooled
+    across the whole period.
+    """
     if not kategorie_ids:
         return {"slots": []}
 
     kat_eintraege = _load_eintraege(
         gruppe_ids, datum_von, datum_bis,
         wochentage=wochentage, kategorie_ids=kategorie_ids,
-        teilnehmer_filter=teilnehmer_filter,
+        teilnehmer_filter=teilnehmer_filter, merkmal_filter=merkmal_filter,
     )
     alle_eintraege = _load_eintraege(
         gruppe_ids, datum_von, datum_bis,
         wochentage=wochentage, teilnehmer_filter=teilnehmer_filter,
+        merkmal_filter=merkmal_filter,
     )
 
-    alle_user_ids: set[int] = {e.user_id for e in alle_eintraege}
-
-    tn_wochen: dict[int, set[str]] = defaultdict(set)
+    # Distinct recorded workdays per participant – the denominator for
+    # "Mittelwert" (a day is the atomic unit now, not a specific weekday).
+    tn_tage: dict[int, set] = defaultdict(set)
     for e in alle_eintraege:
-        tn_wochen[e.user_id].add(_iso_kw(e.datum))
+        tn_tage[e.user_id].add(e.datum)
 
-    tn_slot_kat_match: dict = defaultdict(lambda: defaultdict(lambda: defaultdict(set)))
-    slot_tn: dict[tuple, set] = defaultdict(set)
+    tn_slot_match: dict = defaultdict(lambda: defaultdict(set))  # uid -> slot -> {dates}
+    slot_tn: dict[int, set] = defaultdict(set)  # slot -> {uid}
 
     for e in kat_eintraege:
-        wt = e.datum.weekday()
-        kw = _iso_kw(e.datum)
         von_min = time_to_minutes(e.zeit_von)
         bis_min = time_to_minutes(e.zeit_bis)
         slot = von_min
         while slot < bis_min:
             if TAG_START_MINUTEN <= slot < TAG_END_MINUTEN:
                 off = slot - TAG_START_MINUTEN
-                tn_slot_kat_match[e.user_id][(wt, off)][e.kategorie_id].add(kw)
-                slot_tn[(wt, off)].add(e.user_id)
+                tn_slot_match[e.user_id][off].add(e.datum)
+                slot_tn[off].add(e.user_id)
             slot += SLOT_MINUTES
 
     aggregiert = []
-    for (wt, off), uid_set in slot_tn.items():
+    for off, uid_set in slot_tn.items():
         maximum = len(uid_set)
         total = 0.0
-        for uid in alle_user_ids:
-            wochen = tn_wochen.get(uid)
-            if not wochen:
+        for uid, tage in tn_tage.items():
+            n = len(tage)
+            if not n:
                 continue
-            n = len(wochen)
-            kat_map = tn_slot_kat_match[uid].get((wt, off), {})
-            for kat_id in kategorie_ids:
-                total += len(kat_map.get(kat_id, set())) / n
+            matched = tn_slot_match.get(uid, {}).get(off, set())
+            total += len(matched) / n
 
         aggregiert.append({
-            "wochentag": wt,
             "slot_start_minuten": off,
             "mittelwert": round(total, 3),
             "maximum": maximum,
@@ -320,11 +360,13 @@ def berechne_raumbedarf(
     datum_von: date,
     datum_bis: date,
     teilnehmer_filter: TeilnehmerFilter | None = None,
+    merkmal_filter: MerkmalFilter | None = None,
 ) -> dict:
     """Recommended capacity units per Tätigkeit (excluding Extern)."""
     _get_gruppen(gruppe_ids)
     eintraege = _load_eintraege(
-        gruppe_ids, datum_von, datum_bis, teilnehmer_filter=teilnehmer_filter
+        gruppe_ids, datum_von, datum_bis,
+        teilnehmer_filter=teilnehmer_filter, merkmal_filter=merkmal_filter,
     )
 
     kat_slot_tn: dict[int, dict[tuple, set]] = defaultdict(
@@ -425,6 +467,7 @@ def berechne_anteile(
     datum_von: date,
     datum_bis: date,
     teilnehmer_filter: TeilnehmerFilter | None = None,
+    merkmal_filter: MerkmalFilter | None = None,
 ) -> dict:
     """Compute time shares per Tätigkeitsgruppe and per Tätigkeit, by weekday.
 
@@ -434,7 +477,8 @@ def berechne_anteile(
     so the distribution *within* actual working time is legible on its own.
     """
     eintraege = _load_eintraege(
-        gruppe_ids, datum_von, datum_bis, teilnehmer_filter=teilnehmer_filter
+        gruppe_ids, datum_von, datum_bis,
+        teilnehmer_filter=teilnehmer_filter, merkmal_filter=merkmal_filter
     )
 
     # Keyed by the human label (current Arbeitsform or legacy
@@ -701,13 +745,23 @@ def export_rohdaten(
         idx = index_map.get(key)
         if idx is None:
             continue
+        eff_arbeitsort = e.effective_arbeitsort
+        eff_rueckzugsbedarf = e.effective_rueckzugsbedarf
+        eff_gruppengroesse = e.effective_gruppengroesse
+        eff_teilnehmerkreis = e.effective_teilnehmerkreis
         eintraege.append({
             "t": idx,
             "k": e.kategorie_id,
             "wd": e.datum.weekday(),
             "kw": _iso_kw(e.datum),
+            "d": e.datum.isoformat(),
             "von": time_to_minutes(e.zeit_von),
             "bis": time_to_minutes(e.zeit_bis),
+            # Effective Merkmal-Werte (Kategorie-Vorgabe oder Teilnehmer-Angabe).
+            "ao": eff_arbeitsort.value if eff_arbeitsort else None,
+            "rb": eff_rueckzugsbedarf.value if eff_rueckzugsbedarf else None,
+            "gg": eff_gruppengroesse.value if eff_gruppengroesse else None,
+            "tk": eff_teilnehmerkreis.value if eff_teilnehmerkreis else None,
         })
 
     kategorien = [

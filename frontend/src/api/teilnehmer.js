@@ -1,6 +1,7 @@
 import { del, get, post, put } from "./client";
 
-export const getKategorien  = ()      => get("/api/kategorien");
+export const getKategorien  = (gId)   =>
+  get(gId ? `/api/kategorien?gruppe_id=${gId}` : "/api/kategorien");
 export const getMeineGruppen = ()     => get("/api/meine-gruppen");
 export const getDashboard   = (gId)   => get(`/api/dashboard?gruppe_id=${gId}`);
 

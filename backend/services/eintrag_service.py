@@ -18,12 +18,16 @@ from constants import (
 )
 from extensions import db
 from models import (
+    Arbeitsort,
     Einreichung,
     EinreichungStatus,
     Eintrag,
     Gruppe,
+    Gruppengroesse,
     Kategorie,
     GruppenMitglied,
+    Rueckzugsbedarf,
+    Teilnehmerkreis,
 )
 
 
@@ -110,6 +114,35 @@ def list_eintraege(user_id: int, gruppe_id: int,
     return result
 
 
+_OFFENE_FELD_ENUMS = {
+    "arbeitsort": (Arbeitsort, "Arbeitsort"),
+    "rueckzugsbedarf": (Rueckzugsbedarf, "Rückzugsbedarf"),
+    "gruppengroesse": (Gruppengroesse, "Gruppengrösse"),
+    "teilnehmerkreis": (Teilnehmerkreis, "Teilnehmendenkreis"),
+}
+
+
+def _resolve_offene_merkmale(kategorie: Kategorie, data: dict) -> dict:
+    """Resolve the participant-supplied attribute values for a Kategorie.
+
+    Fields the Kategorie already defines are authoritative and always come
+    back ``None`` here (any value submitted for them is ignored, not just
+    trusted from the client). Fields the Kategorie left open are required
+    and validated against the corresponding enum.
+    """
+    werte = {"arbeitsort": None, "rueckzugsbedarf": None, "gruppengroesse": None, "teilnehmerkreis": None}
+    for feld in kategorie.offene_merkmale:
+        enum_cls, label = _OFFENE_FELD_ENUMS[feld]
+        raw = data.get(feld)
+        if not raw:
+            raise ValidationError(f"{label} ist für diese Tätigkeit anzugeben.")
+        try:
+            werte[feld] = enum_cls(raw)
+        except ValueError as exc:
+            raise ValidationError(f"Ungültiger Wert für {label}: {raw}") from exc
+    return werte
+
+
 def create_eintrag(user_id: int, gruppe_id: int, data: dict, als_admin: bool = False) -> Eintrag:
     """Create a new time-block entry after validation.
 
@@ -142,6 +175,8 @@ def create_eintrag(user_id: int, gruppe_id: int, data: dict, als_admin: bool = F
     if kategorie is None or not kategorie.aktiv:
         raise ValidationError("Kategorie nicht gefunden oder nicht aktiv.")
 
+    merkmale = _resolve_offene_merkmale(kategorie, data)
+
     _check_overlap(user_id, gruppe_id, datum, zeit_von, zeit_bis)
 
     eintrag = Eintrag(
@@ -151,6 +186,7 @@ def create_eintrag(user_id: int, gruppe_id: int, data: dict, als_admin: bool = F
         datum=datum,
         zeit_von=zeit_von,
         zeit_bis=zeit_bis,
+        **merkmale,
     )
     db.session.add(eintrag)
     _get_or_create_einreichung(user_id, gruppe_id)
@@ -184,6 +220,14 @@ def update_eintrag(user_id: int, eintrag_id: int, data: dict, als_admin: bool = 
         if kategorie is None or not kategorie.aktiv:
             raise ValidationError("Kategorie nicht gefunden oder nicht aktiv.")
         eintrag.kategorie_id = int(data["kategorie_id"])
+    else:
+        kategorie = eintrag.kategorie
+
+    merkmale = _resolve_offene_merkmale(kategorie, data)
+    eintrag.arbeitsort = merkmale["arbeitsort"]
+    eintrag.rueckzugsbedarf = merkmale["rueckzugsbedarf"]
+    eintrag.gruppengroesse = merkmale["gruppengroesse"]
+    eintrag.teilnehmerkreis = merkmale["teilnehmerkreis"]
 
     _check_overlap(user_id, eintrag.gruppe_id, datum, zeit_von, zeit_bis, exclude_id=eintrag_id)
 

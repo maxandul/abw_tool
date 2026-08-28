@@ -189,5 +189,13 @@ def get_dashboard():
 @login_required
 def get_kategorien():
     """Return active, current-structure categories (Kategorien from the
-    superseded Arbeitsform-less system are not offered for new entries)."""
-    return ok(kategorie_service.list_kategorien(nur_aktiv=True, nur_neu=True))
+    superseded Arbeitsform-less system are not offered for new entries).
+
+    Query param: gruppe_id (optional) – if that Gruppe has an explicit
+    Tätigkeiten-Zuordnung, only those are returned.
+    """
+    gruppe_id_raw = request.args.get("gruppe_id")
+    gruppe_id = int(gruppe_id_raw) if gruppe_id_raw else None
+    return ok(
+        kategorie_service.list_kategorien(nur_aktiv=True, nur_neu=True, gruppe_id=gruppe_id)
+    )
