@@ -18,6 +18,7 @@ from constants import (
 )
 from extensions import db
 from models import (
+    Arbeitsform,
     Arbeitsort,
     Einreichung,
     EinreichungStatus,
@@ -114,12 +115,14 @@ def list_eintraege(user_id: int, gruppe_id: int,
     return result
 
 
-_OFFENE_FELD_ENUMS = {
-    "arbeitsort": (Arbeitsort, "Arbeitsort"),
-    "rueckzugsbedarf": (Rueckzugsbedarf, "Rückzugsbedarf"),
-    "gruppengroesse": (Gruppengroesse, "Gruppengrösse"),
-    "teilnehmerkreis": (Teilnehmerkreis, "Teilnehmendenkreis"),
-}
+def _resolve_enum_feld(data: dict, feld: str, enum_cls, label: str):
+    raw = data.get(feld)
+    if not raw:
+        raise ValidationError(f"{label} ist für diese Tätigkeit anzugeben.")
+    try:
+        return enum_cls(raw)
+    except ValueError as exc:
+        raise ValidationError(f"Ungültiger Wert für {label}: {raw}") from exc
 
 
 def _resolve_offene_merkmale(kategorie: Kategorie, data: dict) -> dict:
@@ -129,17 +132,37 @@ def _resolve_offene_merkmale(kategorie: Kategorie, data: dict) -> dict:
     back ``None`` here (any value submitted for them is ignored, not just
     trusted from the client). Fields the Kategorie left open are required
     and validated against the corresponding enum.
+
+    Rückzugsbedarf is only ever relevant when the (effective) Arbeitsort is
+    "Üblicher Arbeitsplatz/Standort" – if the Kategorie leaves Arbeitsort open
+    too, this is only known once the participant's own choice is resolved.
     """
     werte = {"arbeitsort": None, "rueckzugsbedarf": None, "gruppengroesse": None, "teilnehmerkreis": None}
-    for feld in kategorie.offene_merkmale:
-        enum_cls, label = _OFFENE_FELD_ENUMS[feld]
-        raw = data.get(feld)
-        if not raw:
-            raise ValidationError(f"{label} ist für diese Tätigkeit anzugeben.")
-        try:
-            werte[feld] = enum_cls(raw)
-        except ValueError as exc:
-            raise ValidationError(f"Ungültiger Wert für {label}: {raw}") from exc
+
+    if kategorie.arbeitsform == Arbeitsform.EINZELARBEIT:
+        if kategorie.arbeitsort is not None:
+            arbeitsort = kategorie.arbeitsort
+        else:
+            arbeitsort = _resolve_enum_feld(data, "arbeitsort", Arbeitsort, "Arbeitsort")
+            werte["arbeitsort"] = arbeitsort
+
+        if kategorie.rueckzugsbedarf is not None:
+            pass  # bereits fest vorgegeben, bleibt None (effective_* greift auf Kategorie zurück)
+        elif arbeitsort == Arbeitsort.UEBLICHER_ARBEITSPLATZ:
+            werte["rueckzugsbedarf"] = _resolve_enum_feld(
+                data, "rueckzugsbedarf", Rueckzugsbedarf, "Rückzugsbedarf"
+            )
+        # Bei anderem Arbeitsort entfällt Rückzugsbedarf – nicht anfordern.
+
+    elif kategorie.arbeitsform == Arbeitsform.MEETING:
+        for feld, enum_cls, label in (
+            ("gruppengroesse", Gruppengroesse, "Gruppengrösse"),
+            ("teilnehmerkreis", Teilnehmerkreis, "Teilnehmendenkreis"),
+            ("rueckzugsbedarf", Rueckzugsbedarf, "Rückzugsbedarf"),
+        ):
+            if getattr(kategorie, feld) is None:
+                werte[feld] = _resolve_enum_feld(data, feld, enum_cls, label)
+
     return werte
 
 

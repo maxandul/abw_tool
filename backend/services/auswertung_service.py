@@ -290,19 +290,21 @@ def berechne_lastprofil(
     teilnehmer_filter: TeilnehmerFilter | None = None,
     merkmal_filter: MerkmalFilter | None = None,
 ) -> dict:
-    """Compute occupancy per time-slot, collapsed onto a single generic workday.
+    """Compute occupancy per time-slot, in two different aggregations.
 
-    The whole survey period (every weekday, every week) is treated as
-    repeated instances of one workday: "Mittelwert" is, per participant, the
-    share of their recorded workdays on which they needed this slot for one
-    of the selected Tätigkeiten, summed across participants (1.0 = needed
-    literally every workday → a fixed desk is required; 0.2 = on average one
-    day out of five). "Maximum" is the largest number of distinct
-    participants ever recorded needing that slot on any single day, pooled
-    across the whole period.
+    "Maximum" keeps the full Mo–Fr week: per (Wochentag, Zeit-Slot) the
+    largest number of distinct participants ever recorded needing that slot
+    on any single occurrence of that weekday, pooled across all weeks.
+
+    "Mittelwert" collapses the whole survey period (every weekday, every
+    week) onto a single generic workday: per participant, the share of their
+    recorded workdays on which they needed this slot for one of the selected
+    Tätigkeiten, summed across participants (1.0 = needed literally every
+    workday → a fixed desk is required; 0.2 = on average one day out of
+    five).
     """
     if not kategorie_ids:
-        return {"slots": []}
+        return {"maximum_slots": [], "mittelwert_slots": []}
 
     kat_eintraege = _load_eintraege(
         gruppe_ids, datum_von, datum_bis,
@@ -316,15 +318,16 @@ def berechne_lastprofil(
     )
 
     # Distinct recorded workdays per participant – the denominator for
-    # "Mittelwert" (a day is the atomic unit now, not a specific weekday).
+    # "Mittelwert" (a day is the atomic unit there, not a specific weekday).
     tn_tage: dict[int, set] = defaultdict(set)
     for e in alle_eintraege:
         tn_tage[e.user_id].add(e.datum)
 
     tn_slot_match: dict = defaultdict(lambda: defaultdict(set))  # uid -> slot -> {dates}
-    slot_tn: dict[int, set] = defaultdict(set)  # slot -> {uid}
+    wt_slot_tn: dict[tuple, set] = defaultdict(set)  # (wochentag, slot) -> {uid}
 
     for e in kat_eintraege:
+        wt = e.datum.weekday()
         von_min = time_to_minutes(e.zeit_von)
         bis_min = time_to_minutes(e.zeit_bis)
         slot = von_min
@@ -332,12 +335,17 @@ def berechne_lastprofil(
             if TAG_START_MINUTEN <= slot < TAG_END_MINUTEN:
                 off = slot - TAG_START_MINUTEN
                 tn_slot_match[e.user_id][off].add(e.datum)
-                slot_tn[off].add(e.user_id)
+                wt_slot_tn[(wt, off)].add(e.user_id)
             slot += SLOT_MINUTES
 
-    aggregiert = []
-    for off, uid_set in slot_tn.items():
-        maximum = len(uid_set)
+    maximum_slots = [
+        {"wochentag": wt, "slot_start_minuten": off, "maximum": len(uid_set)}
+        for (wt, off), uid_set in wt_slot_tn.items()
+    ]
+
+    alle_slots = {off for offs in tn_slot_match.values() for off in offs}
+    mittelwert_slots = []
+    for off in alle_slots:
         total = 0.0
         for uid, tage in tn_tage.items():
             n = len(tage)
@@ -345,14 +353,9 @@ def berechne_lastprofil(
                 continue
             matched = tn_slot_match.get(uid, {}).get(off, set())
             total += len(matched) / n
+        mittelwert_slots.append({"slot_start_minuten": off, "mittelwert": round(total, 3)})
 
-        aggregiert.append({
-            "slot_start_minuten": off,
-            "mittelwert": round(total, 3),
-            "maximum": maximum,
-        })
-
-    return {"slots": aggregiert}
+    return {"maximum_slots": maximum_slots, "mittelwert_slots": mittelwert_slots}
 
 
 def berechne_raumbedarf(

@@ -68,6 +68,17 @@ function TaetigkeitForm({ initial, defaultArbeitsform, onSave, onCancel }) {
     }));
   };
 
+  const onArbeitsortChange = (e) => {
+    const arbeitsort = e.target.value;
+    setForm(f => ({
+      ...f,
+      arbeitsort,
+      // Rückzugsbedarf entfällt bei allen Arbeitsorten ausser dem üblichen
+      // Arbeitsplatz/Standort – bereits gesetzte Werte werden dann verworfen.
+      rueckzugsbedarf: arbeitsort === "UEBLICHER_ARBEITSPLATZ" ? f.rueckzugsbedarf : "",
+    }));
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     setError("");
@@ -104,7 +115,7 @@ function TaetigkeitForm({ initial, defaultArbeitsform, onSave, onCancel }) {
       </div>
 
       {showArbeitsort(form.arbeitsform) && (
-        <Select label="Arbeitsort" value={form.arbeitsort} onChange={set("arbeitsort")} options={ARBEITSORT_OPTS} />
+        <Select label="Arbeitsort" value={form.arbeitsort} onChange={onArbeitsortChange} options={ARBEITSORT_OPTS} />
       )}
       {showGruppengroesse(form.arbeitsform) && (
         <Select label="Gruppengrösse" value={form.gruppengroesse} onChange={set("gruppengroesse")} options={GRUPPENGROESSE_OPTS} />
@@ -112,7 +123,7 @@ function TaetigkeitForm({ initial, defaultArbeitsform, onSave, onCancel }) {
       {showTeilnehmerkreis(form.arbeitsform) && (
         <Select label="Teilnehmendenkreis" value={form.teilnehmerkreis} onChange={set("teilnehmerkreis")} options={TEILNEHMERKREIS_OPTS} />
       )}
-      {showRueckzugsbedarf(form.arbeitsform) && (
+      {showRueckzugsbedarf(form.arbeitsform, form.arbeitsort) && (
         <Select label="Rückzugsbedarf" value={form.rueckzugsbedarf} onChange={set("rueckzugsbedarf")} options={RUECKZUGSBEDARF_OPTS} />
       )}
       {showAbwesenheitGrund(form.arbeitsform) && (

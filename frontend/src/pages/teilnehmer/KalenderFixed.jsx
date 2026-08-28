@@ -85,6 +85,17 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
     }));
   };
 
+  const onArbeitsortChange = (e) => {
+    const arbeitsort = e.target.value;
+    setForm(f => ({
+      ...f,
+      arbeitsort,
+      // Rückzugsbedarf entfällt bei allen Arbeitsorten ausser dem üblichen
+      // Arbeitsplatz/Standort.
+      rueckzugsbedarf: arbeitsort === "UEBLICHER_ARBEITSPLATZ" ? f.rueckzugsbedarf : "",
+    }));
+  };
+
   const submit = async (e) => {
     e.preventDefault(); setError(""); setLoading(true);
     const { error: err } = await onSave(form);
@@ -113,9 +124,15 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
   }
 
   const groups = groupKategorien(sorted);
-  const offen = selKat?.offene_merkmale ?? [];
+  // Rückzugsbedarf ist nur relevant, wenn der (fest vorgegebene oder gerade
+  // ausgewählte) Arbeitsort dem üblichen Arbeitsplatz/Standort entspricht,
+  // oder noch offen ist.
+  const effectiverArbeitsort = selKat?.arbeitsort || form.arbeitsort;
+  const offen = (selKat?.offene_merkmale ?? []).filter(f =>
+    f !== "rueckzugsbedarf" || !effectiverArbeitsort || effectiverArbeitsort === "UEBLICHER_ARBEITSPLATZ"
+  );
   const anwendbar = applicableFelder(selKat?.arbeitsform);
-  const gesperrt = anwendbar.filter(f => !offen.includes(f));
+  const gesperrt = anwendbar.filter(f => selKat?.[f]);
 
   return (
     <Modal title={initial?.id ? "Eintrag bearbeiten" : "Neuer Eintrag"} onClose={onClose}>
@@ -157,7 +174,7 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
         {offen.map(f => (
           <div key={f}>
             <label className="label">{OFFENE_FELD_META[f].label} *</label>
-            <select className="input" value={form[f]} onChange={set(f)} required>
+            <select className="input" value={form[f]} onChange={f === "arbeitsort" ? onArbeitsortChange : set(f)} required>
               <option value="" disabled>– auswählen –</option>
               {OFFENE_FELD_META[f].options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>

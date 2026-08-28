@@ -168,7 +168,18 @@ class Kategorie(db.Model):
         if self.arbeitsform is None:
             return []
         if self.arbeitsform == Arbeitsform.EINZELARBEIT:
-            felder = ["arbeitsort", "rueckzugsbedarf"]
+            felder = []
+            if self.arbeitsort is None:
+                felder.append("arbeitsort")
+            # Rückzugsbedarf ist nur beim üblichen Arbeitsplatz/Standort relevant.
+            # Ist der Arbeitsort selbst noch offen, hängt das erst von der
+            # späteren Wahl der Teilnehmenden ab – als potenziell offenes
+            # Merkmal trotzdem gelistet.
+            if self.rueckzugsbedarf is None and (
+                self.arbeitsort is None or self.arbeitsort == Arbeitsort.UEBLICHER_ARBEITSPLATZ
+            ):
+                felder.append("rueckzugsbedarf")
+            return felder
         elif self.arbeitsform == Arbeitsform.MEETING:
             felder = ["gruppengroesse", "teilnehmerkreis", "rueckzugsbedarf"]
         else:

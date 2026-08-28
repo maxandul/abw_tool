@@ -11,6 +11,7 @@ import {
 import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
 
+const WT_NAMEN = ["Mo", "Di", "Mi", "Do", "Fr"];
 const SLOT_START_H = 7;
 const TOTAL_SLOTS = 12 * 4; // 07:00–19:00
 
@@ -19,19 +20,73 @@ function slotLabel(slotMin) {
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
-// ── Heatmap: einzelner kollabierter Tag ─────────────────────────────────────
-// Der gesamte Erhebungszeitraum (alle Wochentage, alle Wochen) wird auf einen
-// einzigen generischen Arbeitstag heruntergebrochen; pro Zeit-Slot zeigt die
-// Spalte den Mittelwert bzw. das Maximum über diesen Tag.
+// ── Heatmap ──────────────────────────────────────────────────────────────────
+// "Maximum" zeigt die volle Arbeitswoche (Mo–Fr): pro Zeit-Slot und Wochentag
+// die grösste je an einem Tag gleichzeitig beobachtete Personenzahl, über den
+// gesamten Erhebungszeitraum gepoolt.
+// "Mittelwert" bricht den gesamten Erhebungszeitraum auf einen einzigen,
+// generischen Arbeitstag herunter: eine Spalte, Wert = Anteil der erfassten
+// Arbeitstage, an denen der Slot gebraucht wurde.
 function Heatmap({ data, anzeige }) {
-  const { slots } = data;
+  if (anzeige === "maximum") {
+    const slots = data.maximum_slots ?? [];
+    const map = {};
+    slots.forEach(s => { map[`${s.wochentag}_${s.slot_start_minuten}`] = s; });
+    const globalMax = Math.max(0.001, ...slots.map(s => s.maximum));
+
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-400 shrink-0">0</span>
+          <div className="flex-1 h-2 rounded-full" style={{
+            background: "linear-gradient(to right, #f1f5f9, rgba(30,58,95,0.15), rgba(30,58,95,0.55), rgba(30,58,95,1))"
+          }} />
+          <span className="text-xs text-slate-400 shrink-0">{Math.round(globalMax)} Pers.</span>
+        </div>
+        <table className="w-full table-fixed text-xs border-collapse">
+          <thead>
+            <tr>
+              <th className="text-slate-400 font-normal pr-2 text-right pb-1" style={{ width: "3rem" }}>Zeit</th>
+              {WT_NAMEN.map(d => <th key={d} className="text-center text-slate-600 pb-1 font-semibold">{d}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: TOTAL_SLOTS }, (_, si) => {
+              const slotMin = si * 15;
+              return (
+                <tr key={si}>
+                  <td className="pr-2 text-slate-400 text-right leading-none"
+                    style={{ fontSize: "0.6rem", width: "3rem", height: "1.1rem" }}>
+                    {slotMin % 60 === 0 ? slotLabel(slotMin) : ""}
+                  </td>
+                  {[0, 1, 2, 3, 4].map(wt => {
+                    const s = map[`${wt}_${slotMin}`];
+                    const val = s ? s.maximum : 0;
+                    const intensity = val / globalMax;
+                    const bg = val > 0 ? `rgba(30,58,95,${Math.max(0.07, intensity).toFixed(2)})` : "#f8fafc";
+                    const fg = intensity > 0.45 ? "#fff" : "#475569";
+                    const tip = s ? `${WT_NAMEN[wt]} ${slotLabel(slotMin)} · Max ${s.maximum}` : "";
+                    return (
+                      <td key={wt} className="text-center cursor-default"
+                        style={{ background: bg, color: fg, fontSize: "0.58rem", height: "1.1rem" }}
+                        title={tip}>
+                        {val > 0 ? String(Math.round(val)) : ""}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  const slots = data.mittelwert_slots ?? [];
   const map = {};
   slots.forEach(s => { map[s.slot_start_minuten] = s; });
-
-  const allVals = slots.map(s => anzeige === "maximum" ? s.maximum : s.mittelwert);
-  const globalMax = Math.max(0.001, ...allVals);
-  const fmtVal = v => anzeige === "maximum" ? String(Math.round(v)) : v.toFixed(2);
-  const maxLabel = anzeige === "maximum" ? `${Math.round(globalMax)} Pers.` : globalMax.toFixed(2);
+  const globalMax = Math.max(0.001, ...slots.map(s => s.mittelwert));
 
   return (
     <div className="space-y-2 max-w-xs">
@@ -40,7 +95,7 @@ function Heatmap({ data, anzeige }) {
         <div className="flex-1 h-2 rounded-full" style={{
           background: "linear-gradient(to right, #f1f5f9, rgba(30,58,95,0.15), rgba(30,58,95,0.55), rgba(30,58,95,1))"
         }} />
-        <span className="text-xs text-slate-400 shrink-0">{maxLabel}</span>
+        <span className="text-xs text-slate-400 shrink-0">{globalMax.toFixed(2)}</span>
       </div>
       <table className="w-full table-fixed text-xs border-collapse">
         <thead>
@@ -53,11 +108,11 @@ function Heatmap({ data, anzeige }) {
           {Array.from({ length: TOTAL_SLOTS }, (_, si) => {
             const slotMin = si * 15;
             const s = map[slotMin];
-            const val = s ? (anzeige === "maximum" ? s.maximum : s.mittelwert) : 0;
+            const val = s ? s.mittelwert : 0;
             const intensity = val / globalMax;
             const bg = val > 0 ? `rgba(30,58,95,${Math.max(0.07, intensity).toFixed(2)})` : "#f8fafc";
             const fg = intensity > 0.45 ? "#fff" : "#475569";
-            const tip = s ? `${slotLabel(slotMin)} · Ø ${s.mittelwert.toFixed(2)} · Max ${s.maximum}` : "";
+            const tip = s ? `${slotLabel(slotMin)} · Ø ${s.mittelwert.toFixed(2)}` : "";
             return (
               <tr key={si}>
                 <td className="pr-2 text-slate-400 text-right leading-none"
@@ -67,7 +122,7 @@ function Heatmap({ data, anzeige }) {
                 <td className="text-center cursor-default"
                   style={{ background: bg, color: fg, fontSize: "0.58rem", height: "1.1rem" }}
                   title={tip}>
-                  {val > 0 ? fmtVal(val) : ""}
+                  {val > 0 ? val.toFixed(2) : ""}
                 </td>
               </tr>
             );
@@ -410,7 +465,7 @@ function TaetigkeitFilter({ kategorien, aktiveIds, onToggle }) {
 
 const LP_HINTS = {
   mittelwert: "Mittelwert (Ø Personen pro Tag): Der gesamte Erhebungszeitraum (alle Wochentage, alle Wochen) wird auf einen einzigen, generischen Arbeitstag heruntergebrochen. Pro Teilnehmer wird berechnet, an welchem Anteil seiner erfassten Arbeitstage dieser Slot mit einer der gewählten Tätigkeiten belegt war; diese Anteile werden über alle Teilnehmenden summiert. 1 bedeutet: der Slot wird an jedem Arbeitstag gebraucht (fixer Bedarf); 0.2 (= 1/5) bedeutet: im Schnitt nur an einem von fünf Tagen.",
-  maximum:    "Maximum (Personen): Grösste Anzahl unterschiedlicher Teilnehmender, die diesen Slot an ein und demselben Tag mit einer der gewählten Tätigkeiten belegt haben – über den gesamten Erhebungszeitraum gepoolt (alle Wochentage, alle Wochen).",
+  maximum:    "Maximum (Personen): Zeigt die volle Arbeitswoche (Mo–Fr). Pro Wochentag und Zeit-Slot die grösste Anzahl unterschiedlicher Teilnehmender, die diesen Slot an ein und demselben Tag mit einer der gewählten Tätigkeiten belegt haben – über den gesamten Erhebungszeitraum gepoolt (alle Wochen).",
 };
 
 // ── Sample-Info ──────────────────────────────────────────────────────────────
@@ -726,7 +781,7 @@ export default function AuswertungPage() {
       {gruppeIds.length > 0 && (
         <div className="card">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <h2 className="font-semibold text-slate-800">Lastprofil – Wochenansicht</h2>
+            <h2 className="font-semibold text-slate-800">Lastprofil</h2>
             <div className="flex gap-2">
               {["mittelwert", "maximum"].map(a => (
                 <button key={a} onClick={() => setAnzeige(a)}

@@ -48,8 +48,17 @@ export function applicableFelder(arbeitsform) {
 export const showArbeitsort = (arbeitsform) => arbeitsform === "EINZELARBEIT";
 export const showGruppengroesse = (arbeitsform) => arbeitsform === "MEETING";
 export const showTeilnehmerkreis = (arbeitsform) => arbeitsform === "MEETING";
-export const showRueckzugsbedarf = (arbeitsform) =>
-  arbeitsform === "EINZELARBEIT" || arbeitsform === "MEETING";
+/** Rückzugsbedarf ist bei Meeting immer relevant; bei Einzelarbeit nur, wenn
+ * der (ggf. noch offene) Arbeitsort dem üblichen Arbeitsplatz/Standort
+ * entspricht oder noch offengelassen ist (dann entscheidet später die
+ * Teilnehmerwahl). Bei Homeoffice/anderem VD-Standort/mobil-extern entfällt er. */
+export const showRueckzugsbedarf = (arbeitsform, arbeitsort) => {
+  if (arbeitsform === "MEETING") return true;
+  if (arbeitsform === "EINZELARBEIT") {
+    return !arbeitsort || arbeitsort === "UEBLICHER_ARBEITSPLATZ";
+  }
+  return false;
+};
 export const showAbwesenheitGrund = (arbeitsform) => arbeitsform === "ABWESENHEIT";
 
 /** Suggested hex colors per Arbeitsform (green / blue / gray). */

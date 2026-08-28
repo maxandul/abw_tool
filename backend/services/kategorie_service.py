@@ -75,7 +75,13 @@ def _validate(data: dict, partial: bool = False) -> dict:
         if arbeitsform == Arbeitsform.EINZELARBEIT:
             if data.get("arbeitsort"):
                 cleaned["arbeitsort"] = _enum_or_400(Arbeitsort, data["arbeitsort"], "Arbeitsort")
+            # Rückzugsbedarf ist nur beim üblichen Arbeitsplatz/Standort relevant –
+            # bei Homeoffice, anderem VD-Standort oder mobil/extern entfällt er.
             if data.get("rueckzugsbedarf"):
+                if cleaned["arbeitsort"] != Arbeitsort.UEBLICHER_ARBEITSPLATZ:
+                    raise ValidationError(
+                        "Rückzugsbedarf ist nur bei Arbeitsort «Üblicher Arbeitsplatz/Standort» relevant."
+                    )
                 cleaned["rueckzugsbedarf"] = _enum_or_400(
                     Rueckzugsbedarf, data["rueckzugsbedarf"], "Rückzugsbedarf"
                 )

@@ -132,8 +132,8 @@ _EXPORT_TEMPLATE = """\
     </section>
 
     <section id="lastprofil">
-      <h2>Lastprofil – ein Tag</h2>
-      <p class="muted">Der gesamte Erhebungszeitraum (alle Wochentage, alle Wochen) wird auf einen einzigen, generischen Arbeitstag heruntergebrochen.</p>
+      <h2>Lastprofil</h2>
+      <p class="muted" id="lp-hint"></p>
       <div class="toggle-btns">
         <button id="tb-mittelwert" class="toggle-btn" onclick="setAnzeige('mittelwert')">Mittelwert</button>
         <button id="tb-maximum" class="toggle-btn active" onclick="setAnzeige('maximum')">Maximum</button>
@@ -172,6 +172,7 @@ _EXPORT_TEMPLATE = """\
     const TAG_END = D.tag_end_minuten;
     const SLOT = D.slot_minuten;
     const SLOTS = Math.floor((TAG_END - TAG_START) / SLOT);
+    const TAGE = ['Mo','Di','Mi','Do','Fr'];
     // EINZELARBEIT is shared between the current (Arbeitsform) and the
     // legacy (Tätigkeitsgruppe) structure – the others are structure-specific
     // and never mixed within one dataset in practice.
@@ -242,36 +243,48 @@ _EXPORT_TEMPLATE = """\
     }
 
     // ── Computations (mirror of the Python service) ─────────────────────────────
-    // Lastprofil: der gesamte Erhebungszeitraum (alle Wochentage, alle Wochen)
-    // wird auf einen einzigen generischen Arbeitstag heruntergebrochen – pro
-    // Zeit-Slot ist "Mittelwert" der Anteil der erfassten Arbeitstage, an denen
-    // der Slot mit einer der gewählten Tätigkeiten belegt war, summiert über
-    // alle Teilnehmenden; "Maximum" die grösste Anzahl Personen, die diesen
-    // Slot je an ein und demselben Tag belegt haben.
+    // Lastprofil, zwei unterschiedliche Aggregationen:
+    // "Maximum" zeigt die volle Arbeitswoche (Mo–Fr): pro Wochentag und
+    // Zeit-Slot die grösste je an ein und demselben Tag beobachtete
+    // Personenzahl, über den gesamten Erhebungszeitraum gepoolt (alle Wochen).
+    // "Mittelwert" bricht den gesamten Erhebungszeitraum (alle Wochentage,
+    // alle Wochen) auf einen einzigen generischen Arbeitstag herunter: pro
+    // Teilnehmer der Anteil seiner erfassten Arbeitstage, an denen der Slot
+    // mit einer der gewählten Tätigkeiten belegt war, summiert über alle
+    // Teilnehmenden.
     function computeLastprofil(tnSet) {
       const katIds = [...state.kategorie_ids];
-      if (!katIds.length) return { slots: [] };
+      if (!katIds.length) return { maximum_slots: [], mittelwert_slots: [] };
       const katSet = new Set(katIds);
       const all = D.eintraege.filter(e => tnSet.has(e.t) && matchMerkmal(e));
       const katE = all.filter(e => katSet.has(e.k));
       const tnTage = {};
       for (const e of all) (tnTage[e.t] = tnTage[e.t] || new Set()).add(e.d);
 
-      const tsk = {};   // uid -> slot -> Set(dates)
-      const slotTn = {}; // slot -> Set(uid)
+      const tsk = {};       // uid -> slot -> Set(dates)
+      const wtSlotTn = {};  // "wt_slot" -> Set(uid)
       for (const e of katE) {
         for (let slot = e.von; slot < e.bis; slot += SLOT) {
           if (slot >= TAG_START && slot < TAG_END) {
             const off = slot - TAG_START;
             const a = (tsk[e.t] = tsk[e.t] || {});
             (a[off] = a[off] || new Set()).add(e.d);
-            (slotTn[off] = slotTn[off] || new Set()).add(e.t);
+            const key = e.wd + '_' + off;
+            (wtSlotTn[key] = wtSlotTn[key] || new Set()).add(e.t);
           }
         }
       }
-      const slots = [];
-      for (const off in slotTn) {
-        const maximum = slotTn[off].size;
+
+      const maximum_slots = [];
+      for (const key in wtSlotTn) {
+        const [wt, off] = key.split('_').map(Number);
+        maximum_slots.push({ wochentag: wt, slot_start_minuten: off, maximum: wtSlotTn[key].size });
+      }
+
+      const alleOffs = new Set();
+      for (const uid in tsk) for (const off in tsk[uid]) alleOffs.add(Number(off));
+      const mittelwert_slots = [];
+      for (const off of alleOffs) {
         let total = 0;
         for (const uid in tnTage) {
           const tage = tnTage[uid];
@@ -280,9 +293,10 @@ _EXPORT_TEMPLATE = """\
           const matched = (tsk[uid] || {})[off];
           total += (matched ? matched.size : 0) / n;
         }
-        slots.push({ slot_start_minuten: Number(off), mittelwert: r3(total), maximum });
+        mittelwert_slots.push({ slot_start_minuten: off, mittelwert: r3(total) });
       }
-      return { slots };
+
+      return { maximum_slots, mittelwert_slots };
     }
 
     function computeRaumbedarf(tnSet) {
@@ -463,10 +477,16 @@ _EXPORT_TEMPLATE = """\
       if (state.kategorie_ids.has(id)) state.kategorie_ids.delete(id); else state.kategorie_ids.add(id);
       renderKatFilter(); renderLastprofil();
     }
+    const LP_HINTS = {
+      mittelwert: 'Mittelwert (Ø Personen pro Tag): Der gesamte Erhebungszeitraum (alle Wochentage, alle Wochen) wird auf einen einzigen, generischen Arbeitstag heruntergebrochen. Pro Teilnehmer wird berechnet, an welchem Anteil seiner erfassten Arbeitstage dieser Slot mit einer der gewählten Tätigkeiten belegt war; diese Anteile werden über alle Teilnehmenden summiert. 1 bedeutet: der Slot wird an jedem Arbeitstag gebraucht (fixer Bedarf); 0.2 (= 1/5) bedeutet: im Schnitt nur an einem von fünf Tagen.',
+      maximum: 'Maximum (Personen): Zeigt die volle Arbeitswoche (Mo–Fr). Pro Wochentag und Zeit-Slot die grösste Anzahl unterschiedlicher Teilnehmender, die diesen Slot an ein und demselben Tag mit einer der gewählten Tätigkeiten belegt haben – über den gesamten Erhebungszeitraum gepoolt (alle Wochen).',
+    };
+
     function setAnzeige(val) {
       state.anzeige = val;
       document.getElementById('tb-mittelwert').classList.toggle('active', val === 'mittelwert');
       document.getElementById('tb-maximum').classList.toggle('active', val === 'maximum');
+      document.getElementById('lp-hint').textContent = LP_HINTS[val];
       renderLastprofil();
     }
 
@@ -571,13 +591,41 @@ _EXPORT_TEMPLATE = """\
         return;
       }
       const anzeige = state.anzeige;
+
+      if (anzeige === 'maximum') {
+        const map = {};
+        data.maximum_slots.forEach(s => { map[s.wochentag + '_' + s.slot_start_minuten] = s; });
+        const globalMax = Math.max(0.001, ...data.maximum_slots.map(s => s.maximum));
+        document.getElementById('legend-max').textContent = Math.round(globalMax) + ' Pers.';
+
+        let hdr = '<tr><th class="t-axis">Zeit</th>' + TAGE.map(d => `<th>${d}</th>`).join('') + '</tr>';
+        let rows = '';
+        for (let si = 0; si < SLOTS; si++) {
+          const slotMin = si * SLOT;
+          const totalMin = TAG_START + slotMin;
+          const hh = String(Math.floor(totalMin / 60)).padStart(2, '0');
+          const mm = String(totalMin % 60).padStart(2, '0');
+          const label = (totalMin % 60 === 0) ? `${hh}:${mm}` : '';
+          rows += `<tr><td class="t-axis">${label}</td>`;
+          for (let wt = 0; wt < 5; wt++) {
+            const s = map[wt + '_' + slotMin];
+            const val = s ? s.maximum : 0;
+            const intensity = val / globalMax;
+            const bg = val > 0 ? `rgba(30,58,95,${Math.max(0.07, intensity).toFixed(2)})` : '#f8fafc';
+            const fg = intensity > 0.45 ? '#fff' : '#475569';
+            const tip = s ? `${TAGE[wt]} ${hh}:${mm} · Max ${s.maximum}` : '';
+            rows += `<td style="background:${bg};color:${fg}" title="${tip}">${val > 0 ? String(Math.round(val)) : ''}</td>`;
+          }
+          rows += '</tr>';
+        }
+        cont.innerHTML = `<table class="heatmap-table"><thead>${hdr}</thead><tbody>${rows}</tbody></table>`;
+        return;
+      }
+
       const map = {};
-      data.slots.forEach(s => { map[s.slot_start_minuten] = s; });
-      const vals = data.slots.map(s => anzeige === 'maximum' ? s.maximum : s.mittelwert);
-      const globalMax = Math.max(0.001, ...vals);
-      const fmtVal = v => anzeige === 'maximum' ? String(Math.round(v)) : v.toFixed(2);
-      document.getElementById('legend-max').textContent =
-        anzeige === 'maximum' ? Math.round(globalMax) + ' Pers.' : globalMax.toFixed(2);
+      data.mittelwert_slots.forEach(s => { map[s.slot_start_minuten] = s; });
+      const globalMax = Math.max(0.001, ...data.mittelwert_slots.map(s => s.mittelwert));
+      document.getElementById('legend-max').textContent = globalMax.toFixed(2);
 
       let hdr = '<tr><th class="t-axis">Zeit</th><th>Ø Tag</th></tr>';
       let rows = '';
@@ -588,13 +636,13 @@ _EXPORT_TEMPLATE = """\
         const mm = String(totalMin % 60).padStart(2, '0');
         const label = (totalMin % 60 === 0) ? `${hh}:${mm}` : '';
         const s = map[slotMin];
-        const val = s ? (anzeige === 'maximum' ? s.maximum : s.mittelwert) : 0;
+        const val = s ? s.mittelwert : 0;
         const intensity = val / globalMax;
         const bg = val > 0 ? `rgba(30,58,95,${Math.max(0.07, intensity).toFixed(2)})` : '#f8fafc';
         const fg = intensity > 0.45 ? '#fff' : '#475569';
-        const tip = s ? `${hh}:${mm} · Ø ${s.mittelwert.toFixed(2)} · Max ${s.maximum}` : '';
+        const tip = s ? `${hh}:${mm} · Ø ${s.mittelwert.toFixed(2)}` : '';
         rows += `<tr><td class="t-axis">${label}</td>` +
-          `<td style="background:${bg};color:${fg}" title="${tip}">${val > 0 ? fmtVal(val) : ''}</td></tr>`;
+          `<td style="background:${bg};color:${fg}" title="${tip}">${val > 0 ? val.toFixed(2) : ''}</td></tr>`;
       }
       cont.innerHTML = `<table class="heatmap-table" style="max-width:16rem"><thead>${hdr}</thead><tbody>${rows}</tbody></table>`;
     }
@@ -678,6 +726,7 @@ _EXPORT_TEMPLATE = """\
     renderFilters();
     renderMerkmalFilter();
     renderKatFilter();
+    document.getElementById('lp-hint').textContent = LP_HINTS[state.anzeige];
     renderAll();
   </script>
 </body>
