@@ -21,9 +21,9 @@ const ARBEITSFORM_OPTS = ARBEITSFORM_ORDER.map(v => ({ value: v, label: ARBEITSF
 function Select({ label, value, onChange, options }) {
   return (
     <div>
-      <label className="label">{label} *</label>
+      <label className="label">{label} <span className="text-slate-400 font-normal">(optional)</span></label>
       <select className="input" value={value ?? ""} onChange={onChange}>
-        <option value="" disabled>– auswählen –</option>
+        <option value="">– keine Angabe –</option>
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </div>
@@ -131,7 +131,7 @@ function KategorieRow({ k, draggable, dragHandlers, dragOver, onEdit, onDeactiva
         <span className="inline-block w-5 h-5 rounded" style={{ background: k.farbe ?? "#ccc" }} />
       </td>
       <td className="table-td font-medium sticky left-10 z-10 bg-white border-r border-slate-100">{k.name}</td>
-      <td className="table-td text-xs text-slate-500 whitespace-normal min-w-[220px]">{formatTaetigkeitMeta(k)}</td>
+      <td className="table-td text-xs text-slate-500 whitespace-normal min-w-[220px]">{formatTaetigkeitMeta(k) || "–"}</td>
       <td className="table-td text-xs text-slate-500 whitespace-normal min-w-[220px]">{k.beschreibung || "–"}</td>
       <td className="table-td">{k.anzahl_eintraege}</td>
       <td className="table-td">

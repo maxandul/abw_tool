@@ -62,7 +62,9 @@ def _validate(data: dict, partial: bool = False) -> dict:
 
         # Reset every attribute field first, then only fill in what applies
         # to the chosen Arbeitsform – prevents stale leftovers from a
-        # previous form state ending up on the saved row.
+        # previous form state ending up on the saved row. All of these are
+        # optional: only Name und Arbeitsform sind Pflicht, die Merkmale
+        # dienen lediglich der Kategorisierung, wo sinnvoll.
         cleaned["arbeitsort"] = None
         cleaned["gruppengroesse"] = None
         cleaned["teilnehmerkreis"] = None
@@ -70,36 +72,30 @@ def _validate(data: dict, partial: bool = False) -> dict:
         cleaned["abwesenheit_grund"] = None
 
         if arbeitsform == Arbeitsform.EINZELARBEIT:
-            if not data.get("arbeitsort"):
-                raise ValidationError("Arbeitsort ist für Einzelarbeit erforderlich.")
-            cleaned["arbeitsort"] = _enum_or_400(Arbeitsort, data["arbeitsort"], "Arbeitsort")
-            if not data.get("rueckzugsbedarf"):
-                raise ValidationError("Rückzugsbedarf ist für Einzelarbeit erforderlich.")
-            cleaned["rueckzugsbedarf"] = _enum_or_400(
-                Rueckzugsbedarf, data["rueckzugsbedarf"], "Rückzugsbedarf"
-            )
+            if data.get("arbeitsort"):
+                cleaned["arbeitsort"] = _enum_or_400(Arbeitsort, data["arbeitsort"], "Arbeitsort")
+            if data.get("rueckzugsbedarf"):
+                cleaned["rueckzugsbedarf"] = _enum_or_400(
+                    Rueckzugsbedarf, data["rueckzugsbedarf"], "Rückzugsbedarf"
+                )
         elif arbeitsform == Arbeitsform.MEETING:
-            if not data.get("gruppengroesse"):
-                raise ValidationError("Gruppengrösse ist für Meeting erforderlich.")
-            cleaned["gruppengroesse"] = _enum_or_400(
-                Gruppengroesse, data["gruppengroesse"], "Gruppengrösse"
-            )
-            if not data.get("teilnehmerkreis"):
-                raise ValidationError("Teilnehmendenkreis ist für Meeting erforderlich.")
-            cleaned["teilnehmerkreis"] = _enum_or_400(
-                Teilnehmerkreis, data["teilnehmerkreis"], "Teilnehmendenkreis"
-            )
-            if not data.get("rueckzugsbedarf"):
-                raise ValidationError("Rückzugsbedarf ist für Meeting erforderlich.")
-            cleaned["rueckzugsbedarf"] = _enum_or_400(
-                Rueckzugsbedarf, data["rueckzugsbedarf"], "Rückzugsbedarf"
-            )
+            if data.get("gruppengroesse"):
+                cleaned["gruppengroesse"] = _enum_or_400(
+                    Gruppengroesse, data["gruppengroesse"], "Gruppengrösse"
+                )
+            if data.get("teilnehmerkreis"):
+                cleaned["teilnehmerkreis"] = _enum_or_400(
+                    Teilnehmerkreis, data["teilnehmerkreis"], "Teilnehmendenkreis"
+                )
+            if data.get("rueckzugsbedarf"):
+                cleaned["rueckzugsbedarf"] = _enum_or_400(
+                    Rueckzugsbedarf, data["rueckzugsbedarf"], "Rückzugsbedarf"
+                )
         elif arbeitsform == Arbeitsform.ABWESENHEIT:
-            if not data.get("abwesenheit_grund"):
-                raise ValidationError("Grund ist für Abwesenheit erforderlich.")
-            cleaned["abwesenheit_grund"] = _enum_or_400(
-                AbwesenheitGrund, data["abwesenheit_grund"], "Grund"
-            )
+            if data.get("abwesenheit_grund"):
+                cleaned["abwesenheit_grund"] = _enum_or_400(
+                    AbwesenheitGrund, data["abwesenheit_grund"], "Grund"
+                )
 
     return cleaned
 
