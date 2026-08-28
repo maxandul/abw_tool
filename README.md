@@ -15,13 +15,14 @@ Web-Applikation zur Erhebung von Tätigkeitsprofilen im Rahmen einer arbeitsplat
 - Reichen die Erhebung am Ende ein; eingereichte Erhebungen sind gesperrt (Entsperren auf Wunsch möglich).
 
 **Admin**
-- Verwaltet Tätigkeitskategorien (gruppiert nach Tätigkeitsgruppe) und Erhebungen inkl. Teilnehmer.
-- Dashboard mit Fortschritt pro Erhebung. Das Soll ist für alle Teilnehmer gleich (Arbeitstage × 8,4 h): Auch Teilzeitkräfte erfassen die ganze Woche und tragen ihre regulär freie Zeit als Tätigkeit «Teilzeit» ein. Übererfassung Einzelner wird je Teilnehmer auf 100 % begrenzt, damit Lücken anderer sichtbar bleiben.
-- Kann einzelne Teilnehmer-Erhebungen einsehen und im selben Kalender direkt bearbeiten (Admin-Override, unabhängig vom Einreichungsstatus).
+- Verwaltet Tätigkeiten (gruppiert nach Arbeitsform: Einzelarbeit, Besprechung/Meeting, Abwesenheit; je mit passenden Merkmalen wie Arbeitsort, Gruppengrösse, Teilnehmendenkreis, Rückzugsbedarf oder Abwesenheitsgrund; per Drag & Drop sortierbar) und Erhebungen inkl. Teilnehmer.
+  Tätigkeiten aus der ersten Erhebung (vor dieser Umstrukturierung) bleiben als schreibgeschütztes Archiv erhalten und werden für neue Einträge nicht mehr angeboten.
+- Dashboard mit Fortschritt pro Erhebung. Das Soll ist für alle Teilnehmer gleich (Arbeitstage × 8,4 h): Auch Teilzeitkräfte erfassen die ganze Woche und tragen ihre regulär freie Zeit als Abwesenheit mit Grund «Teilzeit» ein. Übererfassung Einzelner wird je Teilnehmer auf 100 % begrenzt, damit Lücken anderer sichtbar bleiben.
+- Kann einzelne Teilnehmer-Erhebungen einsehen und im selben Kalender direkt bearbeiten (Admin-Override, unabhängig vom Einreichungsstatus) sowie Einträge im Namen eines Teilnehmers einreichen (inkl. Lücken-Check), falls dieser das vergessen hat und nicht erreichbar ist.
 - **Auswertung** über eine oder mehrere Erhebungen, mit Filtern nach Teilnehmer-Attributen (Funktion, Organisationseinheit, Beschäftigungsgrad), Wochentagen und Tätigkeiten:
   - *Stichprobe*: Datenbasis (eingereicht/offen, FTE-Summe, erfasste vs. erwartete Stunden, Vollständigkeit; Hinweis auf Teilnehmer unter 85 %).
   - *Lastprofil*: Heatmap über die Woche (Mittelwert/Maximum) für gewählte Tätigkeiten.
-  - *Bedarf nach Tätigkeit* und *Anteilsübersicht* (nach Tätigkeit und Tätigkeitsgruppe).
+  - *Bedarf nach Tätigkeit* und *Anteilsübersicht* (nach Tätigkeit und Arbeitsform, je als 100%-Balken für die gesamte Zeit sowie für die Arbeitszeit ohne Abwesenheit).
   - In die Auswertung fliessen nur **eingereichte** Teilnehmer ein.
 - **HTML-Export**: eigenständige, anonyme Datei (keine Namen/E-Mail-Adressen) der gewählten Erhebung(en). Sie ist interaktiv – Empfänger können darin selbst nach Attributen filtern und Lastprofile erstellen, ganz ohne Server.
 
@@ -30,7 +31,7 @@ Web-Applikation zur Erhebung von Tätigkeitsprofilen im Rahmen einer arbeitsplat
 ## Voraussetzungen
 
 - **Python 3.11+** (auf dem Server-Laptop via IT-Softwarecenter installieren)
-- Node.js / npm (nur auf dem Entwickler-Laptop für den Frontend-Build nötig)
+- Node.js / npm nur für den Frontend-Build nötig – **nicht** auf dem Server-Laptop. Der Download ist im Organisationsnetz gesperrt; der Build wird deshalb auf einem privaten Laptop erzeugt und das fertige Ergebnis (`backend/static/`) direkt mit ins Repo committet (siehe unten). Der Server-Laptop braucht dafür kein Node/npm.
 
 ---
 
@@ -107,6 +108,9 @@ Die aktuelle IP-Adresse des Server-Laptops wird beim Start von `START_SERVER.bat
 4. `START_SERVER.bat` ausführen.
 
 Datenbankmigrationen laufen beim Start automatisch (`flask db upgrade` in `run.py`).
+Der kompilierte Frontend-Stand (`backend/static/`) ist mit im Repo committet – ein
+`git pull` bringt also auch Frontend-Änderungen mit, ohne dass auf dem Server-Laptop
+`build.bat`/Node.js gebraucht wird.
 
 ---
 
@@ -131,7 +135,12 @@ npm run dev
 ```
 build.bat
 ```
-Kopiert `frontend/dist/` nach `backend/static/`.
+Kopiert `frontend/dist/` nach `backend/static/` (bricht bei Fehlern in
+`npm install`/`npm run build` ab, statt stillschweigend einen alten Stand
+auszuliefern). Da Node.js im Organisationsnetz gesperrt ist, läuft dieser
+Schritt auf einem privaten Laptop mit Internetzugang – das Ergebnis in
+`backend/static/` danach committen und pushen/mit ins Repo aufnehmen, damit
+der Server-Laptop es per `git pull` erhält.
 
 ---
 
