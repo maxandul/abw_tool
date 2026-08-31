@@ -3,8 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import {
   getTnEintraegeKontext, getTnEintraege,
   createTnEintrag, updateTnEintrag, deleteTnEintrag,
-  getKategorien,
 } from "../../api/admin";
+import { getKategorien } from "../../api/teilnehmer";
 import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
 import StatusBadge from "../../components/StatusBadge";
@@ -29,10 +29,10 @@ export default function TeilnehmerEintraegePage() {
     createEintrag: (body) => createTnEintrag(gruppeId, userId, body),
     updateEintrag: (id, body) => updateTnEintrag(gruppeId, userId, id, body),
     deleteEintrag: (id) => deleteTnEintrag(gruppeId, userId, id),
-    getKategorien: async () => {
-      const r = await getKategorien();
-      return r.data ? { ...r, data: r.data.filter(k => k.aktiv) } : r;
-    },
+    // Gleiche, auf die Erhebung zugeschnittene Kategorienliste wie im
+    // Teilnehmer-Kalender (aktive, nicht-legacy Tätigkeiten, ggf. per
+    // Gruppen-Zuordnung eingeschränkt) – nicht die volle Admin-Verwaltungsliste.
+    getKategorien: (gId) => getKategorien(gId),
   }), [gruppeId, userId]);
 
   if (error) return <div className="max-w-xl mx-auto p-6"><Alert>{error}</Alert></div>;
