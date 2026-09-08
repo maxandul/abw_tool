@@ -10,6 +10,7 @@ from models import (
     Gruppe,
     Gruppengroesse,
     Kategorie,
+    Raeumlichkeit,
     Rueckzugsbedarf,
     Teilnehmerkreis,
 )
@@ -69,6 +70,7 @@ def _validate(data: dict, partial: bool = False) -> dict:
         cleaned["arbeitsort"] = None
         cleaned["gruppengroesse"] = None
         cleaned["teilnehmerkreis"] = None
+        cleaned["raeumlichkeit"] = None
         cleaned["rueckzugsbedarf"] = None
         cleaned["abwesenheit_grund"] = None
 
@@ -92,9 +94,19 @@ def _validate(data: dict, partial: bool = False) -> dict:
                 )
             if data.get("teilnehmerkreis"):
                 cleaned["teilnehmerkreis"] = _enum_or_400(
-                    Teilnehmerkreis, data["teilnehmerkreis"], "Teilnehmendenkreis"
+                    Teilnehmerkreis, data["teilnehmerkreis"], "Personenkreis"
                 )
+            if data.get("raeumlichkeit"):
+                cleaned["raeumlichkeit"] = _enum_or_400(
+                    Raeumlichkeit, data["raeumlichkeit"], "Räumlichkeit"
+                )
+            # Rückzugsbedarf ist nur beim üblichen Standort relevant – bei
+            # anderem VD-Standort oder extern entfällt er.
             if data.get("rueckzugsbedarf"):
+                if cleaned["raeumlichkeit"] != Raeumlichkeit.UEBLICHER_STANDORT:
+                    raise ValidationError(
+                        "Rückzugsbedarf ist nur bei Räumlichkeit «Üblicher Standort» relevant."
+                    )
                 cleaned["rueckzugsbedarf"] = _enum_or_400(
                     Rueckzugsbedarf, data["rueckzugsbedarf"], "Rückzugsbedarf"
                 )
@@ -162,6 +174,7 @@ def update_kategorie(kategorie_id: int, data: dict, modus: str = "ueberschreiben
             "arbeitsort": cleaned.get("arbeitsort", kategorie.arbeitsort),
             "gruppengroesse": cleaned.get("gruppengroesse", kategorie.gruppengroesse),
             "teilnehmerkreis": cleaned.get("teilnehmerkreis", kategorie.teilnehmerkreis),
+            "raeumlichkeit": cleaned.get("raeumlichkeit", kategorie.raeumlichkeit),
             "rueckzugsbedarf": cleaned.get("rueckzugsbedarf", kategorie.rueckzugsbedarf),
             "abwesenheit_grund": cleaned.get("abwesenheit_grund", kategorie.abwesenheit_grund),
         }

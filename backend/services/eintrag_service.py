@@ -27,6 +27,7 @@ from models import (
     Gruppengroesse,
     Kategorie,
     GruppenMitglied,
+    Raeumlichkeit,
     Rueckzugsbedarf,
     Teilnehmerkreis,
 )
@@ -133,11 +134,16 @@ def _resolve_offene_merkmale(kategorie: Kategorie, data: dict) -> dict:
     trusted from the client). Fields the Kategorie left open are required
     and validated against the corresponding enum.
 
-    Rückzugsbedarf is only ever relevant when the (effective) Arbeitsort is
-    "Üblicher Arbeitsplatz/Standort" – if the Kategorie leaves Arbeitsort open
-    too, this is only known once the participant's own choice is resolved.
+    Rückzugsbedarf is only ever relevant when the (effective) Arbeitsort
+    (Einzelarbeit) resp. Räumlichkeit (Meeting) is "Üblicher
+    Arbeitsplatz/Standort" resp. "Üblicher Standort" – if the Kategorie
+    leaves that field open too, this is only known once the participant's
+    own choice is resolved.
     """
-    werte = {"arbeitsort": None, "rueckzugsbedarf": None, "gruppengroesse": None, "teilnehmerkreis": None}
+    werte = {
+        "arbeitsort": None, "rueckzugsbedarf": None, "gruppengroesse": None,
+        "teilnehmerkreis": None, "raeumlichkeit": None,
+    }
 
     if kategorie.arbeitsform == Arbeitsform.EINZELARBEIT:
         if kategorie.arbeitsort is not None:
@@ -157,11 +163,24 @@ def _resolve_offene_merkmale(kategorie: Kategorie, data: dict) -> dict:
     elif kategorie.arbeitsform == Arbeitsform.MEETING:
         for feld, enum_cls, label in (
             ("gruppengroesse", Gruppengroesse, "Gruppengrösse"),
-            ("teilnehmerkreis", Teilnehmerkreis, "Teilnehmendenkreis"),
-            ("rueckzugsbedarf", Rueckzugsbedarf, "Rückzugsbedarf"),
+            ("teilnehmerkreis", Teilnehmerkreis, "Personenkreis"),
         ):
             if getattr(kategorie, feld) is None:
                 werte[feld] = _resolve_enum_feld(data, feld, enum_cls, label)
+
+        if kategorie.raeumlichkeit is not None:
+            raeumlichkeit = kategorie.raeumlichkeit
+        else:
+            raeumlichkeit = _resolve_enum_feld(data, "raeumlichkeit", Raeumlichkeit, "Räumlichkeit")
+            werte["raeumlichkeit"] = raeumlichkeit
+
+        if kategorie.rueckzugsbedarf is not None:
+            pass  # bereits fest vorgegeben, bleibt None (effective_* greift auf Kategorie zurück)
+        elif raeumlichkeit == Raeumlichkeit.UEBLICHER_STANDORT:
+            werte["rueckzugsbedarf"] = _resolve_enum_feld(
+                data, "rueckzugsbedarf", Rueckzugsbedarf, "Rückzugsbedarf"
+            )
+        # Bei anderer Räumlichkeit entfällt Rückzugsbedarf – nicht anfordern.
 
     return werte
 
@@ -251,6 +270,7 @@ def update_eintrag(user_id: int, eintrag_id: int, data: dict, als_admin: bool = 
     eintrag.rueckzugsbedarf = merkmale["rueckzugsbedarf"]
     eintrag.gruppengroesse = merkmale["gruppengroesse"]
     eintrag.teilnehmerkreis = merkmale["teilnehmerkreis"]
+    eintrag.raeumlichkeit = merkmale["raeumlichkeit"]
 
     _check_overlap(user_id, eintrag.gruppe_id, datum, zeit_von, zeit_bis, exclude_id=eintrag_id)
 

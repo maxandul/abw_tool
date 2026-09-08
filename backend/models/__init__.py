@@ -17,6 +17,7 @@ from .kategorie import (
     Arbeitsort,
     Gruppengroesse,
     Teilnehmerkreis,
+    Raeumlichkeit,
     Rueckzugsbedarf,
     AbwesenheitGrund,
 )
@@ -37,6 +38,7 @@ __all__ = [
     "Arbeitsort",
     "Gruppengroesse",
     "Teilnehmerkreis",
+    "Raeumlichkeit",
     "Rueckzugsbedarf",
     "AbwesenheitGrund",
     "Eintrag",

@@ -60,10 +60,18 @@ class Gruppengroesse(enum.Enum):
 
 
 class Teilnehmerkreis(enum.Enum):
-    """Who takes part in a Meeting."""
+    """Who takes part in a Meeting (shown to users as "Personenkreis")."""
 
     STANDORTINTERN = "STANDORTINTERN"
     STANDORTUEBERGREIFEND_EXTERN = "STANDORTUEBERGREIFEND_EXTERN"
+
+
+class Raeumlichkeit(enum.Enum):
+    """Where a Meeting takes place."""
+
+    UEBLICHER_STANDORT = "UEBLICHER_STANDORT"
+    ANDERER_VD_STANDORT = "ANDERER_VD_STANDORT"
+    EXTERN = "EXTERN"
 
 
 class Rueckzugsbedarf(enum.Enum):
@@ -108,8 +116,14 @@ GRUPPENGROESSE_LABELS = {
 }
 
 TEILNEHMERKREIS_LABELS = {
-    Teilnehmerkreis.STANDORTINTERN: "Standortintern",
-    Teilnehmerkreis.STANDORTUEBERGREIFEND_EXTERN: "Standortübergreifend/extern",
+    Teilnehmerkreis.STANDORTINTERN: "Nur standortintern",
+    Teilnehmerkreis.STANDORTUEBERGREIFEND_EXTERN: "Inkl. standortexternen Personen",
+}
+
+RAEUMLICHKEIT_LABELS = {
+    Raeumlichkeit.UEBLICHER_STANDORT: "Üblicher Standort",
+    Raeumlichkeit.ANDERER_VD_STANDORT: "Anderer VD-Standort",
+    Raeumlichkeit.EXTERN: "Extern",
 }
 
 RUECKZUGSBEDARF_LABELS = {
@@ -153,6 +167,7 @@ class Kategorie(db.Model):
     arbeitsort = db.Column(db.Enum(Arbeitsort), nullable=True)
     gruppengroesse = db.Column(db.Enum(Gruppengroesse), nullable=True)
     teilnehmerkreis = db.Column(db.Enum(Teilnehmerkreis), nullable=True)
+    raeumlichkeit = db.Column(db.Enum(Raeumlichkeit), nullable=True)
     rueckzugsbedarf = db.Column(db.Enum(Rueckzugsbedarf), nullable=True)
     abwesenheit_grund = db.Column(db.Enum(AbwesenheitGrund), nullable=True)
 
@@ -181,10 +196,23 @@ class Kategorie(db.Model):
                 felder.append("rueckzugsbedarf")
             return felder
         elif self.arbeitsform == Arbeitsform.MEETING:
-            felder = ["gruppengroesse", "teilnehmerkreis", "rueckzugsbedarf"]
-        else:
             felder = []
-        return [f for f in felder if getattr(self, f) is None]
+            if self.gruppengroesse is None:
+                felder.append("gruppengroesse")
+            if self.teilnehmerkreis is None:
+                felder.append("teilnehmerkreis")
+            if self.raeumlichkeit is None:
+                felder.append("raeumlichkeit")
+            # Rückzugsbedarf ist nur beim üblichen Standort relevant. Ist die
+            # Räumlichkeit selbst noch offen, hängt das erst von der späteren
+            # Wahl der Teilnehmenden ab – als potenziell offenes Merkmal
+            # trotzdem gelistet.
+            if self.rueckzugsbedarf is None and (
+                self.raeumlichkeit is None or self.raeumlichkeit == Raeumlichkeit.UEBLICHER_STANDORT
+            ):
+                felder.append("rueckzugsbedarf")
+            return felder
+        return []
 
     def to_dict(self) -> dict:
         """Return a JSON-serialisable representation of the Tätigkeit."""
@@ -216,6 +244,10 @@ class Kategorie(db.Model):
             "teilnehmerkreis": self.teilnehmerkreis.value if self.teilnehmerkreis else None,
             "teilnehmerkreis_label": TEILNEHMERKREIS_LABELS.get(self.teilnehmerkreis)
             if self.teilnehmerkreis
+            else None,
+            "raeumlichkeit": self.raeumlichkeit.value if self.raeumlichkeit else None,
+            "raeumlichkeit_label": RAEUMLICHKEIT_LABELS.get(self.raeumlichkeit)
+            if self.raeumlichkeit
             else None,
             "rueckzugsbedarf": self.rueckzugsbedarf.value if self.rueckzugsbedarf else None,
             "rueckzugsbedarf_label": RUECKZUGSBEDARF_LABELS.get(self.rueckzugsbedarf)

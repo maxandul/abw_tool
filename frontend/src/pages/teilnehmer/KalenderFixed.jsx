@@ -13,7 +13,8 @@ import Modal from "../../components/Modal";
 import { fmtDate } from "../../utils/format";
 import {
   groupKategorien, ARBEITSORT_OPTS, GRUPPENGROESSE_OPTS,
-  TEILNEHMERKREIS_OPTS, RUECKZUGSBEDARF_OPTS, applicableFelder,
+  TEILNEHMERKREIS_OPTS, RAEUMLICHKEIT_OPTS, RUECKZUGSBEDARF_OPTS,
+  applicableFelder, showRueckzugsbedarf,
 } from "../../utils/taetigkeiten";
 
 // Metadata for the attribute fields a Kategorie can leave open for
@@ -22,7 +23,8 @@ const OFFENE_FELD_META = {
   arbeitsort: { label: "Arbeitsort", options: ARBEITSORT_OPTS },
   rueckzugsbedarf: { label: "Rückzugsbedarf", options: RUECKZUGSBEDARF_OPTS },
   gruppengroesse: { label: "Gruppengrösse", options: GRUPPENGROESSE_OPTS },
-  teilnehmerkreis: { label: "Teilnehmendenkreis", options: TEILNEHMERKREIS_OPTS },
+  teilnehmerkreis: { label: "Personenkreis", options: TEILNEHMERKREIS_OPTS },
+  raeumlichkeit: { label: "Räumlichkeit", options: RAEUMLICHKEIT_OPTS },
 };
 
 const HOUR_START = 7;
@@ -69,6 +71,7 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
     rueckzugsbedarf: initial?.rueckzugsbedarf ?? "",
     gruppengroesse: initial?.gruppengroesse ?? "",
     teilnehmerkreis: initial?.teilnehmerkreis ?? "",
+    raeumlichkeit: initial?.raeumlichkeit ?? "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -81,7 +84,7 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
     // them so a locked value from the previous selection can't linger.
     setForm(f => ({
       ...f, kategorie_id,
-      arbeitsort: "", rueckzugsbedarf: "", gruppengroesse: "", teilnehmerkreis: "",
+      arbeitsort: "", rueckzugsbedarf: "", gruppengroesse: "", teilnehmerkreis: "", raeumlichkeit: "",
     }));
   };
 
@@ -96,6 +99,23 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
     }));
   };
 
+  const onRaeumlichkeitChange = (e) => {
+    const raeumlichkeit = e.target.value;
+    setForm(f => ({
+      ...f,
+      raeumlichkeit,
+      // Rückzugsbedarf entfällt bei allen Räumlichkeiten ausser dem
+      // üblichen Standort.
+      rueckzugsbedarf: raeumlichkeit === "UEBLICHER_STANDORT" ? f.rueckzugsbedarf : "",
+    }));
+  };
+
+  const fieldOnChange = (f) => {
+    if (f === "arbeitsort") return onArbeitsortChange;
+    if (f === "raeumlichkeit") return onRaeumlichkeitChange;
+    return set(f);
+  };
+
   const submit = async (e) => {
     e.preventDefault(); setError(""); setLoading(true);
     const { error: err } = await onSave(form);
@@ -107,6 +127,7 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
       initial?.effective_arbeitsort_label,
       initial?.effective_gruppengroesse_label,
       initial?.effective_teilnehmerkreis_label,
+      initial?.effective_raeumlichkeit_label,
       initial?.effective_rueckzugsbedarf_label,
     ].filter(Boolean);
     return (
@@ -124,12 +145,15 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
   }
 
   const groups = groupKategorien(sorted);
-  // Rückzugsbedarf ist nur relevant, wenn der (fest vorgegebene oder gerade
-  // ausgewählte) Arbeitsort dem üblichen Arbeitsplatz/Standort entspricht,
-  // oder noch offen ist.
-  const effectiverArbeitsort = selKat?.arbeitsort || form.arbeitsort;
+  // Rückzugsbedarf ist bei Einzelarbeit nur relevant, wenn der (fest
+  // vorgegebene oder gerade ausgewählte) Arbeitsort dem üblichen
+  // Arbeitsplatz/Standort entspricht, bei Meeting nur, wenn die Räumlichkeit
+  // dem üblichen Standort entspricht (jeweils oder noch offen ist).
+  const effectiveArbeitsort = selKat?.arbeitsort || form.arbeitsort;
+  const effectiveRaeumlichkeit = selKat?.raeumlichkeit || form.raeumlichkeit;
   const offen = (selKat?.offene_merkmale ?? []).filter(f =>
-    f !== "rueckzugsbedarf" || !effectiverArbeitsort || effectiverArbeitsort === "UEBLICHER_ARBEITSPLATZ"
+    f !== "rueckzugsbedarf"
+    || showRueckzugsbedarf(selKat?.arbeitsform, effectiveArbeitsort, effectiveRaeumlichkeit)
   );
   const anwendbar = applicableFelder(selKat?.arbeitsform);
   const gesperrt = anwendbar.filter(f => selKat?.[f]);
@@ -174,7 +198,7 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
         {offen.map(f => (
           <div key={f}>
             <label className="label">{OFFENE_FELD_META[f].label} *</label>
-            <select className="input" value={form[f]} onChange={f === "arbeitsort" ? onArbeitsortChange : set(f)} required>
+            <select className="input" value={form[f]} onChange={fieldOnChange(f)} required>
               <option value="" disabled>– auswählen –</option>
               {OFFENE_FELD_META[f].options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
@@ -483,6 +507,7 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
       rueckzugsbedarf: form.rueckzugsbedarf || null,
       gruppengroesse: form.gruppengroesse || null,
       teilnehmerkreis: form.teilnehmerkreis || null,
+      raeumlichkeit: form.raeumlichkeit || null,
     };
     const { error: err } = modal.eintrag?.id
       ? await A.updateEintrag(modal.eintrag.id, body)

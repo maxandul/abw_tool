@@ -30,7 +30,7 @@ def _parse_merkmal_filter(args) -> dict:
     flt = {}
     for key in (
         "arbeitsformen", "arbeitsorte", "rueckzugsbedarfe",
-        "gruppengroessen", "teilnehmerkreise",
+        "gruppengroessen", "teilnehmerkreise", "raeumlichkeiten",
     ):
         werte = parse_string_list(args.get(key))
         if werte:
@@ -199,6 +199,7 @@ def get_export():
             "rueckzugsbedarfe": merkmal_filter.get("rueckzugsbedarfe", []),
             "gruppengroessen": merkmal_filter.get("gruppengroessen", []),
             "teilnehmerkreise": merkmal_filter.get("teilnehmerkreise", []),
+            "raeumlichkeiten": merkmal_filter.get("raeumlichkeiten", []),
         }
 
         gruppen_namen = [g.name for g in gruppen]

@@ -123,6 +123,7 @@ _EXPORT_TEMPLATE = """\
       <div id="filter-merkmal-arbeitsort" class="filter-block"></div>
       <div id="filter-merkmal-gruppengroesse" class="filter-block"></div>
       <div id="filter-merkmal-teilnehmerkreis" class="filter-block"></div>
+      <div id="filter-merkmal-raeumlichkeit" class="filter-block"></div>
       <div id="filter-merkmal-rueckzugsbedarf" class="filter-block"></div>
     </section>
 
@@ -200,6 +201,7 @@ _EXPORT_TEMPLATE = """\
         rueckzugsbedarfe: new Set(INIT.rueckzugsbedarfe || []),
         gruppengroessen: new Set(INIT.gruppengroessen || []),
         teilnehmerkreise: new Set(INIT.teilnehmerkreise || []),
+        raeumlichkeiten: new Set(INIT.raeumlichkeiten || []),
       },
       anzeige: 'maximum',
     };
@@ -239,6 +241,7 @@ _EXPORT_TEMPLATE = """\
       if (m.rueckzugsbedarfe.size && !m.rueckzugsbedarfe.has(e.rb)) return false;
       if (m.gruppengroessen.size && !m.gruppengroessen.has(e.gg)) return false;
       if (m.teilnehmerkreise.size && !m.teilnehmerkreise.has(e.tk)) return false;
+      if (m.raeumlichkeiten.size && !m.raeumlichkeiten.has(e.rl)) return false;
       return true;
     }
 
@@ -496,8 +499,8 @@ _EXPORT_TEMPLATE = """\
       renderChipBlock('filter-grad', 'Beschäftigungsgrad', distinct(t => t.grad, true), state.grade, fmtGrad);
     }
 
-    // ── Merkmal-Filter (Arbeitsform, Arbeitsort, Rückzugsbedarf, Gruppengrösse,
-    // Teilnehmendenkreis) ────────────────────────────────────────────────────────
+    // ── Merkmal-Filter (Arbeitsform, Arbeitsort, Gruppengrösse, Personenkreis,
+    // Räumlichkeit, Rückzugsbedarf) ─────────────────────────────────────────────
     const MERKMAL_META = [
       { key: 'arbeitsformen', elId: 'filter-merkmal-arbeitsform', label: 'Arbeitsform',
         opts: [['EINZELARBEIT','Einzelarbeit'], ['MEETING','Besprechung/Meeting'], ['ABWESENHEIT','Abwesenheit']] },
@@ -507,8 +510,11 @@ _EXPORT_TEMPLATE = """\
       { key: 'gruppengroessen', elId: 'filter-merkmal-gruppengroesse', label: 'Gruppengrösse',
         opts: [['ZWEI_BIS_VIER','2-4 Personen'], ['FUENF_BIS_ACHT','5-8 Personen'],
                ['NEUN_BIS_ZWOELF','9-12 Personen'], ['DREIZEHN_PLUS','13+ Personen']] },
-      { key: 'teilnehmerkreise', elId: 'filter-merkmal-teilnehmerkreis', label: 'Teilnehmendenkreis',
-        opts: [['STANDORTINTERN','Standortintern'], ['STANDORTUEBERGREIFEND_EXTERN','Standortübergreifend/extern']] },
+      { key: 'teilnehmerkreise', elId: 'filter-merkmal-teilnehmerkreis', label: 'Personenkreis',
+        opts: [['STANDORTINTERN','Nur standortintern'], ['STANDORTUEBERGREIFEND_EXTERN','Inkl. standortexternen Personen']] },
+      { key: 'raeumlichkeiten', elId: 'filter-merkmal-raeumlichkeit', label: 'Räumlichkeit',
+        opts: [['UEBLICHER_STANDORT','Üblicher Standort'], ['ANDERER_VD_STANDORT','Anderer VD-Standort'],
+               ['EXTERN','Extern']] },
       { key: 'rueckzugsbedarfe', elId: 'filter-merkmal-rueckzugsbedarf', label: 'Rückzugsbedarf',
         opts: [['ERFORDERLICH','Rückzug erforderlich'], ['GEMEINSAM_MOEGLICH','Gemeinsames Umfeld möglich']] },
     ];

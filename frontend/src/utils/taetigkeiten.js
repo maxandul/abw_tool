@@ -22,9 +22,17 @@ export const GRUPPENGROESSE_OPTS = [
   { value: "DREIZEHN_PLUS", label: "13+ Personen" },
 ];
 
+// Field/enum name kept as "Teilnehmerkreis" internally; shown to users as
+// "Personenkreis" everywhere (see labels below and elsewhere in the UI).
 export const TEILNEHMERKREIS_OPTS = [
-  { value: "STANDORTINTERN", label: "Standortintern" },
-  { value: "STANDORTUEBERGREIFEND_EXTERN", label: "Standortübergreifend/extern" },
+  { value: "STANDORTINTERN", label: "Nur standortintern" },
+  { value: "STANDORTUEBERGREIFEND_EXTERN", label: "Inkl. standortexternen Personen" },
+];
+
+export const RAEUMLICHKEIT_OPTS = [
+  { value: "UEBLICHER_STANDORT", label: "Üblicher Standort" },
+  { value: "ANDERER_VD_STANDORT", label: "Anderer VD-Standort" },
+  { value: "EXTERN", label: "Extern" },
 ];
 
 export const RUECKZUGSBEDARF_OPTS = [
@@ -38,24 +46,30 @@ export const ABWESENHEIT_GRUND_OPTS = [
 ];
 
 /** Attribute fields applicable to an Arbeitsform (mirrors the backend's
- * Kategorie.offene_merkmale field list). */
+ * Kategorie.offene_merkmale field list), in display order. */
 export function applicableFelder(arbeitsform) {
   if (arbeitsform === "EINZELARBEIT") return ["arbeitsort", "rueckzugsbedarf"];
-  if (arbeitsform === "MEETING") return ["gruppengroesse", "teilnehmerkreis", "rueckzugsbedarf"];
+  if (arbeitsform === "MEETING") {
+    return ["gruppengroesse", "teilnehmerkreis", "raeumlichkeit", "rueckzugsbedarf"];
+  }
   return [];
 }
 
 export const showArbeitsort = (arbeitsform) => arbeitsform === "EINZELARBEIT";
 export const showGruppengroesse = (arbeitsform) => arbeitsform === "MEETING";
 export const showTeilnehmerkreis = (arbeitsform) => arbeitsform === "MEETING";
-/** Rückzugsbedarf ist bei Meeting immer relevant; bei Einzelarbeit nur, wenn
- * der (ggf. noch offene) Arbeitsort dem üblichen Arbeitsplatz/Standort
- * entspricht oder noch offengelassen ist (dann entscheidet später die
- * Teilnehmerwahl). Bei Homeoffice/anderem VD-Standort/mobil-extern entfällt er. */
-export const showRueckzugsbedarf = (arbeitsform, arbeitsort) => {
-  if (arbeitsform === "MEETING") return true;
+export const showRaeumlichkeit = (arbeitsform) => arbeitsform === "MEETING";
+/** Rückzugsbedarf ist bei Einzelarbeit nur relevant, wenn der (ggf. noch
+ * offene) Arbeitsort dem üblichen Arbeitsplatz/Standort entspricht; bei
+ * Meeting nur, wenn die (ggf. noch offene) Räumlichkeit dem üblichen
+ * Standort entspricht. Ist das jeweilige Feld noch offen, entscheidet
+ * später die Teilnehmerwahl – bis dahin optimistisch weiter angezeigt. */
+export const showRueckzugsbedarf = (arbeitsform, arbeitsort, raeumlichkeit) => {
   if (arbeitsform === "EINZELARBEIT") {
     return !arbeitsort || arbeitsort === "UEBLICHER_ARBEITSPLATZ";
+  }
+  if (arbeitsform === "MEETING") {
+    return !raeumlichkeit || raeumlichkeit === "UEBLICHER_STANDORT";
   }
   return false;
 };
@@ -79,6 +93,7 @@ export function formatTaetigkeitMeta(k) {
     if (k.arbeitsort_label) parts.push(k.arbeitsort_label);
     if (k.gruppengroesse_label) parts.push(k.gruppengroesse_label);
     if (k.teilnehmerkreis_label) parts.push(k.teilnehmerkreis_label);
+    if (k.raeumlichkeit_label) parts.push(k.raeumlichkeit_label);
     if (k.rueckzugsbedarf_label) parts.push(k.rueckzugsbedarf_label);
     if (k.abwesenheit_grund_label) parts.push(k.abwesenheit_grund_label);
     return parts.join(" · ");

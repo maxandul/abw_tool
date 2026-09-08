@@ -216,6 +216,7 @@ _MERKMAL_FILTER_FELDER = {
     "rueckzugsbedarfe": lambda e: e.effective_rueckzugsbedarf,
     "gruppengroessen": lambda e: e.effective_gruppengroesse,
     "teilnehmerkreise": lambda e: e.effective_teilnehmerkreis,
+    "raeumlichkeiten": lambda e: e.effective_raeumlichkeit,
 }
 
 
@@ -752,6 +753,7 @@ def export_rohdaten(
         eff_rueckzugsbedarf = e.effective_rueckzugsbedarf
         eff_gruppengroesse = e.effective_gruppengroesse
         eff_teilnehmerkreis = e.effective_teilnehmerkreis
+        eff_raeumlichkeit = e.effective_raeumlichkeit
         eintraege.append({
             "t": idx,
             "k": e.kategorie_id,
@@ -765,6 +767,7 @@ def export_rohdaten(
             "rb": eff_rueckzugsbedarf.value if eff_rueckzugsbedarf else None,
             "gg": eff_gruppengroesse.value if eff_gruppengroesse else None,
             "tk": eff_teilnehmerkreis.value if eff_teilnehmerkreis else None,
+            "rl": eff_raeumlichkeit.value if eff_raeumlichkeit else None,
         })
 
     kategorien = [

@@ -6,7 +6,7 @@ import {
 } from "../../api/admin";
 import {
   groupKategorien, ARBEITSFORM_ORDER, ARBEITSFORM_LABELS, ARBEITSORT_OPTS,
-  GRUPPENGROESSE_OPTS, TEILNEHMERKREIS_OPTS, RUECKZUGSBEDARF_OPTS,
+  GRUPPENGROESSE_OPTS, TEILNEHMERKREIS_OPTS, RAEUMLICHKEIT_OPTS, RUECKZUGSBEDARF_OPTS,
 } from "../../utils/taetigkeiten";
 import Spinner from "../../components/Spinner";
 import Alert from "../../components/Alert";
@@ -268,7 +268,8 @@ function Anteile({ data }) {
 // ── Teilnehmer-Filter ────────────────────────────────────────────────────────
 const EMPTY_TN_FILTER = { funktionen: [], organisationseinheiten: [], beschaeftigungsgrade: [] };
 const EMPTY_MERKMAL_FILTER = {
-  arbeitsformen: [], arbeitsorte: [], gruppengroessen: [], teilnehmerkreise: [], rueckzugsbedarfe: [],
+  arbeitsformen: [], arbeitsorte: [], gruppengroessen: [], teilnehmerkreise: [],
+  raeumlichkeiten: [], rueckzugsbedarfe: [],
 };
 
 function FilterChipGroup({ label, items, selected, onToggle, formatLabel }) {
@@ -370,13 +371,14 @@ function TeilnehmerFilterCard({ options, filters, onChange, onClear }) {
   );
 }
 
-// ── Merkmal-Filter (Arbeitsform, Arbeitsort, Rückzugsbedarf, Gruppengrösse,
-// Teilnehmendenkreis) ────────────────────────────────────────────────────────
+// ── Merkmal-Filter (Arbeitsform, Arbeitsort, Gruppengrösse, Personenkreis,
+// Räumlichkeit, Rückzugsbedarf) ─────────────────────────────────────────────
 const MERKMAL_FILTER_META = [
   { key: "arbeitsformen", label: "Arbeitsform", opts: ARBEITSFORM_ORDER.map(v => ({ value: v, label: ARBEITSFORM_LABELS[v] })) },
   { key: "arbeitsorte", label: "Arbeitsort", opts: ARBEITSORT_OPTS },
   { key: "gruppengroessen", label: "Gruppengrösse", opts: GRUPPENGROESSE_OPTS },
-  { key: "teilnehmerkreise", label: "Teilnehmendenkreis", opts: TEILNEHMERKREIS_OPTS },
+  { key: "teilnehmerkreise", label: "Personenkreis", opts: TEILNEHMERKREIS_OPTS },
+  { key: "raeumlichkeiten", label: "Räumlichkeit", opts: RAEUMLICHKEIT_OPTS },
   { key: "rueckzugsbedarfe", label: "Rückzugsbedarf", opts: RUECKZUGSBEDARF_OPTS },
 ];
 
@@ -405,7 +407,7 @@ function MerkmalFilterCard({ filters, onChange, onClear }) {
       </div>
       <p className="text-xs text-slate-500">
         Optional einschränken nach Arbeitsform und Merkmalen (Arbeitsort, Gruppengrösse,
-        Teilnehmendenkreis, Rückzugsbedarf) der erfassten Tätigkeiten.
+        Personenkreis, Räumlichkeit, Rückzugsbedarf) der erfassten Tätigkeiten.
         Wirkt auf Lastprofil, Bedarf nach Tätigkeit und Anteilsübersicht.
         {activeCount > 0 && (
           <span className="text-brand-600"> ({activeCount} Filter aktiv)</span>

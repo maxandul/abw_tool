@@ -6,10 +6,12 @@ from extensions import db
 from models.kategorie import (
     ARBEITSORT_LABELS,
     GRUPPENGROESSE_LABELS,
+    RAEUMLICHKEIT_LABELS,
     RUECKZUGSBEDARF_LABELS,
     TEILNEHMERKREIS_LABELS,
     Arbeitsort,
     Gruppengroesse,
+    Raeumlichkeit,
     Rueckzugsbedarf,
     Teilnehmerkreis,
 )
@@ -21,12 +23,12 @@ class Eintrag(db.Model):
     Overlap validation per (user_id, gruppe_id, datum) is enforced in the
     service layer, not via a database constraint.
 
-    Arbeitsort/Rueckzugsbedarf/Gruppengroesse/Teilnehmerkreis here are only
-    ever set when the Kategorie left the corresponding attribute open (see
-    ``Kategorie.offene_merkmale``) – the participant fills them in at entry
-    time. Where the Kategorie already defines an attribute, it is
-    authoritative and this column stays ``None``; see the ``effective_*``
-    properties for the value that actually applies.
+    Arbeitsort/Rueckzugsbedarf/Gruppengroesse/Teilnehmerkreis/Raeumlichkeit
+    here are only ever set when the Kategorie left the corresponding
+    attribute open (see ``Kategorie.offene_merkmale``) – the participant
+    fills them in at entry time. Where the Kategorie already defines an
+    attribute, it is authoritative and this column stays ``None``; see the
+    ``effective_*`` properties for the value that actually applies.
     """
 
     __tablename__ = "eintrag"
@@ -48,6 +50,7 @@ class Eintrag(db.Model):
     rueckzugsbedarf = db.Column(db.Enum(Rueckzugsbedarf), nullable=True)
     gruppengroesse = db.Column(db.Enum(Gruppengroesse), nullable=True)
     teilnehmerkreis = db.Column(db.Enum(Teilnehmerkreis), nullable=True)
+    raeumlichkeit = db.Column(db.Enum(Raeumlichkeit), nullable=True)
 
     user = db.relationship("User")
     gruppe = db.relationship("Gruppe")
@@ -69,12 +72,17 @@ class Eintrag(db.Model):
     def effective_teilnehmerkreis(self) -> Teilnehmerkreis | None:
         return (self.kategorie.teilnehmerkreis if self.kategorie else None) or self.teilnehmerkreis
 
+    @property
+    def effective_raeumlichkeit(self) -> Raeumlichkeit | None:
+        return (self.kategorie.raeumlichkeit if self.kategorie else None) or self.raeumlichkeit
+
     def to_dict(self) -> dict:
         """Return a JSON-serialisable representation of the entry."""
         eff_arbeitsort = self.effective_arbeitsort
         eff_rueckzugsbedarf = self.effective_rueckzugsbedarf
         eff_gruppengroesse = self.effective_gruppengroesse
         eff_teilnehmerkreis = self.effective_teilnehmerkreis
+        eff_raeumlichkeit = self.effective_raeumlichkeit
         return {
             "id": self.id,
             "user_id": self.user_id,
@@ -89,6 +97,7 @@ class Eintrag(db.Model):
             "rueckzugsbedarf": self.rueckzugsbedarf.value if self.rueckzugsbedarf else None,
             "gruppengroesse": self.gruppengroesse.value if self.gruppengroesse else None,
             "teilnehmerkreis": self.teilnehmerkreis.value if self.teilnehmerkreis else None,
+            "raeumlichkeit": self.raeumlichkeit.value if self.raeumlichkeit else None,
             # Effective values (Kategorie's value if it defines one, else the
             # participant's own) – what analysis and display should use.
             "effective_arbeitsort": eff_arbeitsort.value if eff_arbeitsort else None,
@@ -104,5 +113,9 @@ class Eintrag(db.Model):
             "effective_teilnehmerkreis": eff_teilnehmerkreis.value if eff_teilnehmerkreis else None,
             "effective_teilnehmerkreis_label": TEILNEHMERKREIS_LABELS.get(eff_teilnehmerkreis)
             if eff_teilnehmerkreis
+            else None,
+            "effective_raeumlichkeit": eff_raeumlichkeit.value if eff_raeumlichkeit else None,
+            "effective_raeumlichkeit_label": RAEUMLICHKEIT_LABELS.get(eff_raeumlichkeit)
+            if eff_raeumlichkeit
             else None,
         }

@@ -10,8 +10,8 @@ import ConfirmDialog from "../../components/ConfirmDialog";
 import Farbauswahl from "../../components/Farbauswahl";
 import {
   ARBEITSFORM_ORDER, ARBEITSFORM_LABELS, ARBEITSORT_OPTS, GRUPPENGROESSE_OPTS,
-  TEILNEHMERKREIS_OPTS, RUECKZUGSBEDARF_OPTS, ABWESENHEIT_GRUND_OPTS,
-  showArbeitsort, showGruppengroesse, showTeilnehmerkreis, showRueckzugsbedarf,
+  TEILNEHMERKREIS_OPTS, RAEUMLICHKEIT_OPTS, RUECKZUGSBEDARF_OPTS, ABWESENHEIT_GRUND_OPTS,
+  showArbeitsort, showGruppengroesse, showTeilnehmerkreis, showRaeumlichkeit, showRueckzugsbedarf,
   showAbwesenheitGrund, defaultFarbeForArbeitsform, formatTaetigkeitMeta,
   groupKategorien,
 } from "../../utils/taetigkeiten";
@@ -22,7 +22,8 @@ const OFFEN_LABELS = {
   arbeitsort: "Arbeitsort",
   rueckzugsbedarf: "Rückzugsbedarf",
   gruppengroesse: "Gruppengrösse",
-  teilnehmerkreis: "Teilnehmendenkreis",
+  teilnehmerkreis: "Personenkreis",
+  raeumlichkeit: "Räumlichkeit",
 };
 
 function Select({ label, value, onChange, options, required = false }) {
@@ -50,6 +51,7 @@ function TaetigkeitForm({ initial, defaultArbeitsform, onSave, onCancel }) {
     arbeitsort: initial?.arbeitsort ?? "",
     gruppengroesse: initial?.gruppengroesse ?? "",
     teilnehmerkreis: initial?.teilnehmerkreis ?? "",
+    raeumlichkeit: initial?.raeumlichkeit ?? "",
     rueckzugsbedarf: initial?.rueckzugsbedarf ?? "",
     abwesenheit_grund: initial?.abwesenheit_grund ?? "",
   }));
@@ -63,7 +65,7 @@ function TaetigkeitForm({ initial, defaultArbeitsform, onSave, onCancel }) {
       ...f,
       arbeitsform,
       farbe: defaultFarbeForArbeitsform(arbeitsform),
-      arbeitsort: "", gruppengroesse: "", teilnehmerkreis: "",
+      arbeitsort: "", gruppengroesse: "", teilnehmerkreis: "", raeumlichkeit: "",
       rueckzugsbedarf: "", abwesenheit_grund: "",
     }));
   };
@@ -76,6 +78,17 @@ function TaetigkeitForm({ initial, defaultArbeitsform, onSave, onCancel }) {
       // Rückzugsbedarf entfällt bei allen Arbeitsorten ausser dem üblichen
       // Arbeitsplatz/Standort – bereits gesetzte Werte werden dann verworfen.
       rueckzugsbedarf: arbeitsort === "UEBLICHER_ARBEITSPLATZ" ? f.rueckzugsbedarf : "",
+    }));
+  };
+
+  const onRaeumlichkeitChange = (e) => {
+    const raeumlichkeit = e.target.value;
+    setForm(f => ({
+      ...f,
+      raeumlichkeit,
+      // Rückzugsbedarf entfällt bei allen Räumlichkeiten ausser dem
+      // üblichen Standort – bereits gesetzte Werte werden dann verworfen.
+      rueckzugsbedarf: raeumlichkeit === "UEBLICHER_STANDORT" ? f.rueckzugsbedarf : "",
     }));
   };
 
@@ -121,9 +134,12 @@ function TaetigkeitForm({ initial, defaultArbeitsform, onSave, onCancel }) {
         <Select label="Gruppengrösse" value={form.gruppengroesse} onChange={set("gruppengroesse")} options={GRUPPENGROESSE_OPTS} />
       )}
       {showTeilnehmerkreis(form.arbeitsform) && (
-        <Select label="Teilnehmendenkreis" value={form.teilnehmerkreis} onChange={set("teilnehmerkreis")} options={TEILNEHMERKREIS_OPTS} />
+        <Select label="Personenkreis" value={form.teilnehmerkreis} onChange={set("teilnehmerkreis")} options={TEILNEHMERKREIS_OPTS} />
       )}
-      {showRueckzugsbedarf(form.arbeitsform, form.arbeitsort) && (
+      {showRaeumlichkeit(form.arbeitsform) && (
+        <Select label="Räumlichkeit" value={form.raeumlichkeit} onChange={onRaeumlichkeitChange} options={RAEUMLICHKEIT_OPTS} />
+      )}
+      {showRueckzugsbedarf(form.arbeitsform, form.arbeitsort, form.raeumlichkeit) && (
         <Select label="Rückzugsbedarf" value={form.rueckzugsbedarf} onChange={set("rueckzugsbedarf")} options={RUECKZUGSBEDARF_OPTS} />
       )}
       {showAbwesenheitGrund(form.arbeitsform) && (

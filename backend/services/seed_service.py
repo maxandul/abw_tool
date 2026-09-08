@@ -19,27 +19,28 @@ from models import (
 )
 
 # (sort_order, name, farbe, arbeitsform, arbeitsort, gruppengroesse,
-#  teilnehmerkreis, rueckzugsbedarf, abwesenheit_grund, beschreibung)
+#  teilnehmerkreis, raeumlichkeit, rueckzugsbedarf, abwesenheit_grund, beschreibung)
 #
 # Bewusst minimal: zwei generische Tätigkeiten (Einzelarbeit, Meeting) ohne
 # vordefinierte Merkmale – Teilnehmende erfassen Arbeitsort/Rückzugsbedarf
-# bzw. Gruppengrösse/Teilnehmendenkreis/Rückzugsbedarf beim Eintragen selbst
-# (siehe Kategorie.offene_merkmale) – plus die beiden Abwesenheitsgründe.
+# bzw. Gruppengrösse/Personenkreis/Räumlichkeit/Rückzugsbedarf beim Eintragen
+# selbst (siehe Kategorie.offene_merkmale) – plus die beiden Abwesenheitsgründe.
 # Für standortspezifische Standardtätigkeiten (z.B. "Beratungsgespräch" mit
 # fest vorgegebenen Merkmalen) legt der Admin weitere Tätigkeiten mit den
 # entsprechenden Feldern gesetzt an.
 ARBEITSFORM_DEFAULT_TAETIGKEITEN = [
     (1, "Einzelarbeit", "#2ECC71",
-     Arbeitsform.EINZELARBEIT, None, None, None, None, None,
+     Arbeitsform.EINZELARBEIT, None, None, None, None, None, None,
      "Konzentrierte oder ausführende Einzelarbeit. Arbeitsort und Rückzugsbedarf werden beim Erfassen angegeben."),
     (10, "Besprechung/Meeting", "#3498DB",
-     Arbeitsform.MEETING, None, None, None, None, None,
-     "Besprechung, Sitzung oder Austausch mit anderen. Gruppengrösse, Teilnehmendenkreis und Rückzugsbedarf werden beim Erfassen angegeben."),
+     Arbeitsform.MEETING, None, None, None, None, None, None,
+     "Besprechung, Sitzung oder Austausch mit anderen. Gruppengrösse, Personenkreis, Räumlichkeit und "
+     "Rückzugsbedarf werden beim Erfassen angegeben."),
     (30, "Teilzeit", "#D5D8DC",
-     Arbeitsform.ABWESENHEIT, None, None, None, None, AbwesenheitGrund.TEILZEIT,
+     Arbeitsform.ABWESENHEIT, None, None, None, None, None, AbwesenheitGrund.TEILZEIT,
      "Vereinbarte freie Zeit aufgrund eines Teilzeitpensums (regulär nicht gearbeitet)."),
     (31, "Sonstiges", "#7F8C8D",
-     Arbeitsform.ABWESENHEIT, None, None, None, None, AbwesenheitGrund.SONSTIGES,
+     Arbeitsform.ABWESENHEIT, None, None, None, None, None, AbwesenheitGrund.SONSTIGES,
      "Abwesend wegen Ferien, Krankheit, Feiertag oder Ähnlichem."),
 ]
 
@@ -117,7 +118,7 @@ def _insert_default_taetigkeiten() -> None:
     for row in ARBEITSFORM_DEFAULT_TAETIGKEITEN:
         (
             sort_order, name, farbe, arbeitsform, arbeitsort, gruppengroesse,
-            teilnehmerkreis, rueckzugsbedarf, abwesenheit_grund, beschreibung,
+            teilnehmerkreis, raeumlichkeit, rueckzugsbedarf, abwesenheit_grund, beschreibung,
         ) = row
         db.session.add(
             Kategorie(
@@ -128,6 +129,7 @@ def _insert_default_taetigkeiten() -> None:
                 arbeitsort=arbeitsort,
                 gruppengroesse=gruppengroesse,
                 teilnehmerkreis=teilnehmerkreis,
+                raeumlichkeit=raeumlichkeit,
                 rueckzugsbedarf=rueckzugsbedarf,
                 abwesenheit_grund=abwesenheit_grund,
                 sort_order=sort_order,
