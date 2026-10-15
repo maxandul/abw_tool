@@ -37,6 +37,7 @@ class Arbeitsform(enum.Enum):
     """Top-level grouping for participant dropdown and analysis."""
 
     EINZELARBEIT = "EINZELARBEIT"
+    ONLINE = "ONLINE"
     MEETING = "MEETING"
     ABWESENHEIT = "ABWESENHEIT"
 
@@ -53,6 +54,7 @@ class Arbeitsort(enum.Enum):
 class Gruppengroesse(enum.Enum):
     """Size bracket for a Meeting."""
 
+    ALLEIN = "ALLEIN"
     ZWEI_BIS_VIER = "ZWEI_BIS_VIER"
     FUENF_BIS_ACHT = "FUENF_BIS_ACHT"
     NEUN_BIS_ZWOELF = "NEUN_BIS_ZWOELF"
@@ -96,19 +98,21 @@ TAETIGKEITSGRUPPE_LABELS = {
 }
 
 ARBEITSFORM_LABELS = {
-    Arbeitsform.EINZELARBEIT: "Einzelarbeit",
+    Arbeitsform.EINZELARBEIT: "Allein arbeiten",
+    Arbeitsform.ONLINE: "Online-Meeting / Telefonat",
     Arbeitsform.MEETING: "Besprechung/Meeting",
     Arbeitsform.ABWESENHEIT: "Abwesenheit",
 }
 
 ARBEITSORT_LABELS = {
-    Arbeitsort.UEBLICHER_ARBEITSPLATZ: "Üblicher Arbeitsplatz/Standort",
+    Arbeitsort.UEBLICHER_ARBEITSPLATZ: "Am untersuchten Standort",
     Arbeitsort.HOMEOFFICE: "Homeoffice",
     Arbeitsort.ANDERER_VD_STANDORT: "Anderer VD-Standort",
-    Arbeitsort.MOBIL_EXTERN: "Mobil/extern",
+    Arbeitsort.MOBIL_EXTERN: "Anderswo / unterwegs",
 }
 
 GRUPPENGROESSE_LABELS = {
+    Gruppengroesse.ALLEIN: "Nur ich",
     Gruppengroesse.ZWEI_BIS_VIER: "2-4 Personen",
     Gruppengroesse.FUENF_BIS_ACHT: "5-8 Personen",
     Gruppengroesse.NEUN_BIS_ZWOELF: "9-12 Personen",
@@ -116,8 +120,8 @@ GRUPPENGROESSE_LABELS = {
 }
 
 TEILNEHMERKREIS_LABELS = {
-    Teilnehmerkreis.STANDORTINTERN: "Nur standortintern",
-    Teilnehmerkreis.STANDORTUEBERGREIFEND_EXTERN: "Inkl. standortexternen Personen",
+    Teilnehmerkreis.STANDORTINTERN: "Nur Personen von meinem Standort",
+    Teilnehmerkreis.STANDORTUEBERGREIFEND_EXTERN: "Auch Personen von anderen Standorten / externe Gäste",
 }
 
 RAEUMLICHKEIT_LABELS = {
@@ -127,8 +131,8 @@ RAEUMLICHKEIT_LABELS = {
 }
 
 RUECKZUGSBEDARF_LABELS = {
-    Rueckzugsbedarf.ERFORDERLICH: "Rückzug erforderlich",
-    Rueckzugsbedarf.GEMEINSAM_MOEGLICH: "Gemeinsames Umfeld möglich",
+    Rueckzugsbedarf.ERFORDERLICH: "Ja, geschlossener Raum erforderlich",
+    Rueckzugsbedarf.GEMEINSAM_MOEGLICH: "Nein, offener Bereich genügt",
 }
 
 ABWESENHEIT_GRUND_LABELS = {
@@ -151,6 +155,7 @@ class Kategorie(db.Model):
     __tablename__ = "kategorie"
 
     id = db.Column(db.Integer, primary_key=True)
+    schema_version = db.Column(db.Integer, nullable=False, default=2)
     name = db.Column(db.String(255), nullable=False)
     beschreibung = db.Column(db.Text, nullable=True)
     farbe = db.Column(db.String(7), nullable=True)
@@ -180,6 +185,8 @@ class Kategorie(db.Model):
     def offene_merkmale(self) -> list[str]:
         """Attribute fields applicable to this Arbeitsform that the admin
         left undefined – the participant must supply these at entry time."""
+        if self.schema_version == 2:
+            return []  # Guided entry form owns the v2 questions.
         if self.arbeitsform is None:
             return []
         if self.arbeitsform == Arbeitsform.EINZELARBEIT:
@@ -218,6 +225,7 @@ class Kategorie(db.Model):
         """Return a JSON-serialisable representation of the Tätigkeit."""
         return {
             "id": self.id,
+            "schema_version": self.schema_version,
             "name": self.name,
             "beschreibung": self.beschreibung,
             "farbe": self.farbe,

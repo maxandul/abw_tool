@@ -143,7 +143,7 @@ ANWESEND_GRUPPEN = (
     Taetigkeitsgruppe.GRUPPE_4PLUS,
 )
 
-ANWESEND_ARBEITSFORMEN = (Arbeitsform.EINZELARBEIT, Arbeitsform.MEETING)
+ANWESEND_ARBEITSFORMEN = (Arbeitsform.EINZELARBEIT, Arbeitsform.MEETING, Arbeitsform.ONLINE)
 
 
 def _get_gruppen(gruppe_ids: list[int]) -> list[Gruppe]:
@@ -187,7 +187,7 @@ def _hauptgruppe(kategorie: Kategorie) -> str:
     if kategorie.arbeitsform is not None:
         if kategorie.arbeitsform == Arbeitsform.EINZELARBEIT:
             return "Stille Tätigkeiten"
-        if kategorie.arbeitsform == Arbeitsform.MEETING:
+        if kategorie.arbeitsform in (Arbeitsform.MEETING, Arbeitsform.ONLINE):
             return "Kommunikative Tätigkeiten"
         return "Abwesenheit & Sonstiges"
     if kategorie.taetigkeitsgruppe == Taetigkeitsgruppe.EINZELARBEIT:
@@ -225,6 +225,7 @@ def _merkmal_filter_active(flt: MerkmalFilter | None) -> bool:
 
 
 def _eintrag_matches_merkmal_filter(e: Eintrag, flt: MerkmalFilter) -> bool:
+    flt = flt or {}
     for key, getter in _MERKMAL_FILTER_FELDER.items():
         erlaubt = flt.get(key)
         if not erlaubt:
@@ -315,7 +316,6 @@ def berechne_lastprofil(
     alle_eintraege = _load_eintraege(
         gruppe_ids, datum_von, datum_bis,
         wochentage=wochentage, teilnehmer_filter=teilnehmer_filter,
-        merkmal_filter=merkmal_filter,
     )
 
     # Distinct recorded workdays per participant – the denominator for
@@ -336,12 +336,16 @@ def berechne_lastprofil(
             if TAG_START_MINUTEN <= slot < TAG_END_MINUTEN:
                 off = slot - TAG_START_MINUTEN
                 tn_slot_match[e.user_id][off].add(e.datum)
-                wt_slot_tn[(wt, off)].add(e.user_id)
+                wt_slot_tn[(e.datum, off)].add(e.user_id)
             slot += SLOT_MINUTES
 
+    maxima = defaultdict(int)
+    for (day, off), users in wt_slot_tn.items():
+        key = (day.weekday(), off)
+        maxima[key] = max(maxima[key], len(users))
     maximum_slots = [
-        {"wochentag": wt, "slot_start_minuten": off, "maximum": len(uid_set)}
-        for (wt, off), uid_set in wt_slot_tn.items()
+        {"wochentag": wt, "slot_start_minuten": off, "maximum": count}
+        for (wt, off), count in sorted(maxima.items())
     ]
 
     alle_slots = {off for offs in tn_slot_match.values() for off in offs}
@@ -359,76 +363,43 @@ def berechne_lastprofil(
     return {"maximum_slots": maximum_slots, "mittelwert_slots": mittelwert_slots}
 
 
-def berechne_raumbedarf(
-    gruppe_ids: list[int],
-    datum_von: date,
-    datum_bis: date,
-    teilnehmer_filter: TeilnehmerFilter | None = None,
-    merkmal_filter: MerkmalFilter | None = None,
-) -> dict:
-    """Recommended capacity units per Tätigkeit (excluding Extern)."""
-    _get_gruppen(gruppe_ids)
-    eintraege = _load_eintraege(
-        gruppe_ids, datum_von, datum_bis,
-        teilnehmer_filter=teilnehmer_filter, merkmal_filter=merkmal_filter,
-    )
+def _am_standort(e):
+    if e.kategorie.schema_version == 2:
+        return _enum_value(e.effective_arbeitsort) == "UEBLICHER_ARBEITSPLATZ"
+    if e.kategorie.arbeitsform == Arbeitsform.EINZELARBEIT:
+        return _enum_value(e.effective_arbeitsort) == "UEBLICHER_ARBEITSPLATZ"
+    if e.kategorie.arbeitsform == Arbeitsform.MEETING:
+        return _enum_value(e.effective_raeumlichkeit) == "UEBLICHER_STANDORT"
+    return False  # unknown historical locations are not invented
 
-    kat_slot_tn: dict[int, dict[tuple, set]] = defaultdict(
-        lambda: defaultdict(set)
-    )
 
-    for e in eintraege:
-        if not e.kategorie or not _is_anwesend(e.kategorie):
-            continue
-        kat_id = e.kategorie_id
-        wt = e.datum.weekday()
-        von_min = time_to_minutes(e.zeit_von)
-        bis_min = time_to_minutes(e.zeit_bis)
-        slot = von_min
-        while slot < bis_min:
-            if TAG_START_MINUTEN <= slot < TAG_END_MINUTEN:
-                kat_slot_tn[kat_id][(wt, slot - TAG_START_MINUTEN)].add(e.user_id)
-            slot += SLOT_MINUTES
+def _enum_value(value):
+    return value.value if value else None
 
-    anwesend_slot_tn: dict[tuple, set] = defaultdict(set)
-    for slot_map in kat_slot_tn.values():
-        for sk, uid_set in slot_map.items():
-            anwesend_slot_tn[sk].update(uid_set)
 
-    kategorien = {
-        k.id: k
-        for k in Kategorie.query.filter_by(aktiv=True).order_by(Kategorie.sort_order).all()
-        if _is_anwesend(k)
-    }
-
-    taetigkeiten_result = []
-    for kat_id in sorted(kategorien, key=lambda kid: kategorien[kid].sort_order):
-        slot_map = kat_slot_tn.get(kat_id, {})
-        counts = [len(uid_set) for uid_set in slot_map.values()]
-        if not counts:
-            continue
-        kat = kategorien[kat_id]
-        avg_nutzung = round(sum(counts) / len(counts), 2)
-        peak_nutzung = max(counts)
-        taetigkeiten_result.append({
-            "id": kat_id,
-            "name": kat.name,
-            "farbe": kat.farbe,
-            "avg_nutzung": avg_nutzung,
-            "peak_nutzung": peak_nutzung,
-            "einheiten_avg": math.ceil(avg_nutzung) if avg_nutzung > 0 else 0,
-            "einheiten_peak": peak_nutzung,
-        })
-
-    anw_counts = [len(uid_set) for uid_set in anwesend_slot_tn.values()]
-
-    return {
-        "taetigkeiten": taetigkeiten_result,
-        "anwesend_total": {
-            "avg_nutzung": round(sum(anw_counts) / len(anw_counts), 2) if anw_counts else 0.0,
-            "peak_nutzung": max(anw_counts) if anw_counts else 0,
-        },
-    }
+def berechne_raumbedarf(gruppe_ids, datum_von, datum_bis, teilnehmer_filter=None, merkmal_filter=None):
+    all_entries = _load_eintraege(gruppe_ids, datum_von, datum_bis, teilnehmer_filter=teilnehmer_filter)
+    entries = [e for e in all_entries if _eintrag_matches_merkmal_filter(e, merkmal_filter)]
+    from services.planning import calculate_planning
+    groups = _get_gruppen(gruppe_ids)
+    memberships = _membership_lookup(gruppe_ids)
+    submitted = _eingereichte_paare(gruppe_ids)
+    participants = [{"id": uid, "group": gid, "start": max(g.zeitraum_von, datum_von).isoformat(),
+                     "end": min(g.zeitraum_bis, datum_bis).isoformat()}
+                    for g in groups for gid, uid in submitted if gid == g.id
+                    and (gid, uid) in memberships
+                    and _mitglied_matches_teilnehmer_filter(memberships[(gid, uid)], teilnehmer_filter)]
+    def raw(e):
+        return {"id": e.user_id, "group": e.gruppe_id, "day": e.datum.isoformat(),
+                "start": time_to_minutes(e.zeit_von), "end": time_to_minutes(e.zeit_bis),
+                "onsite": _am_standort(e), "room": e.raumnutzung,
+                "size": _enum_value(e.effective_gruppengroesse),
+                "circle": _enum_value(e.effective_teilnehmerkreis),
+                "retreat": _enum_value(e.effective_rueckzugsbedarf),
+                "reasons": e.rueckzug_gruende or [], "v2": e.kategorie.schema_version == 2,
+                "category": e.kategorie_id}
+    planning = calculate_planning([raw(e) for e in all_entries], [raw(e) for e in entries], participants)
+    return {"planning": planning, "taetigkeiten": [], "anwesend_total": {"avg_nutzung": 0, "peak_nutzung": 0}}
 
 
 def _tg_label_order(vorhanden: dict[str, float]) -> list[str]:
@@ -720,6 +691,7 @@ def export_rohdaten(
     eingereicht_paare = _eingereichte_paare(gruppe_ids)
 
     # Stable anonymous index per membership (gruppe_id, user_id).
+    anonymous_users = {uid: i for i, uid in enumerate(sorted({m.user_id for m in mitglieder}))}
     index_map: dict[tuple[int, int], int] = {}
     teilnehmer = []
     for m in mitglieder:
@@ -728,6 +700,10 @@ def export_rohdaten(
         index_map[key] = idx
         teilnehmer.append({
             "i": idx,
+            "u": anonymous_users[m.user_id],
+            "g": m.gruppe_id,
+            "start": max(next(g for g in gruppen if g.id == m.gruppe_id).zeitraum_von, datum_von).isoformat(),
+            "end": min(next(g for g in gruppen if g.id == m.gruppe_id).zeitraum_bis, datum_bis).isoformat(),
             "funktion": m.funktion or "",
             "oe": m.organisationseinheit or "",
             "grad": m.beschaeftigungsgrad if m.beschaeftigungsgrad is not None else 100.0,
@@ -756,6 +732,12 @@ def export_rohdaten(
         eff_raeumlichkeit = e.effective_raeumlichkeit
         eintraege.append({
             "t": idx,
+            "u": anonymous_users[e.user_id],
+            "g": e.gruppe_id,
+            "onsite": _am_standort(e),
+            "room": e.raumnutzung,
+            "reasons": e.rueckzug_gruende or [],
+            "v2": e.kategorie.schema_version == 2,
             "k": e.kategorie_id,
             "wd": e.datum.weekday(),
             "kw": _iso_kw(e.datum),

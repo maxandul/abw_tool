@@ -46,23 +46,18 @@ export default function HilfePageAdmin() {
         </ul>
       </Section>
 
-      <Section title="Tätigkeiten">
-        <P>Tätigkeiten definieren die Arten, die Teilnehmer im Kalender auswählen können. Sie sind in vier Gruppen gegliedert:</P>
-        <ul className="list-disc list-inside space-y-1 pl-2">
-          <Li><strong>Einzelarbeit:</strong> Call- und stille Einzelarbeit-Varianten (Grüntöne im Kalender).</Li>
-          <Li><strong>Zu zweit/zu dritt (physisch):</strong> Störung erlaubt/ungestört × geplant/ungeplant (Blautöne).</Li>
-          <Li><strong>In Gruppen (4+, physisch):</strong> wie zu zweit/zu dritt (Rottöne).</Li>
-          <Li><strong>Extern:</strong> Teilzeit (regulär freie Zeit bei Teilzeitpensum), Homeoffice, Mobil/anderer Standort, Abwesend (Ferien, Krankheit, Feiertag). Diese zählen zur Vollständigkeit, gelten aber nicht als Anwesenheit/Raumbedarf.</Li>
-        </ul>
-        <P>Pro Tätigkeit kannst du Name, Farbe (Gruppen-Palette oder eigene Farbe per «+»), Beschreibung und Sortierung anpassen. Im Teilnehmer-Kalender erscheinen die Tätigkeiten gruppiert nach diesen Gruppen.</P>
-        <P>Inaktive Tätigkeiten können nicht mehr erfasst werden; bestehende Einträge bleiben erhalten.</P>
+      <Section title="Tätigkeiten und räumliche Planung">
+        <P>Es gibt fünf feste Grundtypen: Allein arbeiten, Online-Meeting / Telefonat, Besprechung / Zusammenarbeit vor Ort, Arbeitsfreie Zeit wegen Teilzeit und Andere Abwesenheit.</P>
+        <P>Teilnehmende erfassen ihren Aufenthaltsort, die ungefähre Zahl der Personen im selben Raum und gegebenenfalls Gäste. Bei hybriden Besprechungen wählen sie Online-Meeting / Telefonat. Online zugeschaltete Personen werden nicht mitgezählt.</P>
+        <P>Am untersuchten Standort werden der tatsächlich genutzte Platz und der Bedarf an einem geschlossenen Raum getrennt erfasst. Historische Einträge bleiben unverändert; fehlende Angaben werden nicht nachträglich angenommen.</P>
+        <P>Richte pro Standort eine eigene Erhebung ein und nenne den Standort im Namen der Erhebung. Bereite danach die Teilnehmenden vor, begleite die Erfassung, prüfe die Vollständigkeit und schliesse die Erhebung nach der Auswertung ab.</P>
       </Section>
 
       <Section title="Auswertung">
         <P>Wähle eine oder mehrere Erhebungen aus dem Dropdown. Der Vergleichsmodus ermöglicht das Überlagern mehrerer Erhebungen per Chip-Auswahl.</P>
         <P>In die Auswertung fliessen <strong>nur eingereichte</strong> Teilnehmer ein (Status «Eingereicht» oder «Abgeschlossen»). Wer noch nicht eingereicht oder die Erhebung zur Bearbeitung entsperrt hat, wird nicht berücksichtigt.</P>
         <P>Die Karte <strong>Stichprobe</strong> fasst die Datenbasis zusammen: wie viele von wie vielen eingereicht haben, FTE-Summe und erfasste Zeit der Eingereichten sowie deren Vollständigkeit (erfasste vs. erwartete Stunden). Übererfassung einzelner Teilnehmer wird dabei auf 100% des jeweiligen Solls begrenzt, damit Lücken anderer nicht überdeckt werden. Eingereichte Teilnehmer unter 85% Vollständigkeit werden separat ausgewiesen und sind anklickbar. Die Werte berücksichtigen den Teilnehmer-Filter.</P>
-        <P>Die Auswertung zeigt Lastprofile, Bedarf nach Tätigkeit sowie Zeitanteile pro Tätigkeit und Tätigkeitsgruppe.</P>
+        <P>Die Auswertung zeigt Tätigkeitsprofile, tatsächliche Arbeitsplatzbelegung und geschätzten Raumbedarf. Maxima werden je konkretem Tag berechnet, danach je Wochentag zusammengefasst. Der durchschnittliche Tag enthält auch unbelegte Zeitfenster; vollständig fehlende Personentage werden ausgeschlossen. Die Schätzannahmen stehen direkt bei der Raumansicht.</P>
         <P>Der <strong>HTML-Export</strong> ist eine eigenständige, anonyme Datei (keine Namen oder E-Mail-Adressen) der aktuell gewählten Erhebung(en). Sie ist interaktiv: Empfänger können darin selbst nach Teilnehmer-Attributen filtern und Lastprofile für verschiedene Tätigkeiten erstellen – ganz ohne Server. Der beim Export aktive Filter ist als Ausgangszustand voreingestellt.</P>
       </Section>
 

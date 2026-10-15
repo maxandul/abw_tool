@@ -135,45 +135,22 @@ function Heatmap({ data, anzeige }) {
 
 // ── Bedarf nach Tätigkeit ────────────────────────────────────────────────────
 function TaetigkeitenBedarf({ data }) {
-  return (
-    <div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th className="table-th min-w-[14rem]">Tätigkeit</th>
-              <th className="table-th text-right">Ø Nutzung</th>
-              <th className="table-th text-right">Peak</th>
-              <th className="table-th text-right">Einheiten (Ø)</th>
-              <th className="table-th text-right">Einheiten (Peak)</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {data.taetigkeiten.map(r => {
-              const color = r.farbe || undefined;
-              return (
-              <tr key={r.id} style={color ? { color } : undefined}>
-                <td className="table-td font-medium align-top break-words">{r.name}</td>
-                <td className="table-td text-right">{r.avg_nutzung}</td>
-                <td className="table-td text-right">{r.peak_nutzung}</td>
-                <td className="table-td text-right font-semibold">{r.einheiten_avg}</td>
-                <td className="table-td text-right font-semibold">{r.einheiten_peak}</td>
-              </tr>
-            );})}
-            <tr className="bg-slate-50 font-semibold">
-              <td className="table-td">Anwesend total</td>
-              <td className="table-td text-right">{data.anwesend_total.avg_nutzung}</td>
-              <td className="table-td text-right">{data.anwesend_total.peak_nutzung}</td>
-              <td colSpan={2} />
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p className="text-xs text-slate-500 mt-3">
-        Empfohlene Einheiten basieren auf Ø- bzw. Peak-Nutzung (aufgerundet). Ø-Werte sind kosteneffizienter, Peak-Werte decken Spitzenlastzeiten ab. Externe Tätigkeiten (Homeoffice, Teilzeit usw.) sind nicht enthalten.
-      </p>
-    </div>
-  );
+  const [key,setKey] = useState('desks');
+  const [view,setView] = useState('maximum');
+  const p = data.planning;
+  if (!p) return null;
+  const profile = p.profiles.find(x=>x.key===key);
+  return <div className="space-y-4">
+    <p className="text-sm text-slate-600">Die Arbeitsplatzbelegung zählt Personen am Büroarbeitsplatz am untersuchten Standort. Personen in Besprechungs- oder Rückzugsräumen zählen dort nicht mit.</p>
+    <label className="label" htmlFor="planning-profile">Was möchtest du planen?</label>
+    <select id="planning-profile" className="input" value={key} onChange={e=>setKey(e.target.value)}>{p.profiles.map(x=><option key={x.key} value={x.key}>{x.label}</option>)}</select>
+    <div className="flex gap-2"><button className={view==='maximum'?'btn-primary':'btn-secondary'} onClick={()=>setView('maximum')}>Maximum je Wochentag</button><button className={view==='mittelwert'?'btn-primary':'btn-secondary'} onClick={()=>setView('mittelwert')}>Durchschnittlicher Tag</button></div>
+    <p className="text-sm">{view==='maximum' ? 'Grösste gleichzeitig beobachtete Belegung an einem konkreten Tag, je Wochentag und Uhrzeit.' : `Durchschnitt je Uhrzeit über ${p.mean_days} Tage. Tage ohne Belegung zählen mit; Tage mit vollständig fehlenden Personenerfassungen sind ausgeschlossen.`}</p>
+    {view==='mittelwert' && !p.mean_days ? <Alert>Für den Durchschnitt ist noch kein Tag für alle eingereichten Teilnehmenden dokumentiert.</Alert> : <Heatmap data={profile} anzeige={view}/>}
+    <p className="text-xs text-slate-500">{p.observed_days} beobachtete Tage · {p.excluded_days} Tage wegen fehlender Personentage nicht im Durchschnitt. Teilweise erfasste Tage können die Werte weiterhin beeinflussen; beachte die Vollständigkeit oben. Es wird nicht auf fehlende Teilnehmende hochgerechnet.</p>
+    {p.historical_entries>0 && <Alert>{p.historical_entries} ältere Einträge enthalten keine Angaben zur tatsächlichen Raumnutzung. Sie werden nur bei bekannter Standortanwesenheit berücksichtigt, nicht als Arbeitsplatz- oder Raumnutzung interpretiert.</Alert>}
+    <details className="text-sm"><summary className="cursor-pointer font-semibold">So wird der Raumbedarf geschätzt</summary><p className="mt-2">Gleichzeitig erfasste interne Besprechungen derselben Erhebung und Grössenklasse werden zusammengefasst: Anzahl erfasster Personen geteilt durch 3, 6,5, 10,5 bzw. 13, aufgerundet. Bei 13+ ist 13 eine Annahme. Gemischte Gruppen mit Gästen werden vorsichtig als ein Raum je erfassender Person gezählt und können dadurch überschätzt werden. Unterschiedliche Erhebungen werden nicht als gemeinsames Meeting zusammengelegt. Gefilterte Teilgruppen und nicht teilnehmende Personen können die Schätzung beeinflussen.</p><p className="mt-2">Tatsächliche Raumnutzung und benötigter geschlossener Raum sind getrennte Ansichten und dürfen nicht addiert werden. Auch Rückzugsgründe können sich überschneiden.</p></details>
+  </div>;
 }
 
 // ── Anteile ──────────────────────────────────────────────────────────────────
@@ -378,7 +355,7 @@ const MERKMAL_FILTER_META = [
   { key: "arbeitsorte", label: "Arbeitsort", opts: ARBEITSORT_OPTS },
   { key: "gruppengroessen", label: "Gruppengrösse", opts: GRUPPENGROESSE_OPTS },
   { key: "teilnehmerkreise", label: "Personenkreis", opts: TEILNEHMERKREIS_OPTS },
-  { key: "raeumlichkeiten", label: "Räumlichkeit", opts: RAEUMLICHKEIT_OPTS },
+  { key: "raeumlichkeiten", label: "Standort (bisherige Meeting-Erfassung)", opts: RAEUMLICHKEIT_OPTS },
   { key: "rueckzugsbedarfe", label: "Rückzugsbedarf", opts: RUECKZUGSBEDARF_OPTS },
 ];
 
@@ -783,7 +760,7 @@ export default function AuswertungPage() {
       {gruppeIds.length > 0 && (
         <div className="card">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <h2 className="font-semibold text-slate-800">Lastprofil</h2>
+            <h2 className="font-semibold text-slate-800">Tätigkeiten im Tagesverlauf</h2>
             <div className="flex gap-2">
               {["mittelwert", "maximum"].map(a => (
                 <button key={a} onClick={() => setAnzeige(a)}
@@ -795,7 +772,7 @@ export default function AuswertungPage() {
           </div>
 
           <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-3 mb-4">
-            {LP_HINTS[anzeige]}
+            Dieses Profil zählt gewählte Tätigkeiten an allen erfassten Orten. Die Arbeitsplatz- und Raumbelegung findest du in der separaten Ansicht unten. {LP_HINTS[anzeige]}
           </p>
 
           <TaetigkeitFilter
@@ -815,7 +792,7 @@ export default function AuswertungPage() {
 
       {rb && (
         <div className="card">
-          <h2 className="font-semibold text-slate-800 mb-4">Bedarf nach Tätigkeit</h2>
+          <h2 className="font-semibold text-slate-800 mb-4">Arbeitsplätze und Räume</h2>
           <TaetigkeitenBedarf data={rb} />
         </div>
       )}

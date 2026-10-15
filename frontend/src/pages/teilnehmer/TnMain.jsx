@@ -154,7 +154,7 @@ function ErhebungKachel({ gruppe, onKalender }) {
       {step === "bestaetigen" && (
         <Modal title="Einträge einreichen" onClose={() => setStep(null)}>
           <p className="text-sm text-slate-600 mb-6">
-            Möchtest du deine Einträge für <strong>{gruppe.name}</strong> definitiv einreichen?
+            Möchtest du deine Einträge für <strong>{gruppe.name}</strong> zur Auswertung einreichen?
           </p>
           <div className="flex gap-3 justify-end">
             <button className="btn-secondary" onClick={() => setStep(null)}>Abbrechen</button>

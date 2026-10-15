@@ -140,6 +140,9 @@ def _resolve_offene_merkmale(kategorie: Kategorie, data: dict) -> dict:
     leaves that field open too, this is only known once the participant's
     own choice is resolved.
     """
+    if kategorie.schema_version == 2:
+        return _resolve_v2(kategorie, data)
+
     werte = {
         "arbeitsort": None, "rueckzugsbedarf": None, "gruppengroesse": None,
         "teilnehmerkreis": None, "raeumlichkeit": None,
@@ -217,6 +220,8 @@ def create_eintrag(user_id: int, gruppe_id: int, data: dict, als_admin: bool = F
     if kategorie is None or not kategorie.aktiv:
         raise ValidationError("Kategorie nicht gefunden oder nicht aktiv.")
 
+    if kategorie.schema_version != 2:
+        raise ValidationError("Für neue Einträge bitte einen der fünf aktuellen Grundtypen wählen.")
     merkmale = _resolve_offene_merkmale(kategorie, data)
 
     _check_overlap(user_id, gruppe_id, datum, zeit_von, zeit_bis)
@@ -257,6 +262,9 @@ def update_eintrag(user_id: int, eintrag_id: int, data: dict, als_admin: bool = 
     if zeit_von >= zeit_bis:
         raise ValidationError("'Zeit von' muss vor 'Zeit bis' liegen.")
 
+    if zeit_von < TAG_START or zeit_bis > TAG_END:
+        raise ValidationError("Zeit liegt ausserhalb des Erfassungsfensters.")
+
     if "kategorie_id" in data:
         kategorie = db.session.get(Kategorie, int(data["kategorie_id"]))
         if kategorie is None or not kategorie.aktiv:
@@ -266,11 +274,8 @@ def update_eintrag(user_id: int, eintrag_id: int, data: dict, als_admin: bool = 
         kategorie = eintrag.kategorie
 
     merkmale = _resolve_offene_merkmale(kategorie, data)
-    eintrag.arbeitsort = merkmale["arbeitsort"]
-    eintrag.rueckzugsbedarf = merkmale["rueckzugsbedarf"]
-    eintrag.gruppengroesse = merkmale["gruppengroesse"]
-    eintrag.teilnehmerkreis = merkmale["teilnehmerkreis"]
-    eintrag.raeumlichkeit = merkmale["raeumlichkeit"]
+    for feld, wert in merkmale.items():
+        setattr(eintrag, feld, wert)
 
     _check_overlap(user_id, eintrag.gruppe_id, datum, zeit_von, zeit_bis, exclude_id=eintrag_id)
 
@@ -474,3 +479,38 @@ def get_dashboard(user_id: int, gruppe_id: int) -> dict:
         "erwartete_stunden": round(erwartete_minuten / 60, 1),
         "vollstaendigkeit_prozent": vollstaendigkeit,
     }
+
+
+RAUMNUTZUNGEN = {"ARBEITSPLATZ", "RUECKZUG", "BESPRECHUNG", "OFFEN"}
+RUECKZUG_GRUENDE = {"KONZENTRATION", "VERTRAULICHKEIT", "LAERM"}
+
+
+def _resolve_v2(kategorie, data):
+    values = dict.fromkeys(("arbeitsort", "rueckzugsbedarf", "gruppengroesse",
+                           "teilnehmerkreis", "raeumlichkeit", "raumnutzung", "online_dabei"))
+    values["rueckzug_gruende"] = []
+    form = kategorie.arbeitsform
+    if form == Arbeitsform.ABWESENHEIT:
+        return values
+    values["arbeitsort"] = _resolve_enum_feld(data, "arbeitsort", Arbeitsort, "Dein Aufenthaltsort")
+    if form == Arbeitsform.EINZELARBEIT:
+        values["gruppengroesse"] = Gruppengroesse.ALLEIN
+        values["online_dabei"] = False
+    else:
+        values["gruppengroesse"] = _resolve_enum_feld(data, "gruppengroesse", Gruppengroesse, "Personen im selben Raum")
+        if form == Arbeitsform.MEETING and values["gruppengroesse"] == Gruppengroesse.ALLEIN:
+            raise ValidationError("Für eine Besprechung vor Ort sind mindestens zwei Personen nötig. Wähle für einen Call Online-Meeting / Telefonat.")
+        values["online_dabei"] = form == Arbeitsform.ONLINE
+        if values["gruppengroesse"] != Gruppengroesse.ALLEIN:
+            values["teilnehmerkreis"] = _resolve_enum_feld(data, "teilnehmerkreis", Teilnehmerkreis, "Personen mit dir im Raum")
+    if values["arbeitsort"] == Arbeitsort.UEBLICHER_ARBEITSPLATZ:
+        if data.get("raumnutzung") not in RAUMNUTZUNGEN:
+            raise ValidationError("Bitte gib an, wo du am Standort arbeitest.")
+        values["raumnutzung"] = data["raumnutzung"]
+        values["rueckzugsbedarf"] = _resolve_enum_feld(data, "rueckzugsbedarf", Rueckzugsbedarf, "Geschlossener Raum erforderlich")
+        if values["rueckzugsbedarf"] == Rueckzugsbedarf.ERFORDERLICH:
+            reasons = data.get("rueckzug_gruende")
+            if not isinstance(reasons, list) or not reasons or any(r not in RUECKZUG_GRUENDE for r in reasons):
+                raise ValidationError("Bitte wähle mindestens einen Grund für den geschlossenen Raum.")
+            values["rueckzug_gruende"] = sorted(set(reasons))
+    return values

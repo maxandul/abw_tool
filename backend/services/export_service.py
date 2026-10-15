@@ -1,7 +1,7 @@
 """Generate a fully self-contained, interactive, anonymous HTML export.
 
 The export embeds the anonymised raw data of the selected groups and recomputes
-Lastprofil, Bedarf nach Tätigkeit, Anteilsübersicht and Stichprobe entirely in
+Lastprofil, Arbeitsplätze und Räume, Anteilsübersicht and Stichprobe entirely in
 the browser. The recipient can change the Teilnehmer-Filter (Funktion, OE,
 Beschäftigungsgrad) and the Lastprofil-Tätigkeiten without any server – mirroring
 the live Auswertung page.
@@ -13,6 +13,7 @@ included.
 
 import html as html_lib
 import json
+from pathlib import Path
 from datetime import date
 
 
@@ -155,7 +156,7 @@ _EXPORT_TEMPLATE = """\
     </section>
 
     <section id="raumbedarf">
-      <h2>Bedarf nach Tätigkeit</h2>
+      <h2>Arbeitsplätze und Räume</h2>
       <div id="raumbedarf-container"></div>
     </section>
 
@@ -177,9 +178,10 @@ _EXPORT_TEMPLATE = """\
     // EINZELARBEIT is shared between the current (Arbeitsform) and the
     // legacy (Tätigkeitsgruppe) structure – the others are structure-specific
     // and never mixed within one dataset in practice.
-    const TG_ORDER = ['EINZELARBEIT','MEETING','ABWESENHEIT','ZU_ZWEIT_DREIT','GRUPPE_4PLUS','EXTERN'];
+    const TG_ORDER = ['EINZELARBEIT','ONLINE','MEETING','ABWESENHEIT','ZU_ZWEIT_DREIT','GRUPPE_4PLUS','EXTERN'];
     const TG_LABELS = {
-      EINZELARBEIT: 'Einzelarbeit',
+      EINZELARBEIT: 'Allein arbeiten',
+      ONLINE: 'Online-Meeting / Telefonat',
       MEETING: 'Besprechung/Meeting',
       ABWESENHEIT: 'Abwesenheit',
       ZU_ZWEIT_DREIT: 'Zu zweit/zu dritt (physisch)',
@@ -255,12 +257,14 @@ _EXPORT_TEMPLATE = """\
     // Teilnehmer der Anteil seiner erfassten Arbeitstage, an denen der Slot
     // mit einer der gewählten Tätigkeiten belegt war, summiert über alle
     // Teilnehmenden.
+    __PLANNING_JS__
+
     function computeLastprofil(tnSet) {
       const katIds = [...state.kategorie_ids];
       if (!katIds.length) return { maximum_slots: [], mittelwert_slots: [] };
       const katSet = new Set(katIds);
-      const all = D.eintraege.filter(e => tnSet.has(e.t) && matchMerkmal(e));
-      const katE = all.filter(e => katSet.has(e.k));
+      const all = D.eintraege.filter(e => tnSet.has(e.t));
+      const katE = all.filter(e => katSet.has(e.k) && matchMerkmal(e));
       const tnTage = {};
       for (const e of all) (tnTage[e.t] = tnTage[e.t] || new Set()).add(e.d);
 
@@ -272,17 +276,19 @@ _EXPORT_TEMPLATE = """\
             const off = slot - TAG_START;
             const a = (tsk[e.t] = tsk[e.t] || {});
             (a[off] = a[off] || new Set()).add(e.d);
-            const key = e.wd + '_' + off;
+            const key = e.d + '_' + off;
             (wtSlotTn[key] = wtSlotTn[key] || new Set()).add(e.t);
           }
         }
       }
 
-      const maximum_slots = [];
+      const maxima = {};
       for (const key in wtSlotTn) {
-        const [wt, off] = key.split('_').map(Number);
-        maximum_slots.push({ wochentag: wt, slot_start_minuten: off, maximum: wtSlotTn[key].size });
+        const [day, off] = key.split('_');
+        const wt = (new Date(day+'T00:00:00Z').getUTCDay()+6)%7;
+        const mk=wt+'_'+off; maxima[mk]=Math.max(maxima[mk]||0,wtSlotTn[key].size);
       }
+      const maximum_slots=Object.entries(maxima).map(([k,maximum])=>{const [wochentag,slot_start_minuten]=k.split('_').map(Number);return {wochentag,slot_start_minuten,maximum};});
 
       const alleOffs = new Set();
       for (const uid in tsk) for (const off in tsk[uid]) alleOffs.add(Number(off));
@@ -303,46 +309,9 @@ _EXPORT_TEMPLATE = """\
     }
 
     function computeRaumbedarf(tnSet) {
-      const anwesendKat = new Set(D.kategorien.filter(k => k.anwesend).map(k => k.id));
-      const ents = D.eintraege.filter(e => tnSet.has(e.t) && anwesendKat.has(e.k) && matchMerkmal(e));
-      const kst = {};
-      for (const e of ents) {
-        for (let slot = e.von; slot < e.bis; slot += SLOT) {
-          if (slot >= TAG_START && slot < TAG_END) {
-            const key = e.wd + '_' + (slot - TAG_START);
-            const a = (kst[e.k] = kst[e.k] || {});
-            (a[key] = a[key] || new Set()).add(e.t);
-          }
-        }
-      }
-      const ast = {};
-      for (const k in kst) for (const key in kst[k]) {
-        (ast[key] = ast[key] || new Set());
-        kst[k][key].forEach(u => ast[key].add(u));
-      }
-      const anwesendCats = D.kategorien
-        .filter(k => k.anwesend)
-        .sort((a, b) => a.sort_order - b.sort_order);
-      const taetigkeiten = [];
-      for (const k of anwesendCats) {
-        const slotMap = kst[k.id];
-        if (!slotMap) continue;
-        const counts = Object.values(slotMap).map(s => s.size);
-        if (!counts.length) continue;
-        const avg = counts.reduce((a, b) => a + b, 0) / counts.length;
-        const peak = Math.max(...counts);
-        taetigkeiten.push({
-          id: k.id, name: k.name, farbe: k.farbe,
-          avg_nutzung: r2(avg), peak_nutzung: peak,
-          einheiten_avg: avg > 0 ? Math.ceil(avg) : 0, einheiten_peak: peak,
-        });
-      }
-      const anwCounts = Object.values(ast).map(s => s.size);
-      const anwesend_total = {
-        avg_nutzung: anwCounts.length ? r2(anwCounts.reduce((a, b) => a + b, 0) / anwCounts.length) : 0,
-        peak_nutzung: anwCounts.length ? Math.max(...anwCounts) : 0,
-      };
-      return { taetigkeiten, anwesend_total };
+      const raw=e=>({id:e.u,group:e.g,day:e.d,start:e.von,end:e.bis,onsite:e.onsite,room:e.room,size:e.gg,circle:e.tk,retreat:e.rb,reasons:e.reasons||[],v2:e.v2,category:e.k});
+      const all=D.eintraege.filter(e=>tnSet.has(e.t));
+      return calculatePlanning(all.map(raw),all.filter(matchMerkmal).map(raw),D.teilnehmer.filter(t=>tnSet.has(t.i)).map(t=>({id:t.u,group:t.g,start:t.start,end:t.end})));
     }
 
     function computeAnteile(tnSet) {
@@ -503,20 +472,20 @@ _EXPORT_TEMPLATE = """\
     // Räumlichkeit, Rückzugsbedarf) ─────────────────────────────────────────────
     const MERKMAL_META = [
       { key: 'arbeitsformen', elId: 'filter-merkmal-arbeitsform', label: 'Arbeitsform',
-        opts: [['EINZELARBEIT','Einzelarbeit'], ['MEETING','Besprechung/Meeting'], ['ABWESENHEIT','Abwesenheit']] },
+        opts: [['EINZELARBEIT','Allein arbeiten'], ['ONLINE','Online-Meeting / Telefonat'], ['MEETING','Besprechung/Meeting'], ['ABWESENHEIT','Abwesenheit']] },
       { key: 'arbeitsorte', elId: 'filter-merkmal-arbeitsort', label: 'Arbeitsort',
-        opts: [['UEBLICHER_ARBEITSPLATZ','Üblicher Arbeitsplatz/Standort'], ['HOMEOFFICE','Homeoffice'],
+        opts: [['UEBLICHER_ARBEITSPLATZ','Am untersuchten Standort'], ['HOMEOFFICE','Homeoffice'],
                ['ANDERER_VD_STANDORT','Anderer VD-Standort'], ['MOBIL_EXTERN','Mobil/extern']] },
       { key: 'gruppengroessen', elId: 'filter-merkmal-gruppengroesse', label: 'Gruppengrösse',
-        opts: [['ZWEI_BIS_VIER','2-4 Personen'], ['FUENF_BIS_ACHT','5-8 Personen'],
+        opts: [['ALLEIN','Nur ich'], ['ZWEI_BIS_VIER','2-4 Personen'], ['FUENF_BIS_ACHT','5-8 Personen'],
                ['NEUN_BIS_ZWOELF','9-12 Personen'], ['DREIZEHN_PLUS','13+ Personen']] },
       { key: 'teilnehmerkreise', elId: 'filter-merkmal-teilnehmerkreis', label: 'Personenkreis',
         opts: [['STANDORTINTERN','Nur standortintern'], ['STANDORTUEBERGREIFEND_EXTERN','Inkl. standortexternen Personen']] },
-      { key: 'raeumlichkeiten', elId: 'filter-merkmal-raeumlichkeit', label: 'Räumlichkeit',
+      { key: 'raeumlichkeiten', elId: 'filter-merkmal-raeumlichkeit', label: 'Standort (bisherige Meeting-Erfassung)',
         opts: [['UEBLICHER_STANDORT','Üblicher Standort'], ['ANDERER_VD_STANDORT','Anderer VD-Standort'],
                ['EXTERN','Extern']] },
       { key: 'rueckzugsbedarfe', elId: 'filter-merkmal-rueckzugsbedarf', label: 'Rückzugsbedarf',
-        opts: [['ERFORDERLICH','Rückzug erforderlich'], ['GEMEINSAM_MOEGLICH','Gemeinsames Umfeld möglich']] },
+        opts: [['ERFORDERLICH','Ja, geschlossener Raum erforderlich'], ['GEMEINSAM_MOEGLICH','Nein, offener Bereich genügt']] },
     ];
 
     function renderMerkmalFilter() {
@@ -653,35 +622,24 @@ _EXPORT_TEMPLATE = """\
       cont.innerHTML = `<table class="heatmap-table" style="max-width:16rem"><thead>${hdr}</thead><tbody>${rows}</tbody></table>`;
     }
 
+    let planningKey='desks';
     function renderRaumbedarf() {
-      const tnSet = sampleTnIdx();
-      const d = computeRaumbedarf(tnSet);
-      if (!d.taetigkeiten.length) {
-        document.getElementById('raumbedarf-container').innerHTML = '<div class="empty">Keine Daten für die aktuelle Auswahl.</div>';
-        return;
-      }
-      const rows = d.taetigkeiten.map(r => `<tr>
-        <td style="color:${esc(r.farbe || '#1e293b')};font-weight:500">${esc(r.name)}</td>
-        <td class="right">${r.avg_nutzung}</td>
-        <td class="right">${r.peak_nutzung}</td>
-        <td class="right"><strong>${r.einheiten_avg}</strong></td>
-        <td class="right"><strong>${r.einheiten_peak}</strong></td>
-      </tr>`).join('');
-      const total = `<tr style="background:#f1f5f9;font-weight:600">
-        <td>Anwesend total</td>
-        <td class="right">${d.anwesend_total.avg_nutzung}</td>
-        <td class="right">${d.anwesend_total.peak_nutzung}</td>
-        <td colspan="2"></td>
-      </tr>`;
-      document.getElementById('raumbedarf-container').innerHTML = `
-        <table>
-          <thead><tr>
-            <th>Tätigkeit</th><th class="right">Ø Nutzung</th><th class="right">Peak</th>
-            <th class="right">Einheiten (Ø)</th><th class="right">Einheiten (Peak)</th>
-          </tr></thead>
-          <tbody>${rows}${total}</tbody>
-        </table>
-        <p class="note">Empfohlene Einheiten basieren auf Ø- bzw. Peak-Nutzung (aufgerundet). Externe Tätigkeiten sind nicht enthalten.</p>`;
+      const p=computeRaumbedarf(sampleTnIdx());
+      const profile=p.profiles.find(x=>x.key===planningKey);
+      const rows=Array.from({length:48},(_,i)=>{
+        const off=i*15, total=420+off;
+        const label=String(Math.floor(total/60)).padStart(2,'0')+':'+String(total%60).padStart(2,'0');
+        const mean=profile.mittelwert_slots.find(x=>x.slot_start_minuten===off);
+        const maxima=[0,1,2,3,4].map(w=>profile.maximum_slots.find(x=>x.wochentag===w&&x.slot_start_minuten===off)?.maximum||0);
+        return `<tr><td>${label}</td><td>${mean?mean.mittelwert.toFixed(2):'–'}</td>${maxima.map(n=>`<td>${n}</td>`).join('')}</tr>`;
+      }).join('');
+      document.getElementById('raumbedarf-container').innerHTML=`
+        <label for="planning-select">Was möchtest du planen?</label>
+        <select id="planning-select" onchange="planningKey=this.value;renderRaumbedarf()">${p.profiles.map(x=>`<option value="${esc(x.key)}" ${x.key===planningKey?'selected':''}>${esc(x.label)}</option>`).join('')}</select>
+        <p>Durchschnitt aus ${p.mean_days} dokumentierten Tagen; ${p.excluded_days} Tage wegen fehlender Personentage ausgeschlossen. Maxima zählen tatsächliche Gleichzeitigkeit an konkreten Tagen. Teilweise fehlende Erfassungen können Werte beeinflussen; keine Hochrechnung auf nicht eingereichte Personen.</p>
+        <p>${p.historical_entries} ältere Einträge ohne Angaben zur Raumnutzung: nur bekannte Standortanwesenheit, keine nachträglich angenommene Arbeitsplatz- oder Raumbelegung.</p>
+        <table><thead><tr><th>Zeit</th><th>Ø Tag</th><th>Max Mo</th><th>Max Di</th><th>Max Mi</th><th>Max Do</th><th>Max Fr</th></tr></thead><tbody>${rows}</tbody></table>
+        <details><summary>Schätzannahmen für Besprechungsräume</summary><p>Interne Personen derselben Erhebung und Grössenklasse je Zeitfenster: durch 3 / 6,5 / 10,5 / 13 teilen, aufrunden. 13 ist die Annahme für 13+. Bei gemischten Gruppen mit Gästen wird ein Raum je erfassender Person gezählt; Überschätzung ist möglich. Filter auf Teilgruppen beeinflussen die Schätzung. Nutzung, benötigte Räume und mehrere Rückzugsgründe nicht addieren.</p></details>`;
     }
 
     // Fixed palette for Tätigkeitsgruppe/Arbeitsform segments, which (unlike
@@ -761,7 +719,7 @@ def generiere_export_html(
         "__INITIAL_FILTER_JSON__": _json_for_script(initial_filter),
     }
 
-    html = _EXPORT_TEMPLATE
+    html = _EXPORT_TEMPLATE.replace("__PLANNING_JS__", Path(__file__).with_name("planning_export.js").read_text(encoding="utf-8"))
     # Replace data/filter JSON last so header tokens can't collide with payload.
     for token in (
         "__TITEL__",

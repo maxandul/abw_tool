@@ -1,3 +1,4 @@
+import TaetigkeitFragen, { RAUM_OPTS, GRUND_OPTS } from "../../components/TaetigkeitFragen";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { format, startOfWeek, addDays, addWeeks, parseISO, isBefore, isAfter, isSameDay, isWithinInterval } from "date-fns";
@@ -54,14 +55,15 @@ const TIME_OPTIONS = Array.from({ length: SLOTS + 1 }, (_, i) => {
 
 
 // ── Entry form modal ──────────────────────────────────────────────────────────
-function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose }) {
+function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose, onCopy }) {
   // Safety net: if the entry's current Tätigkeit isn't in the offered list
   // (e.g. it was assigned under the previous, now-archived structure), keep
   // it selectable so saving without changing the selection doesn't silently
   // reassign it.
-  const sorted = initial?.kategorie_id && !kategorien.some(k => k.id === initial.kategorie_id) && initial.kategorie
-    ? [...kategorien, initial.kategorie]
-    : kategorien;
+  const offered = kategorien.filter(k => k.schema_version === 2);
+  const sorted = initial?.kategorie_id && !offered.some(k => k.id === initial.kategorie_id) && initial.kategorie
+    ? [...offered, initial.kategorie]
+    : offered;
   const [form, setForm] = useState({
     datum: initial?.datum ?? "",
     zeit_von: initial?.zeit_von ?? "08:00",
@@ -72,6 +74,8 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
     gruppengroesse: initial?.gruppengroesse ?? "",
     teilnehmerkreis: initial?.teilnehmerkreis ?? "",
     raeumlichkeit: initial?.raeumlichkeit ?? "",
+    raumnutzung: initial?.raumnutzung ?? "",
+    rueckzug_gruende: initial?.rueckzug_gruende ?? [],
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -84,7 +88,7 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
     // them so a locked value from the previous selection can't linger.
     setForm(f => ({
       ...f, kategorie_id,
-      arbeitsort: "", rueckzugsbedarf: "", gruppengroesse: "", teilnehmerkreis: "", raeumlichkeit: "",
+      arbeitsort: "", rueckzugsbedarf: "", gruppengroesse: "", teilnehmerkreis: "", raeumlichkeit: "", raumnutzung: "", rueckzug_gruende: [],
     }));
   };
 
@@ -124,6 +128,9 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
 
   if (readonly) {
     const merkmale = [
+      RAUM_OPTS.find(o => o.value === initial?.raumnutzung)?.label,
+      ...(initial?.rueckzug_gruende || []).map(v => GRUND_OPTS.find(o=>o.value===v)?.label),
+      initial?.online_dabei === true ? "Online zugeschaltet: Ja" : null,
       initial?.effective_arbeitsort_label,
       initial?.effective_gruppengroesse_label,
       initial?.effective_teilnehmerkreis_label,
@@ -144,7 +151,7 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
     );
   }
 
-  const groups = groupKategorien(sorted);
+
   // Rückzugsbedarf ist bei Einzelarbeit nur relevant, wenn der (fest
   // vorgegebene oder gerade ausgewählte) Arbeitsort dem üblichen
   // Arbeitsplatz/Standort entspricht, bei Meeting nur, wenn die Räumlichkeit
@@ -162,6 +169,7 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
     <Modal title={initial?.id ? "Eintrag bearbeiten" : "Neuer Eintrag"} onClose={onClose}>
       {error && <div className="mb-3"><Alert>{error}</Alert></div>}
       <form onSubmit={submit} className="space-y-4">
+        <label className="label">Datum<input type="date" className="input" required value={form.datum} onChange={set("datum")}/></label>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="label">Von</label>
@@ -178,24 +186,23 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
         </div>
         <div>
           <label className="label">Tätigkeit</label>
-          <select className="input w-full" value={form.kategorie_id} onChange={onKategorieChange}>
-            {groups.map(g => (
-              <optgroup key={g.key} label={g.label}>
-                {g.items.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
-              </optgroup>
-            ))}
-          </select>
+          <div className="grid grid-cols-1 gap-2" role="group" aria-label="Tätigkeit auswählen">
+            {sorted.map(k=><button key={k.id} type="button" aria-pressed={Number(form.kategorie_id)===k.id}
+              className={`text-left rounded-lg border px-3 py-2 text-sm ${Number(form.kategorie_id)===k.id ? 'border-blue-700 bg-blue-50 font-semibold' : 'border-slate-200 hover:bg-slate-50'}`}
+              onClick={()=>onKategorieChange({target:{value:k.id}})}>{k.name}{k.schema_version!==2?' (bisherige Erfassung)':''}</button>)}
+          </div>
           {selKat?.beschreibung && (
             <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 p-2 rounded">{selKat.beschreibung}</p>
           )}
         </div>
 
-        {gesperrt.length > 0 && (
+        {selKat?.schema_version === 2 && <TaetigkeitFragen form={form} setForm={setForm} kategorie={selKat} />}
+        {gesperrt.length > 0 && selKat?.schema_version !== 2 && (
           <p className="text-xs text-slate-500 bg-slate-50 p-2 rounded">
             {gesperrt.map(f => `${OFFENE_FELD_META[f].label}: ${selKat[`${f}_label`]}`).join(" · ")}
           </p>
         )}
-        {offen.map(f => (
+        {selKat?.schema_version !== 2 && offen.map(f => (
           <div key={f}>
             <label className="label">{OFFENE_FELD_META[f].label} *</label>
             <select className="input" value={form[f]} onChange={fieldOnChange(f)} required>
@@ -205,8 +212,18 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
           </div>
         ))}
 
+        {selKat?.schema_version === 2 && <div className="rounded-lg bg-slate-50 p-3 text-sm" aria-live="polite">
+          <strong>{selKat.name}</strong> · {form.zeit_von}–{form.zeit_bis}
+          {selKat.arbeitsform !== 'ABWESENHEIT' && <p>{[
+            ARBEITSORT_OPTS.find(o=>o.value===form.arbeitsort)?.label,
+            selKat.arbeitsform==='EINZELARBEIT'?'Nur ich':GRUPPENGROESSE_OPTS.find(o=>o.value===form.gruppengroesse)?.label,
+            form.arbeitsort==='UEBLICHER_ARBEITSPLATZ'?RAUM_OPTS.find(o=>o.value===form.raumnutzung)?.label:null,
+            form.arbeitsort==='UEBLICHER_ARBEITSPLATZ'?RUECKZUGSBEDARF_OPTS.find(o=>o.value===form.rueckzugsbedarf)?.label:null,
+          ].filter(Boolean).join(' · ')}</p>}
+        </div>}
         <div className="flex gap-3 justify-between pt-2">
-          <div>
+          <div className="flex gap-2">
+            {initial?.id && selKat?.schema_version === 2 && onCopy && <button type="button" className="btn-secondary text-xs" onClick={()=>onCopy(initial)}>Kopieren</button>}
             {initial?.id && (
               <button type="button" className="btn-danger text-xs" onClick={() => onDelete(initial.id)}>Löschen</button>
             )}
@@ -447,6 +464,7 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
   const [luecken, setLuecken] = useState([]);
   const [msg, setMsg] = useState("");
   const [hoverSlot, setHoverSlot] = useState(null);
+  const [weekIndex,setWeekIndex] = useState(0);
 
   const load = useCallback(async () => {
     if (!gId || !zeitraumVon || !zeitraumBis) return;
@@ -488,7 +506,7 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
     const { error: e } = await A.einreichen(gId);
     setActionStep(null);
     if (e) { setError(e); return; }
-    setMsg("Einträge erfolgreich eingereicht."); load();
+    setMsg("Einträge zur Auswertung eingereicht. Bis zum Abschluss kannst du sie wieder bearbeiten."); load();
   };
 
   const { selection, onMouseDown, onMouseMove, onMouseUp } = useDragSelect(
@@ -499,7 +517,7 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
   const handleSave = async (form) => {
     const body = {
       gruppe_id: gId,
-      datum: modal.datum ?? modal.eintrag?.datum,
+      datum: form.datum || modal.datum || modal.eintrag?.datum,
       zeit_von: form.zeit_von,
       zeit_bis: form.zeit_bis,
       kategorie_id: Number(form.kategorie_id),
@@ -508,6 +526,8 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
       gruppengroesse: form.gruppengroesse || null,
       teilnehmerkreis: form.teilnehmerkreis || null,
       raeumlichkeit: form.raeumlichkeit || null,
+      raumnutzung: form.raumnutzung || null,
+      rueckzug_gruende: form.rueckzug_gruende || [],
     };
     const { error: err } = modal.eintrag?.id
       ? await A.updateEintrag(modal.eintrag.id, body)
@@ -517,7 +537,9 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
   };
 
   const handleDelete = async (id) => {
-    await A.deleteEintrag(id); setModal(null); load();
+    const { error: err } = await A.deleteEintrag(id);
+    if (err) { setError(err); return; }
+    setModal(null); load();
   };
 
   if (loading) return <div className="flex justify-center mt-12"><Spinner size="lg" /></div>;
@@ -584,12 +606,17 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
         </div>
       )}
 
-      {/* Stacked week grids */}
+      <nav className="flex gap-3 items-center flex-wrap" aria-label="Kalenderwoche">
+        <button className="btn-secondary" disabled={weekIndex<=0} onClick={()=>setWeekIndex(i=>i-1)}>← Vorherige Woche</button>
+        <select className="input w-auto" aria-label="Woche wählen" value={Math.min(weekIndex,weeks.length-1)} onChange={e=>setWeekIndex(Number(e.target.value))}>{weeks.map((w,i)=><option key={i} value={i}>{format(w,'dd.MM.yyyy')} – {format(addDays(w,4),'dd.MM.yyyy')}</option>)}</select>
+        <button className="btn-secondary" disabled={weekIndex>=weeks.length-1} onClick={()=>setWeekIndex(i=>i+1)}>Nächste Woche →</button>
+      </nav>
+      {/* Week grid */}
       <div className="space-y-6"
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}>
-        {weeks.map(ws => (
+        {weeks.slice(Math.min(weekIndex,weeks.length-1),Math.min(weekIndex,weeks.length-1)+1).map(ws => (
           <WeekGrid
             key={dateStr(ws)}
             weekStart={ws}
@@ -613,18 +640,19 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
 
       {/* Entry modal */}
       {modal && (
-        <EintragModal
+        <EintragModal key={`${modal.eintrag?.id || "new"}-${modal.eintrag?.datum || modal.datum}`}
           initial={modal.eintrag ?? {
             datum: modal.datum,
             zeit_von: modal.zeitVon ?? "08:00",
             zeit_bis: modal.zeitBis ?? "09:00",
-            kategorie_id: kategorien[0]?.id ?? "",
+            kategorie_id: kategorien.find(k=>k.schema_version===2)?.id ?? "",
           }}
           kategorien={kategorien}
           readonly={readonly}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setModal(null)}
+          onCopy={entry=>setModal({eintrag:{...entry,id:undefined}})}
         />
       )}
 
@@ -651,7 +679,7 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
       {actionStep === "bestaetigen" && (
         <Modal title="Einträge einreichen" onClose={() => setActionStep(null)}>
           <p className="text-sm text-slate-600 mb-6">
-            Möchtest du deine Einträge definitiv einreichen?
+            Möchtest du deine Einträge zur Auswertung einreichen?
           </p>
           <div className="flex gap-3 justify-end">
             <button className="btn-secondary" onClick={() => setActionStep(null)}>Abbrechen</button>

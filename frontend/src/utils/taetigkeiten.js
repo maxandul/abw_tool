@@ -1,21 +1,23 @@
 // ── Current structure (Arbeitsform-based) ──────────────────────────────────
 
-export const ARBEITSFORM_ORDER = ["EINZELARBEIT", "MEETING", "ABWESENHEIT"];
+export const ARBEITSFORM_ORDER = ["EINZELARBEIT", "ONLINE", "MEETING", "ABWESENHEIT"];
 
 export const ARBEITSFORM_LABELS = {
-  EINZELARBEIT: "Einzelarbeit",
+  EINZELARBEIT: "Allein arbeiten",
+  ONLINE: "Online-Meeting / Telefonat",
   MEETING: "Besprechung/Meeting",
   ABWESENHEIT: "Abwesenheit",
 };
 
 export const ARBEITSORT_OPTS = [
-  { value: "UEBLICHER_ARBEITSPLATZ", label: "Üblicher Arbeitsplatz/Standort" },
+  { value: "UEBLICHER_ARBEITSPLATZ", label: "Am untersuchten Standort" },
   { value: "HOMEOFFICE", label: "Homeoffice" },
   { value: "ANDERER_VD_STANDORT", label: "Anderer VD-Standort" },
-  { value: "MOBIL_EXTERN", label: "Mobil/extern" },
+  { value: "MOBIL_EXTERN", label: "Anderswo / unterwegs" },
 ];
 
 export const GRUPPENGROESSE_OPTS = [
+  {value: "ALLEIN", label: "Nur ich"},
   { value: "ZWEI_BIS_VIER", label: "2-4 Personen" },
   { value: "FUENF_BIS_ACHT", label: "5-8 Personen" },
   { value: "NEUN_BIS_ZWOELF", label: "9-12 Personen" },
@@ -25,8 +27,8 @@ export const GRUPPENGROESSE_OPTS = [
 // Field/enum name kept as "Teilnehmerkreis" internally; shown to users as
 // "Personenkreis" everywhere (see labels below and elsewhere in the UI).
 export const TEILNEHMERKREIS_OPTS = [
-  { value: "STANDORTINTERN", label: "Nur standortintern" },
-  { value: "STANDORTUEBERGREIFEND_EXTERN", label: "Inkl. standortexternen Personen" },
+  { value: "STANDORTINTERN", label: "Nur Personen von meinem Standort" },
+  { value: "STANDORTUEBERGREIFEND_EXTERN", label: "Auch Personen von anderen Standorten / externe Gäste" },
 ];
 
 export const RAEUMLICHKEIT_OPTS = [
@@ -36,8 +38,8 @@ export const RAEUMLICHKEIT_OPTS = [
 ];
 
 export const RUECKZUGSBEDARF_OPTS = [
-  { value: "ERFORDERLICH", label: "Rückzug erforderlich" },
-  { value: "GEMEINSAM_MOEGLICH", label: "Gemeinsames Umfeld möglich" },
+  { value: "ERFORDERLICH", label: "Ja, geschlossener Raum erforderlich" },
+  { value: "GEMEINSAM_MOEGLICH", label: "Nein, offener Bereich genügt" },
 ];
 
 export const ABWESENHEIT_GRUND_OPTS = [
@@ -78,6 +80,7 @@ export const showAbwesenheitGrund = (arbeitsform) => arbeitsform === "ABWESENHEI
 /** Suggested hex colors per Arbeitsform (green / blue / gray). */
 export const ARBEITSFORM_FARBEN = {
   EINZELARBEIT: ["#58D68D", "#2ECC71", "#27AE60", "#1E8449", "#145A32"],
+  ONLINE: ["#7c3aed"],
   MEETING: ["#85C1E9", "#5DADE2", "#3498DB", "#2874A6", "#1A5276"],
   ABWESENHEIT: ["#D5D8DC", "#BDC3C7", "#95A5A6", "#7F8C8D", "#566573"],
 };

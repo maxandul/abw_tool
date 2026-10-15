@@ -133,8 +133,8 @@ def list_kategorien(
     if nur_aktiv:
         query = query.filter_by(aktiv=True)
     if nur_neu:
-        query = query.filter(Kategorie.arbeitsform.isnot(None))
-    if gruppe_id is not None:
+        query = query.filter(Kategorie.schema_version == 2)
+    if gruppe_id is not None and not nur_neu:
         gruppe = db.session.get(Gruppe, gruppe_id)
         if gruppe is not None and gruppe.kategorien:
             erlaubte_ids = {k.id for k in gruppe.kategorien}
@@ -146,54 +146,19 @@ def list_kategorien(
 
 
 def create_kategorie(data: dict) -> Kategorie:
-    cleaned = _validate(data)
-    kategorie = Kategorie(**cleaned)
-    db.session.add(kategorie)
-    db.session.commit()
-    return kategorie
+    raise ValidationError("Die fünf Grundtypen sind fest vorgegeben.")
 
 
 def update_kategorie(kategorie_id: int, data: dict, modus: str = "ueberschreiben") -> Kategorie:
-    kategorie = db.session.get(Kategorie, kategorie_id)
-    if kategorie is None:
-        raise ValidationError("Tätigkeit nicht gefunden.")
-    if kategorie.ist_legacy:
-        raise ValidationError(
-            "Tätigkeiten aus dem bisherigen System können nicht mehr bearbeitet werden."
-        )
-
-    cleaned = _validate(data, partial=True)
-
-    if modus == "neu":
-        merged = {
-            "name": cleaned.get("name", kategorie.name),
-            "beschreibung": cleaned.get("beschreibung", kategorie.beschreibung),
-            "farbe": cleaned.get("farbe", kategorie.farbe),
-            "sort_order": cleaned.get("sort_order", kategorie.sort_order),
-            "arbeitsform": cleaned.get("arbeitsform", kategorie.arbeitsform),
-            "arbeitsort": cleaned.get("arbeitsort", kategorie.arbeitsort),
-            "gruppengroesse": cleaned.get("gruppengroesse", kategorie.gruppengroesse),
-            "teilnehmerkreis": cleaned.get("teilnehmerkreis", kategorie.teilnehmerkreis),
-            "raeumlichkeit": cleaned.get("raeumlichkeit", kategorie.raeumlichkeit),
-            "rueckzugsbedarf": cleaned.get("rueckzugsbedarf", kategorie.rueckzugsbedarf),
-            "abwesenheit_grund": cleaned.get("abwesenheit_grund", kategorie.abwesenheit_grund),
-        }
-        neue = Kategorie(**merged)
-        db.session.add(neue)
-        db.session.commit()
-        return neue
-
-    for key, value in cleaned.items():
-        setattr(kategorie, key, value)
-
-    db.session.commit()
-    return kategorie
+    raise ValidationError("Tätigkeiten sind fest vorgegeben. Historische Einträge behalten ihre Bedeutung.")
 
 
 def set_aktiv(kategorie_id: int, aktiv: bool) -> Kategorie:
     kategorie = db.session.get(Kategorie, kategorie_id)
     if kategorie is None:
         raise ValidationError("Tätigkeit nicht gefunden.")
+    if kategorie.schema_version == 2:
+        raise ValidationError("Die fünf Grundtypen bleiben aktiv.")
     kategorie.aktiv = aktiv
     db.session.commit()
     return kategorie

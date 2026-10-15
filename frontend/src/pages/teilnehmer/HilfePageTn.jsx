@@ -40,7 +40,7 @@ export default function HilfePageTn() {
           <Li><strong>Fortschritt:</strong> Balken mit erfasster Zeit gegenüber dem Soll (Arbeitstage × 8,4 h) und dem Prozentwert deiner Vollständigkeit.</Li>
           <Li><strong>Zeitanteile:</strong> Balkendiagramm deiner bisher erfassten Tätigkeitskategorien.</Li>
           <Li><strong>Tätigkeit erfassen:</strong> Öffnet den Kalender dieser Erhebung.</Li>
-          <Li><strong>Einreichen:</strong> Reicht deine Einträge definitiv ein.</Li>
+          <Li><strong>Einreichen:</strong> Reicht deine Einträge zur Auswertung ein.</Li>
           <Li><strong>Änderung vornehmen:</strong> Entsperrt eingereichte Einträge, falls du noch etwas korrigieren möchtest.</Li>
         </ul>
       </Section>
@@ -49,7 +49,7 @@ export default function HilfePageTn() {
         <P>Im Kalender sind alle Kalenderwochen des Erhebungszeitraums fest untereinander dargestellt. Tage ausserhalb des Erhebungszeitraums sind ausgegraut und nicht bearbeitbar.</P>
         <ul className="list-disc list-inside space-y-1 pl-2">
           <Li><strong>Klicken und Ziehen:</strong> Halte die Maustaste auf einem freien Zeitslot gedrückt und ziehe nach unten, um eine Zeitspanne auszuwählen. Der blaue Bereich zeigt dir Startzeit, Endzeit und Dauer.</Li>
-          <Li><strong>Tätigkeit wählen:</strong> Im erscheinenden Formular wählst du die passende Tätigkeit. Die Auswahl ist nach Arbeitsform gruppiert (Einzelarbeit, Besprechung/Meeting, Abwesenheit).</Li>
+          <Li><strong>Tätigkeit wählen:</strong> Im erscheinenden Formular wählst du die passende Tätigkeit. Du wählst aus fünf Grundtypen. Bei einem hybriden Meeting wählst du Online-Meeting / Telefonat.</Li>
           <Li><strong>Alles ausser Pausen:</strong> Erfasse alle Tätigkeiten deines Arbeitstags lückenlos. Nur (Mittags-)Pausen lässt du frei.</Li>
           <Li><strong>Teilzeit &amp; Abwesenheit:</strong> Regulär freie Zeit bei Teilzeitpensum trägst du als Abwesenheit mit Grund <strong>Teilzeit</strong> ein. Für Ferien, Krankheit oder Feiertage gibt es eine Abwesenheit mit Grund <strong>Sonstiges</strong>. So ist deine Woche vollständig.</Li>
           <Li><strong>Eintrag bearbeiten / löschen:</strong> Klicke auf einen bestehenden farbigen Block, um ihn zu bearbeiten oder zu löschen.</Li>
@@ -88,6 +88,12 @@ export default function HilfePageTn() {
         </Section>
       )}
 
+      <Section title="Welche Angaben sind gemeint?">
+        <P><strong>Aufenthaltsort:</strong> Wo bist du selbst? Der untersuchte Standort ist der Standort deiner Erhebung.</P>
+        <P><strong>Personen im selben Raum:</strong> Schätze die Zahl der an deiner Tätigkeit beteiligten Personen einschliesslich dir selbst. Andere Personen im Grossraumbüro und online zugeschaltete Personen zählen nicht mit. Nur ich, 2–4, 5–8, 9–12 oder 13 und mehr genügen.</P>
+        <P><strong>Raumnutzung:</strong> Wo hast du tatsächlich gearbeitet? Gib zusätzlich an, ob du einen geschlossenen Raum gebraucht hättest – auch wenn keiner verfügbar war. Gründe können Konzentration, Vertraulichkeit oder Rücksicht auf andere sein.</P>
+        <P>Die Angaben helfen bei der Planung von Arbeitsplätzen und Räumen. Eine ungefähre Einschätzung genügt.</P>
+      </Section>
       <Section title="Einreichen">
         <P>Wenn du alle Tätigkeiten für den Erhebungszeitraum erfasst hast, kannst du deine Einträge einreichen:</P>
         <ul className="list-disc list-inside space-y-1 pl-2">

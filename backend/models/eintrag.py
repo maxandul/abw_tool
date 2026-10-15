@@ -52,6 +52,10 @@ class Eintrag(db.Model):
     teilnehmerkreis = db.Column(db.Enum(Teilnehmerkreis), nullable=True)
     raeumlichkeit = db.Column(db.Enum(Raeumlichkeit), nullable=True)
 
+    raumnutzung = db.Column(db.String(32), nullable=True)
+    online_dabei = db.Column(db.Boolean, nullable=True)
+    rueckzug_gruende = db.Column(db.JSON, nullable=True)
+
     user = db.relationship("User")
     gruppe = db.relationship("Gruppe")
     kategorie = db.relationship("Kategorie")
@@ -85,6 +89,9 @@ class Eintrag(db.Model):
         eff_raeumlichkeit = self.effective_raeumlichkeit
         return {
             "id": self.id,
+            "raumnutzung": self.raumnutzung,
+            "online_dabei": self.online_dabei,
+            "rueckzug_gruende": self.rueckzug_gruende or [],
             "user_id": self.user_id,
             "gruppe_id": self.gruppe_id,
             "kategorie_id": self.kategorie_id,

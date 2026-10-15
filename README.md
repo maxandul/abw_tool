@@ -1,3 +1,5 @@
+> Aktuelle Erfassungs- und Berechnungsregeln sowie Updatehinweise: [Erfassung und Raumplanung ab Oktober 2026](#erfassung-und-raumplanung-ab-oktober-2026). Frühere frei konfigurierbare Tätigkeitskataloge gelten nur noch für historische Daten.
+
 # Tätigkeitserhebung Tool
 
 Web-Applikation zur Erhebung von Tätigkeitsprofilen im Rahmen einer arbeitsplatzbasierten Umgestaltung (Activity-Based Working). Teilnehmer erfassen täglich ihre Zeitblöcke nach Tätigkeitskategorie. Admins werten die Daten aus und leiten daraus den Raumbedarf für neue Arbeitswelten ab.
@@ -180,3 +182,59 @@ Festplatte und sperrt alle Änderungen serverseitig.
 
 Einrichtung, Konfiguration und Sicherheitsgrenzen sind in
 [`BETRIEBSMODI.md`](BETRIEBSMODI.md) beschrieben.
+
+## Erfassung und Raumplanung ab Oktober 2026
+
+Neue Einträge verwenden fünf feste Grundtypen: Allein arbeiten, Online-Meeting /
+Telefonat (einschliesslich hybrider Meetings), Besprechung / Zusammenarbeit vor Ort,
+Arbeitsfreie Zeit wegen Teilzeit und Andere Abwesenheit. Pro Standort eine eigene
+Erhebung anlegen und den Standort im Erhebungsnamen nennen.
+
+Teilnehmende schätzen nur Personen im selben Raum (inklusive sich selbst): nur ich,
+2–4, 5–8, 9–12, 13+. Online zugeschaltete Personen werden nicht gezählt; ihre
+Anwesenheit ergibt sich als Ja/Nein aus dem Grundtyp. Tatsächlicher Aufenthaltsort,
+genutzter Platz und benötigter geschlossener Raum werden getrennt erfasst.
+Rückzugsgründe erlauben Mehrfachauswahl. Der Kalender bietet Wochenwahl und das
+Kopieren neuer Einträge mit anpassbarem Datum und Zeitfenster.
+
+### Berechnungsregeln
+
+- Arbeitsplatzbelegung: nur tatsächliche Büroarbeitsplätze am untersuchten
+  Standort, unabhängig vom Tätigkeitstyp. Besprechungsräume zählen nicht mit.
+- Maximum: zuerst unterschiedliche Personen je konkretem Datum und Viertelstunde
+  zählen, dann Maximum je Wochentag/Uhrzeit über die Wochen bilden.
+- Durchschnittlicher Tag in der Raumplanung: arithmetischer Mittelwert je Uhrzeit
+  über Tage, für die alle eingereichten, im Zeitraum zugeordneten Personen
+  mindestens einen Eintrag haben. Dokumentierte Abwesenheiten sind echte Nullen.
+  Fehlende Personentage werden ausgeschlossen und ihre Zahl angezeigt. Teilweise
+  unvollständige Tage können weiterhin verzerren; keine Hochrechnung auf Personen,
+  die nicht eingereicht haben. Vollständigkeit separat prüfen.
+- Interne Besprechungsräume werden pro Erhebung, tatsächlichem Datum, Zeitfenster
+  und Grössenklasse geschätzt: erfasste Personen / Klassenwert, aufgerundet.
+  Klassenwerte: 1, 3, 6,5, 10,5, 13. Für 13+ ist 13 eine offene Annahme.
+  Gemischte Gruppen mit Gästen werden konservativ als ein Raum je erfassender
+  Person gezählt (mögliche Überschätzung). Teilgruppenfilter beeinflussen diese
+  Schätzung. Erhebungen werden nicht als identisches Meeting zusammengelegt.
+- Genutzte Räume und benötigte geschlossene Räume sind getrennte Perspektiven;
+  nicht addieren. Rückzugsgründe können sich überschneiden.
+- Das frei filterbare Tätigkeitsprofil behält den Mittelwert der individuellen
+  dokumentierten Tage bei. Es umfasst auch Arbeit ausserhalb des Standortes und
+  ist keine direkte Arbeitsplatzbelegung.
+
+### Update und historische Daten
+
+Vor dem Update eine Datenbanksicherung erstellen. Beim regulären Serverstart
+läuft die Migration `g7b8c9d0e1f2`; danach werden die fünf neuen Grundtypen ergänzt.
+Alte Kategorien und Einträge bleiben als Version 1 erhalten. Neue Erfassungen
+verwenden Version 2, auch bei bestehenden offenen Erhebungen; frühere
+Tätigkeits-Allowlisten gelten hierfür nicht mehr. Bestehende Einträge bleiben
+bearbeitbar, werden aber nicht automatisch umgedeutet. Fehlende Angaben zur
+Raumnutzung werden in der Planung ausgewiesen und nicht rückwirkend erfunden.
+Neue Anwendung und aktualisierte Datenbank gemeinsam verwenden; Read-only-Kopien
+benötigen eine Sicherung nach der Migration. Ein Downgrade erfolgt durch
+Wiederherstellen der Sicherung zusammen mit der vorherigen Anwendungsversion.
+
+Tests: `python -m pytest -q` (inkl. Datenmigration, Erfassungsvalidierung,
+Gleichzeitigkeit über Wochen, dokumentierte Nulltage und Python/HTML-Export-Parität).
+Frontend: `cd frontend` und `npm ci --force && npm run build`; Buildinhalt nach
+`backend/static` kopieren (wie durch `build.bat`).

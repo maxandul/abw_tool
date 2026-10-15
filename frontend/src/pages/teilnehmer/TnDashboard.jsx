@@ -31,7 +31,7 @@ function ConfirmEinreichen({ onConfirm, onCancel }) {
   return (
     <Modal title="Einträge einreichen" onClose={onCancel}>
       <p className="text-sm text-slate-600 mb-6">
-        Möchtest du alle deine Einträge definitiv einreichen? Nach dem Einreichen kannst du deine Einträge nur noch einsehen, aber selbst wieder entsperren falls du Korrekturen vornehmen musst.
+        Möchtest du alle deine Einträge zur Auswertung einreichen? Nach dem Einreichen kannst du deine Einträge nur noch einsehen, aber selbst wieder entsperren falls du Korrekturen vornehmen musst.
       </p>
       <div className="flex gap-3 justify-end">
         <button className="btn-secondary" onClick={onCancel}>Abbrechen</button>

@@ -7,11 +7,11 @@ import ConfirmDialog from "../../components/ConfirmDialog";
 import { fmtDate, workingDays, fmtMinuten } from "../../utils/format";
 
 const BAR_COLORS = { OFFEN: "bg-slate-300", EINGEREICHT: "bg-brand-500" };
-const BAR_LABELS = { OFFEN: "Offen", EINGEREICHT: "Eingereicht" };
+const BAR_LABELS = { OFFEN: "Noch nicht begonnen", IN_BEARBEITUNG: "In Bearbeitung", EINGEREICHT: "Eingereicht", ABGESCHLOSSEN: "Abgeschlossen" };
 
 function ProgressBar({ counts, total }) {
   if (!total) return <div className="h-1.5 bg-slate-100 rounded-full" />;
-  const eingereicht = counts?.EINGEREICHT ?? 0;
+  const eingereicht = (counts?.EINGEREICHT ?? 0) + (counts?.ABGESCHLOSSEN ?? 0);
   const offen       = counts?.OFFEN       ?? 0;
   const einPct  = Math.min(100, (eingereicht / total) * 100);
   const offPct  = Math.min(100, (offen       / total) * 100);
@@ -62,7 +62,8 @@ export default function AdminDashboard() {
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
+      <h1 className="text-2xl font-bold text-slate-800">Erhebungen begleiten</h1>
+      <div className="card text-sm space-y-2"><p><strong>1. Erhebung einrichten</strong> → <strong>2. Teilnehmende hinzufügen</strong> → <strong>3. Erfassung begleiten</strong> → <strong>4. Auswerten und abschliessen</strong></p><p>Lege pro Standort eine Erhebung an. Prüfe vor der Auswertung den Rücklauf und die dokumentierte Zeit.</p><Link className="btn-secondary inline-block" to="/admin/gruppen">Erhebungen einrichten</Link></div>
 
       {/* KPIs */}
       <div className="grid grid-cols-3 gap-4">
@@ -125,8 +126,8 @@ export default function AdminDashboard() {
               </div>
               {/* Submission progress */}
               <ProgressBar counts={counts} total={anz} />
-              <div className="flex gap-4 mt-1.5 mb-3">
-                {["OFFEN", "EINGEREICHT"].map(k => (
+              <div className="flex flex-wrap gap-4 mt-1.5 mb-3">
+                {["OFFEN", "IN_BEARBEITUNG", "EINGEREICHT", "ABGESCHLOSSEN"].map(k => (
                   <span key={k} className="text-xs text-slate-500">
                     {BAR_LABELS[k]}: <strong>{counts[k] ?? 0}</strong>
                   </span>
