@@ -11,8 +11,8 @@ def seed_default_data():
 def _ensure_v2_catalog():
     """Never reinterpret old entries; new surveys use a new fixed catalogue."""
     defaults = [
-        ("Allein arbeiten", Arbeitsform.EINZELARBEIT, None, "#15803d", "Aufgaben ohne gleichzeitigen Austausch bearbeiten, z. B. lesen, schreiben oder E-Mails bearbeiten."),
-        ("Online-Meeting / Telefonat", Arbeitsform.ONLINE, None, "#7c3aed", "Du nimmst selbst online oder telefonisch teil. Für gemeinsame Besprechungen mit anderen Personen im selben Raum wähle Besprechung / Zusammenarbeit vor Ort."),
+        ("Allein arbeiten", Arbeitsform.EINZELARBEIT, None, "#15803d", "Aufgaben ohne gleichzeitigen Austausch (z. B. lesen, schreiben oder E-Mails bearbeiten)."),
+        ("Online-Meeting / Telefonat", Arbeitsform.ONLINE, None, "#7c3aed", "Du nimmst online oder telefonisch an einer Besprechung teil, ohne gleichzeitig Austausch mit Personen im selben Raum."),
         ("Besprechung / Zusammenarbeit vor Ort", Arbeitsform.MEETING, None, "#0369a1", "Gemeinsamer Austausch oder gemeinsame Arbeit im selben Raum, gegebenenfalls mit zusätzlich online zugeschalteten Personen."),
         ("Arbeitsfreie Zeit wegen Teilzeit", Arbeitsform.ABWESENHEIT, AbwesenheitGrund.TEILZEIT, "#64748b", "Regulär freie Zeit aufgrund deines Teilzeitpensums."),
         ("Andere Abwesenheit", Arbeitsform.ABWESENHEIT, AbwesenheitGrund.SONSTIGES, "#475569", "Zum Beispiel Ferien, Krankheit oder Feiertag."),
