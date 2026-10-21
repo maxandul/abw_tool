@@ -1,3 +1,4 @@
+import ActivityIcon from "../../components/ActivityIcon";
 import TaetigkeitFragen, { RAUM_OPTS, GRUND_OPTS } from "../../components/TaetigkeitFragen";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -65,6 +66,7 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
     ? [...offered, initial.kategorie]
     : offered;
   const [form, setForm] = useState({
+    eigener_name: initial?.eigener_name ?? "",
     datum: initial?.datum ?? "",
     zeit_von: initial?.zeit_von ?? "08:00",
     zeit_bis: initial?.zeit_bis ?? "09:00",
@@ -141,6 +143,7 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
     return (
       <Modal title="Eintrag" onClose={onClose}>
         <div className="space-y-2 text-sm">
+          {initial?.eigener_name && <p className="font-semibold">{initial.eigener_name}</p>}
           <p><span className="text-slate-500">Datum:</span> {fmtDate(initial?.datum)}</p>
           <p><span className="text-slate-500">Zeit:</span> {initial?.zeit_von} – {initial?.zeit_bis}</p>
           <p><span className="text-slate-500">Tätigkeit:</span> {initial?.kategorie?.name}</p>
@@ -187,7 +190,7 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
           </div>
         </div>
         <div>
-          <label className="label">Tätigkeit</label>
+          <label className="label"><ActivityIcon type={selKat?.arbeitsform}/> Tätigkeit</label>
           <select aria-label="Tätigkeit" className="input" required value={form.kategorie_id} onChange={onKategorieChange}>
             {sorted.map(k => <option key={k.id} value={k.id}>{k.name}{k.schema_version !== 2 ? ' (bisherige Erfassung)' : ''}</option>)}
           </select>
@@ -195,6 +198,13 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
             <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 p-2 rounded">{selKat.beschreibung}</p>
           )}
         </div>
+
+        <details open={form.eigener_name ? true : undefined}>
+          <summary className="cursor-pointer text-sm text-slate-600">Eigener Name (optional)</summary>
+          <label className="label mt-2" htmlFor="eigener-name">Name für diesen Eintrag</label>
+          <input id="eigener-name" className="input" maxLength={100} value={form.eigener_name} onChange={set("eigener_name")} placeholder="z. B. Teamsitzung oder Projektbericht"/>
+          <p className="text-xs text-slate-500 mt-1">Hilft dir, Einträge im Kalender wiederzuerkennen und zu kopieren. Die Tätigkeit bleibt für die Auswertung massgebend.</p>
+        </details>
 
         {selKat?.schema_version === 2 && <TaetigkeitFragen form={form} setForm={setForm} kategorie={selKat} />}
         {gesperrt.length > 0 && selKat?.schema_version !== 2 && (
@@ -213,7 +223,7 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
         ))}
 
         {selKat?.schema_version === 2 && <div className="rounded-lg bg-slate-50 p-3 text-sm" aria-live="polite">
-          <strong>{selKat.name}</strong> · {form.zeit_von}–{form.zeit_bis}
+          <ActivityIcon type={selKat.arbeitsform}/> <strong>{form.eigener_name.trim() || selKat.name}</strong> · {form.zeit_von}–{form.zeit_bis}
           {selKat.arbeitsform !== 'ABWESENHEIT' && <p>{[
             ARBEITSORT_OPTS.find(o=>o.value===form.arbeitsort)?.label,
             selKat.arbeitsform==='EINZELARBEIT'?'Nur ich':GRUPPENGROESSE_OPTS.find(o=>o.value===form.gruppengroesse)?.label,
@@ -286,7 +296,7 @@ function useDragSelect(readonly, onSelect) {
 
 function entryDetails(e) {
   return [
-    e.kategorie?.name, fmtDate(e.datum) + ' · ' + e.zeit_von + '–' + e.zeit_bis,
+    e.eigener_name, e.kategorie?.name, fmtDate(e.datum) + ' · ' + e.zeit_von + '–' + e.zeit_bis,
     e.effective_arbeitsort_label,
     RAUM_OPTS.find(o => o.value === e.raumnutzung)?.label,
     e.effective_gruppengroesse_label, e.effective_teilnehmerkreis_label,
@@ -338,7 +348,7 @@ function WeekGrid({ weekStart, periodStart, periodEnd, eintraege, readonly, kate
             onMouseDown={ev => ev.stopPropagation()}
             onClick={ev => { ev.stopPropagation(); onBlockClick(e); }}>
             <div className="px-1 text-white leading-tight overflow-hidden" style={{ fontSize: "0.6rem", lineHeight: "1.1" }}>
-              <span className="font-semibold">{kat?.name ?? "?"}</span><br />
+              <span className="font-semibold"><ActivityIcon type={kat?.arbeitsform} className="w-3 h-3"/> {e.eigener_name || kat?.name || "?"}{kat?.arbeitsform === "MEETING" && e.online_dabei && <> · <ActivityIcon type="HYBRID" className="w-3 h-3"/> Hybrid</>}</span><br />
               <span className="opacity-80">{e.zeit_von}–{e.zeit_bis}</span>
             </div>
           </div>
@@ -547,6 +557,7 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
       zeit_von: form.zeit_von,
       zeit_bis: form.zeit_bis,
       kategorie_id: Number(form.kategorie_id),
+      eigener_name: form.eigener_name.trim() || null,
       arbeitsort: form.arbeitsort || null,
       rueckzugsbedarf: form.rueckzugsbedarf || null,
       gruppengroesse: form.gruppengroesse || null,

@@ -96,6 +96,22 @@ def test_capture_catalog_and_backend_validation(app):
               rueckzugsbedarf='ERFORDERLICH',rueckzug_gruende=['VERTRAULICHKEIT'])
     e=create_eintrag(u.id,g.id,data)
     assert e.online_dabei is True
+    assert e.eigener_name is None
+    e=update_eintrag(u.id,e.id,{**data,'eigener_name':'  Teamsitzung  '})
+    assert e.to_dict()['eigener_name']=='Teamsitzung'
+    e=update_eintrag(u.id,e.id,data)
+    assert e.eigener_name=='Teamsitzung'  # older clients do not erase names
+    copied=create_eintrag(u.id,g.id,{**data,'zeit_von':'11:00','zeit_bis':'11:15',
+                                     'eigener_name':e.to_dict()['eigener_name']})
+    assert copied.eigener_name=='Teamsitzung'
+    from services.eintrag_service import delete_eintrag
+    delete_eintrag(u.id,copied.id)
+    for invalid in ('x'*101, 42):
+        with pytest.raises(ValidationError):
+            update_eintrag(u.id,e.id,{**data,'eigener_name':invalid})
+        db.session.rollback()
+    e=update_eintrag(u.id,e.id,{**data,'eigener_name':'   '})
+    assert e.eigener_name is None
     assert e.to_dict()['rueckzug_gruende']==[]
     assert e.rueckzugsbedarf is None
     # Online participation needs no room group or hypothetical room demand.
@@ -154,7 +170,11 @@ def test_upgrade_preserves_historical_category_and_values(tmp_path):
         upgrade(directory=str(ROOT/'migrations'),revision='f6a7b8c9d0e1')
         db.session.execute(text("INSERT INTO kategorie (id,name,aktiv,sort_order,arbeitsform,arbeitsort) VALUES (1,'Historische Einzelarbeit',1,1,'EINZELARBEIT','HOMEOFFICE')"))
         db.session.commit()
+        upgrade(directory=str(ROOT/'migrations'), revision='g7b8c9d0e1f2')
+        db.session.execute(text("INSERT INTO eintrag (id,user_id,gruppe_id,kategorie_id,datum,zeit_von,zeit_bis,created_at,updated_at) VALUES (1,1,1,1,'2026-10-05','10:00','11:00','2026-10-05','2026-10-05')"))
+        db.session.commit()
         upgrade(directory=str(ROOT/'migrations'))
+        assert db.session.execute(text("SELECT eigener_name FROM eintrag WHERE id=1")).scalar() is None
         seed_default_data()
         old=db.session.get(Kategorie,1)
         assert old.schema_version==1

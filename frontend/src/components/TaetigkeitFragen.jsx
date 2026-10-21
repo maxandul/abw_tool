@@ -1,3 +1,4 @@
+import ActivityIcon from "./ActivityIcon";
 import { ARBEITSORT_OPTS, GRUPPENGROESSE_OPTS, TEILNEHMERKREIS_OPTS } from '../utils/taetigkeiten';
 export const RAUM_OPTS = [
   {value:'ARBEITSPLATZ',label:'Am Büroarbeitsplatz'},
@@ -27,7 +28,7 @@ export default function TaetigkeitFragen({form, setForm, kategorie}) {
     {form.arbeitsort && art === 'MEETING' && <>
       {select('gruppengroesse','Wie viele Personen sind mit dir im selben Raum – dich eingeschlossen?',GRUPPENGROESSE_OPTS.filter(o => o.value !== 'ALLEIN'), 'Eine ungefähre Einschätzung genügt. Online zugeschaltete Personen nicht mitzählen.')}
       {form.gruppengroesse && <>
-        <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={!!form.online_dabei} onChange={e => setForm(f => ({...f, online_dabei:e.target.checked}))}/>An der Besprechung nehmen online zugeschaltete Personen teil (hybrid).</label>
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={!!form.online_dabei} onChange={e => setForm(f => ({...f, online_dabei:e.target.checked}))}/><ActivityIcon type="HYBRID"/>An der Besprechung nehmen online zugeschaltete Personen teil (hybrid).</label>
         {select('teilnehmerkreis','Wer ist mit dir im Raum?',TEILNEHMERKREIS_OPTS)}
       </>}
     </>}

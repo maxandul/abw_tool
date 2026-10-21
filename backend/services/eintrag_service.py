@@ -188,6 +188,17 @@ def _resolve_offene_merkmale(kategorie: Kategorie, data: dict) -> dict:
     return werte
 
 
+def _eigener_name(value):
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValidationError("Der eigene Name muss Text sein.")
+    value = value.strip()
+    if len(value) > 100:
+        raise ValidationError("Der eigene Name darf höchstens 100 Zeichen lang sein.")
+    return value or None
+
+
 def create_eintrag(user_id: int, gruppe_id: int, data: dict, als_admin: bool = False) -> Eintrag:
     """Create a new time-block entry after validation.
 
@@ -227,6 +238,7 @@ def create_eintrag(user_id: int, gruppe_id: int, data: dict, als_admin: bool = F
     _check_overlap(user_id, gruppe_id, datum, zeit_von, zeit_bis)
 
     eintrag = Eintrag(
+        eigener_name=_eigener_name(data.get("eigener_name")),
         user_id=user_id,
         gruppe_id=gruppe_id,
         kategorie_id=int(kategorie_id),
@@ -279,6 +291,8 @@ def update_eintrag(user_id: int, eintrag_id: int, data: dict, als_admin: bool = 
 
     _check_overlap(user_id, eintrag.gruppe_id, datum, zeit_von, zeit_bis, exclude_id=eintrag_id)
 
+    if "eigener_name" in data:
+        eintrag.eigener_name = _eigener_name(data["eigener_name"])
     eintrag.datum = datum
     eintrag.zeit_von = zeit_von
     eintrag.zeit_bis = zeit_bis

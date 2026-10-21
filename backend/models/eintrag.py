@@ -37,6 +37,7 @@ class Eintrag(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     gruppe_id = db.Column(db.Integer, db.ForeignKey("gruppe.id"), nullable=False)
     kategorie_id = db.Column(db.Integer, db.ForeignKey("kategorie.id"), nullable=False)
+    eigener_name = db.Column(db.String(100), nullable=True)
     datum = db.Column(db.Date, nullable=False)
     zeit_von = db.Column(db.Time, nullable=False)
     zeit_bis = db.Column(db.Time, nullable=False)
@@ -89,6 +90,7 @@ class Eintrag(db.Model):
         eff_raeumlichkeit = self.effective_raeumlichkeit
         return {
             "id": self.id,
+            "eigener_name": self.eigener_name,
             "raumnutzung": self.raumnutzung,
             "online_dabei": self.online_dabei,
             "rueckzug_gruende": self.rueckzug_gruende or [],
