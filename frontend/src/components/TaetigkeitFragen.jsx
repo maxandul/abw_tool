@@ -1,4 +1,4 @@
-import { ARBEITSORT_OPTS, GRUPPENGROESSE_OPTS, TEILNEHMERKREIS_OPTS, RUECKZUGSBEDARF_OPTS } from '../utils/taetigkeiten';
+import { ARBEITSORT_OPTS, GRUPPENGROESSE_OPTS, TEILNEHMERKREIS_OPTS } from '../utils/taetigkeiten';
 export const RAUM_OPTS = [
   {value:'ARBEITSPLATZ',label:'Am Büroarbeitsplatz'},
   {value:'RUECKZUG',label:'In einem Rückzugs- / Telefonraum'},
@@ -24,18 +24,15 @@ export default function TaetigkeitFragen({form, setForm, kategorie}) {
   </div>;
   return <div className="space-y-4">
     {select('arbeitsort','Wo bist du selbst während dieser Tätigkeit?',ARBEITSORT_OPTS)}
-    {art !== 'EINZELARBEIT' && <>
-      {select('gruppengroesse','Wie viele Personen sind mit dir im selben Raum – dich eingeschlossen?',GRUPPENGROESSE_OPTS.filter(o => art === 'ONLINE' || o.value !== 'ALLEIN'), 'Eine ungefähre Einschätzung genügt. Online zugeschaltete Personen nicht mitzählen.')}
-      {form.gruppengroesse && form.gruppengroesse !== 'ALLEIN' && select('teilnehmerkreis','Wer ist mit dir im Raum?',TEILNEHMERKREIS_OPTS)}
-      <p className="text-sm text-slate-600">Online oder telefonisch zugeschaltete Personen: <strong>{art === 'ONLINE' ? 'Ja' : 'Nein'}</strong>. {art === 'MEETING' && 'Bei einer hybriden Besprechung wähle oben Online-Meeting / Telefonat.'}</p>
+    {form.arbeitsort && art === 'MEETING' && <>
+      {select('gruppengroesse','Wie viele Personen sind mit dir im selben Raum – dich eingeschlossen?',GRUPPENGROESSE_OPTS.filter(o => o.value !== 'ALLEIN'), 'Eine ungefähre Einschätzung genügt. Online zugeschaltete Personen nicht mitzählen.')}
+      {form.gruppengroesse && <>
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={!!form.online_dabei} onChange={e => setForm(f => ({...f, online_dabei:e.target.checked}))}/>An der Besprechung nehmen online zugeschaltete Personen teil (hybrid).</label>
+        {select('teilnehmerkreis','Wer ist mit dir im Raum?',TEILNEHMERKREIS_OPTS)}
+      </>}
     </>}
-    {form.arbeitsort === 'UEBLICHER_ARBEITSPLATZ' && <>
-      {select('raumnutzung','Wo arbeitest du dabei?',RAUM_OPTS,'Wähle den tatsächlich genutzten Platz am untersuchten Standort.')}
-      {select('rueckzugsbedarf','Brauchst du für diese Tätigkeit einen geschlossenen Raum?',RUECKZUGSBEDARF_OPTS,'Unabhängig davon, ob dir tatsächlich ein solcher Raum zur Verfügung steht.')}
-      {form.rueckzugsbedarf === 'ERFORDERLICH' && <fieldset><legend className="label">Weshalb brauchst du einen geschlossenen Raum?</legend>
-        {GRUND_OPTS.map(o => <label key={o.value} className="flex gap-2 text-sm py-1"><input type="checkbox" checked={(form.rueckzug_gruende || []).includes(o.value)} onChange={e => setForm(f => ({...f,rueckzug_gruende:e.target.checked ? [...(f.rueckzug_gruende || []),o.value] : f.rueckzug_gruende.filter(v=>v!==o.value)}))}/>{o.label}</label>)}
-        <p className="text-xs text-slate-500">Mindestens einen Grund wählen; mehrere Antworten sind möglich.</p>
-      </fieldset>}
-    </>}
+    {form.arbeitsort === 'UEBLICHER_ARBEITSPLATZ' && (art !== 'MEETING' || (form.gruppengroesse && form.teilnehmerkreis)) &&
+      select('raumnutzung','Wo arbeitest du dabei?',RAUM_OPTS,'Wähle den tatsächlich genutzten Platz am untersuchten Standort.')}
+
   </div>;
 }

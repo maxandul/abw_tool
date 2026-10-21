@@ -96,9 +96,20 @@ def test_capture_catalog_and_backend_validation(app):
               rueckzugsbedarf='ERFORDERLICH',rueckzug_gruende=['VERTRAULICHKEIT'])
     e=create_eintrag(u.id,g.id,data)
     assert e.online_dabei is True
-    assert e.to_dict()['rueckzug_gruende']==['VERTRAULICHKEIT']
+    assert e.to_dict()['rueckzug_gruende']==[]
+    assert e.rueckzugsbedarf is None
+    # Online participation needs no room group or hypothetical room demand.
+    e=update_eintrag(u.id,e.id,{k:v for k,v in data.items() if k not in ('gruppengroesse','rueckzugsbedarf','rueckzug_gruende')})
+    assert e.gruppengroesse.value == 'ALLEIN'
+    meeting=Kategorie.query.filter_by(schema_version=2,arbeitsform=Arbeitsform.MEETING).one()
+    meeting_data={**data,'kategorie_id':meeting.id,'gruppengroesse':'ZWEI_BIS_VIER',
+                  'teilnehmerkreis':'STANDORTINTERN','online_dabei':True}
+    e=update_eintrag(u.id,e.id,meeting_data)
+    assert e.online_dabei is True
+    e=update_eintrag(u.id,e.id,{**meeting_data,'online_dabei':False})
+    assert e.online_dabei is False
     with pytest.raises(ValidationError):
-        update_eintrag(u.id,e.id,{**data,'rueckzug_gruende':[]})
+        update_eintrag(u.id,e.id,{**meeting_data,'online_dabei':'false'})
     db.session.rollback()
     e=update_eintrag(u.id,e.id,{**data,'arbeitsort':'HOMEOFFICE'})
     assert e.raumnutzung is None and e.rueckzug_gruende==[]

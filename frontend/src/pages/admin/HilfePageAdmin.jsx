@@ -48,8 +48,8 @@ export default function HilfePageAdmin() {
 
       <Section title="Tätigkeiten und räumliche Planung">
         <P>Es gibt fünf feste Grundtypen: Allein arbeiten, Online-Meeting / Telefonat, Besprechung / Zusammenarbeit vor Ort, Arbeitsfreie Zeit wegen Teilzeit und Andere Abwesenheit.</P>
-        <P>Teilnehmende erfassen ihren Aufenthaltsort, die ungefähre Zahl der Personen im selben Raum und gegebenenfalls Gäste. Bei hybriden Besprechungen wählen sie Online-Meeting / Telefonat. Online zugeschaltete Personen werden nicht mitgezählt.</P>
-        <P>Am untersuchten Standort werden der tatsächlich genutzte Platz und der Bedarf an einem geschlossenen Raum getrennt erfasst. Historische Einträge bleiben unverändert; fehlende Angaben werden nicht nachträglich angenommen.</P>
+        <P>Teilnehmende erfassen ihren Aufenthaltsort, die ungefähre Zahl der Personen im selben Raum und gegebenenfalls Gäste. Hybride Besprechungen erfassen sie als Besprechung / Zusammenarbeit vor Ort und markieren die Online-Teilnahme. Online zugeschaltete Personen werden nicht mitgezählt.</P>
+        <P>Am untersuchten Standort wird der tatsächlich genutzte Platz erfasst. Ein hypothetischer Bedarf an geschlossenen Räumen wird nicht mehr abgefragt. Historische Einträge bleiben unverändert; fehlende Angaben werden nicht nachträglich angenommen.</P>
         <P>Richte pro Standort eine eigene Erhebung ein und nenne den Standort im Namen der Erhebung. Bereite danach die Teilnehmenden vor, begleite die Erfassung, prüfe die Vollständigkeit und schliesse die Erhebung nach der Auswertung ab.</P>
       </Section>
 

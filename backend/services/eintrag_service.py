@@ -493,24 +493,20 @@ def _resolve_v2(kategorie, data):
     if form == Arbeitsform.ABWESENHEIT:
         return values
     values["arbeitsort"] = _resolve_enum_feld(data, "arbeitsort", Arbeitsort, "Dein Aufenthaltsort")
-    if form == Arbeitsform.EINZELARBEIT:
+    if form in (Arbeitsform.EINZELARBEIT, Arbeitsform.ONLINE):
         values["gruppengroesse"] = Gruppengroesse.ALLEIN
-        values["online_dabei"] = False
+        values["online_dabei"] = form == Arbeitsform.ONLINE
     else:
         values["gruppengroesse"] = _resolve_enum_feld(data, "gruppengroesse", Gruppengroesse, "Personen im selben Raum")
         if form == Arbeitsform.MEETING and values["gruppengroesse"] == Gruppengroesse.ALLEIN:
             raise ValidationError("Für eine Besprechung vor Ort sind mindestens zwei Personen nötig. Wähle für einen Call Online-Meeting / Telefonat.")
-        values["online_dabei"] = form == Arbeitsform.ONLINE
+        if not isinstance(data.get("online_dabei", False), bool):
+            raise ValidationError("Online-Teilnahme muss Ja oder Nein sein.")
+        values["online_dabei"] = data.get("online_dabei", False)
         if values["gruppengroesse"] != Gruppengroesse.ALLEIN:
             values["teilnehmerkreis"] = _resolve_enum_feld(data, "teilnehmerkreis", Teilnehmerkreis, "Personen mit dir im Raum")
     if values["arbeitsort"] == Arbeitsort.UEBLICHER_ARBEITSPLATZ:
         if data.get("raumnutzung") not in RAUMNUTZUNGEN:
             raise ValidationError("Bitte gib an, wo du am Standort arbeitest.")
         values["raumnutzung"] = data["raumnutzung"]
-        values["rueckzugsbedarf"] = _resolve_enum_feld(data, "rueckzugsbedarf", Rueckzugsbedarf, "Geschlossener Raum erforderlich")
-        if values["rueckzugsbedarf"] == Rueckzugsbedarf.ERFORDERLICH:
-            reasons = data.get("rueckzug_gruende")
-            if not isinstance(reasons, list) or not reasons or any(r not in RUECKZUG_GRUENDE for r in reasons):
-                raise ValidationError("Bitte wähle mindestens einen Grund für den geschlossenen Raum.")
-            values["rueckzug_gruende"] = sorted(set(reasons))
     return values

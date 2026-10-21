@@ -9,7 +9,7 @@ export default function KategorienPage() {
     {error && <Alert>{error}</Alert>}
     <p>Für neue Einträge stehen diese fünf Grundtypen bereit. Die Teilnehmenden ergänzen Aufenthaltsort, Personen im selben Raum, tatsächliche Raumnutzung und benötigten Rückzug.</p>
     {rows(items.filter(k=>k.schema_version===2))}
-    <div className="card text-sm">Gruppengrössen werden geschätzt: nur ich, 2–4, 5–8, 9–12 oder 13 und mehr. Online zugeschaltete Personen werden nicht mitgezählt. Bei hybriden Besprechungen wird Online-Meeting / Telefonat gewählt.</div>
+    <div className="card text-sm">Gruppengrössen werden geschätzt: nur ich, 2–4, 5–8, 9–12 oder 13 und mehr. Online zugeschaltete Personen werden nicht mitgezählt. Hybride Besprechungen werden als Besprechung / Zusammenarbeit vor Ort mit Online-Teilnahme erfasst.</div>
     <details><summary className="cursor-pointer font-semibold">Bisherige Tätigkeiten / historische Daten</summary><p className="text-sm my-3">Bestehende Einträge behalten ihre ursprüngliche Bedeutung. Neue Angaben zu Raumnutzung und Rückzugsgründen werden nicht rückwirkend angenommen.</p><div className="space-y-3">{rows(items.filter(k=>k.schema_version!==2))}</div></details>
   </div>;
 }
