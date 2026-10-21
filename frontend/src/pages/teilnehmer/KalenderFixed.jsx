@@ -1,3 +1,4 @@
+import { namedEntryTemplates, applyNamedEntry } from "../../utils/namedEntries";
 import ActivityIcon from "../../components/ActivityIcon";
 import TaetigkeitFragen, { RAUM_OPTS, GRUND_OPTS } from "../../components/TaetigkeitFragen";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -56,7 +57,7 @@ const TIME_OPTIONS = Array.from({ length: SLOTS + 1 }, (_, i) => {
 
 
 // ── Entry form modal ──────────────────────────────────────────────────────────
-function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose, onCopy }) {
+function EintragModal({ initial, kategorien, eintraege, readonly, onSave, onDelete, onClose, onCopy }) {
   // Safety net: if the entry's current Tätigkeit isn't in the offered list
   // (e.g. it was assigned under the previous, now-archived structure), keep
   // it selectable so saving without changing the selection doesn't silently
@@ -80,6 +81,26 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
     rueckzug_gruende: initial?.rueckzug_gruende ?? [],
     online_dabei: initial?.online_dabei ?? false,
   });
+  const templates = namedEntryTemplates(eintraege, kategorien);
+  const [templateKey, setTemplateKey] = useState("");
+  const templateLabel = template => [
+    template.eigener_name,
+    template.kategorie.name,
+    ARBEITSORT_OPTS.find(o => o.value === template.arbeitsort)?.label,
+    GRUPPENGROESSE_OPTS.find(o => o.value === template.gruppengroesse)?.label,
+    TEILNEHMERKREIS_OPTS.find(o => o.value === template.teilnehmerkreis)?.label,
+    RAUM_OPTS.find(o => o.value === template.raumnutzung)?.label,
+    template.kategorie.arbeitsform === 'MEETING' ? (template.online_dabei ? 'Hybrid' : 'Nur vor Ort') : null,
+  ].filter(Boolean).join(' · ');
+  const selectTemplate = event => {
+    const key = event.target.value;
+    setTemplateKey(key);
+    const template = templates.find(t => t.key === key);
+    if (template) {
+      setForm(f => applyNamedEntry(f, template));
+      setError("");
+    }
+  };
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -87,6 +108,7 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
 
   const onKategorieChange = (e) => {
     const kategorie_id = e.target.value;
+    setTemplateKey("");
     // A different Tätigkeit may leave different attributes open – reset
     // them so a locked value from the previous selection can't linger.
     setForm(f => ({
@@ -189,6 +211,16 @@ function EintragModal({ initial, kategorien, readonly, onSave, onDelete, onClose
             </select>
           </div>
         </div>
+        {!initial?.id && templates.length > 0 && (
+          <div className="rounded-lg bg-slate-50 p-3">
+            <label className="label" htmlFor="named-entry-template">Aus benanntem Eintrag übernehmen (optional)</label>
+            <select id="named-entry-template" className="input" value={templateKey} onChange={selectTemplate}>
+              <option value="">Bitte auswählen</option>
+              {templates.map(t => <option key={t.key} value={t.key}>{templateLabel(t)}</option>)}
+            </select>
+            <p className="text-xs text-slate-500 mt-1">Übernimmt Name, Tätigkeit und Angaben. Datum und Uhrzeit bleiben wie oben gewählt. Du kannst alle Angaben vor dem Speichern anpassen.</p>
+          </div>
+        )}
         <div>
           <label className="label"><ActivityIcon type={selKat?.arbeitsform}/> Tätigkeit</label>
           <select aria-label="Tätigkeit" className="input" required value={form.kategorie_id} onChange={onKategorieChange}>
@@ -686,6 +718,7 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
             kategorie_id: kategorien.find(k=>k.schema_version===2)?.id ?? "",
           }}
           kategorien={kategorien}
+          eintraege={eintraege}
           readonly={readonly}
           onSave={handleSave}
           onDelete={handleDelete}
