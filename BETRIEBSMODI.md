@@ -42,6 +42,13 @@ Datenstand des Snapshots angezeigt.
 `START_SERVER.bat` bleibt aus Kompatibilitätsgründen erhalten und öffnet dieselbe
 Modusauswahl.
 
+## Automatischer Start nach Windows-Neustarts
+
+`START_PRODUCTION.bat` startet den Produktivmodus ohne Eingabe und ohne
+Browserfenster. Die Einrichtung in der Windows-Aufgabenplanung, Protokollierung
+und der Neustarttest sind in [`AUTOSTART.md`](AUTOSTART.md) beschrieben.
+Die Aufgabe muss einmalig auf dem HR-Laptop eingerichtet werden.
+
 ## Backups
 
 Der Produktivmodus erstellt zunächst lokal über die SQLite-Backup-API einen
