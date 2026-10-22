@@ -1,3 +1,5 @@
+import Section from "../../components/HelpSection";
+import CaptureAccuracyHelp from "../../components/CaptureAccuracyHelp";
 import { useEffect, useState } from "react";
 import { getKontakt } from "../../api/auth";
 import { getKategorien } from "../../api/teilnehmer";
@@ -17,13 +19,6 @@ export default function HilfePageTn() {
   }, []);
 
   const taetigkeitsGruppen = groupKategorien(kategorien);
-
-  const Section = ({ title, children }) => (
-    <section className="card space-y-3">
-      <h2 className="text-base font-semibold text-slate-800">{title}</h2>
-      {children}
-    </section>
-  );
 
   const P = ({ children }) => <p className="text-sm text-slate-600 leading-relaxed">{children}</p>;
   const Li = ({ children }) => <li className="text-sm text-slate-600 leading-relaxed">{children}</li>;
@@ -55,6 +50,8 @@ export default function HilfePageTn() {
           <Li><strong>Eintrag bearbeiten / löschen:</strong> Klicke auf einen bestehenden farbigen Block, um ihn zu bearbeiten oder zu löschen.</Li>
         </ul>
       </Section>
+
+      <CaptureAccuracyHelp />
 
       {taetigkeitsGruppen.length > 0 && (
         <Section title="Übersicht der Tätigkeiten">

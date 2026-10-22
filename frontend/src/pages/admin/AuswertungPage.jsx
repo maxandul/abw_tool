@@ -772,7 +772,7 @@ export default function AuswertungPage() {
           </div>
 
           <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-3 mb-4">
-            Dieses Profil zählt gewählte Tätigkeiten an allen erfassten Orten. Die Arbeitsplatz- und Raumbelegung findest du in der separaten Ansicht unten. {LP_HINTS[anzeige]}
+            Zeitanteile beruhen auf Schätzungen. Zusammengefasste Tätigkeiten erlauben keine minutengenaue Interpretation des Tagesverlaufs. Dieses Profil zählt gewählte Tätigkeiten an allen erfassten Orten. Die Arbeitsplatz- und Raumbelegung findest du in der separaten Ansicht unten. {LP_HINTS[anzeige]}
           </p>
 
           <TaetigkeitFilter

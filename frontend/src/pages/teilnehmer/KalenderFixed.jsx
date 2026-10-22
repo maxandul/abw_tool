@@ -667,11 +667,7 @@ export default function KalenderFixed({ gruppeId, zeitraumVon, zeitraumBis, abge
             <li>Im Kalender ein Zeitfenster <strong>markieren</strong> (klicken und nach unten ziehen).</li>
             <li>Im Formular die passende <strong>Tätigkeit wählen</strong>.</li>
             <li>Erfasse <strong>alle Tätigkeiten</strong> – nur (Mittags-)Pausen lässt du frei.</li>
-            {!adminMode && (
-              <li>Eine <strong>Übersicht aller Tätigkeiten</strong> mit Beschreibung findest du unter{" "}
-                <Link to="/tn/hilfe" className="font-semibold underline hover:text-blue-900">Hilfe</Link>.
-              </li>
-            )}
+            <li>Erfasse häufige Wechsel am gleichen Aufenthaltsort als zusammenhängende Blöcke (s. <Link to={`${adminMode ? '/admin/hilfe' : '/tn/hilfe'}#erfassungsgenauigkeit`} className="font-semibold underline hover:text-blue-900">Wie genau muss ich erfassen?</Link>).</li>
           </ul>
         </div>
       )}

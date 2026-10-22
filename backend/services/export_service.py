@@ -135,6 +135,7 @@ _EXPORT_TEMPLATE = """\
 
     <section id="lastprofil">
       <h2>Lastprofil</h2>
+      <p class="muted">Zeitanteile beruhen auf Schätzungen. Zusammengefasste Tätigkeiten erlauben keine minutengenaue Interpretation des Tagesverlaufs.</p>
       <p class="muted" id="lp-hint"></p>
       <div class="toggle-btns">
         <button id="tb-mittelwert" class="toggle-btn" onclick="setAnzeige('mittelwert')">Mittelwert</button>

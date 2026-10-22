@@ -1,11 +1,6 @@
+import Section from "../../components/HelpSection";
+import CaptureAccuracyHelp from "../../components/CaptureAccuracyHelp";
 export default function HilfePageAdmin() {
-  const Section = ({ title, children }) => (
-    <section className="card space-y-3">
-      <h2 className="text-base font-semibold text-slate-800">{title}</h2>
-      {children}
-    </section>
-  );
-
   const P = ({ children }) => <p className="text-sm text-slate-600 leading-relaxed">{children}</p>;
   const Li = ({ children }) => <li className="text-sm text-slate-600 leading-relaxed">{children}</li>;
 
@@ -54,6 +49,8 @@ export default function HilfePageAdmin() {
         <P>Als Admin kannst du Einträge auch nach der Einreichung sowie in abgeschlossenen Erhebungen bearbeiten. In der Teilnehmerliste kannst du über <strong>Einreichen</strong> im Namen einer Person einreichen. Prüfe die Hinweise zu möglichen Lücken und bestätige die Einreichung. Solange die Erhebung offen ist, kann die Person ihre Einreichung selbst wieder entsperren.</P>
       </Section>
 
+      <CaptureAccuracyHelp />
+
       <Section title="Tätigkeiten und räumliche Planung">
         <P>Unter <strong>Tätigkeiten und Erfassung</strong> findest du die fünf festen Grundtypen: Allein arbeiten, Online-Meeting / Telefonat, Besprechung / Zusammenarbeit vor Ort, Arbeitsfreie Zeit wegen Teilzeit und Andere Abwesenheit. Historische Tätigkeiten sind separat einsehbar.</P>
         <P><strong>Allein arbeiten:</strong> Aufgaben ohne gleichzeitigen Austausch (z. B. lesen, schreiben oder E-Mails bearbeiten).</P>
@@ -65,6 +62,7 @@ export default function HilfePageAdmin() {
       </Section>
 
       <Section title="Auswertung">
+        <P>Zeitanteile beruhen auf Schätzungen. Zusammengefasste Tätigkeiten erlauben keine minutengenaue Interpretation des Tagesverlaufs.</P>
         <P>Wähle zunächst eine Erhebung im Dropdown. Über «Mehrere Erhebungen zusammenfassen» kannst du weitere Erhebungen per Schaltfläche hinzufügen oder entfernen. Die ausgewählten Erhebungen werden gemeinsam ausgewertet. Mit dem Teilnehmer-Filter grenzt du nach Funktion, Organisationseinheit oder Beschäftigungsgrad ein.</P>
         <P>In die Auswertung fliessen <strong>nur eingereichte</strong> Teilnehmer ein (Status «Eingereicht» oder «Abgeschlossen»). Wer noch nicht eingereicht oder die Erhebung zur Bearbeitung entsperrt hat, wird nicht berücksichtigt.</P>
         <P>Die Karte <strong>Stichprobe</strong> fasst die Datenbasis zusammen: wie viele von wie vielen eingereicht haben, FTE-Summe und erfasste Zeit der Eingereichten sowie deren Vollständigkeit (erfasste vs. erwartete Stunden). Übererfassung einzelner Teilnehmer wird dabei auf 100% des jeweiligen Solls begrenzt, damit Lücken anderer nicht überdeckt werden. Eingereichte Teilnehmer unter 85% Vollständigkeit werden separat ausgewiesen und sind anklickbar. Die Werte berücksichtigen den Teilnehmer-Filter.</P>
