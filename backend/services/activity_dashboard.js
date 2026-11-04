@@ -537,7 +537,10 @@ export function mountDashboard(root, data, initial = {}, onExport = null) {
     }
     if (el.hasAttribute("data-view") && el.value !== "") {
       currentView = el.value;
-      state = { ...DEFAULTS, ...views[Number(el.value)].state };
+      state = {
+        ...DEFAULTS,
+        ...JSON.parse(JSON.stringify(views[Number(el.value)].state)),
+      };
       detail = "";
       render();
     }
