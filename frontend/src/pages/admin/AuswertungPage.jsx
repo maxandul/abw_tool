@@ -3,12 +3,16 @@ import { useSearchParams } from "react-router-dom";
 import { getGruppen } from "../../api/admin";
 import { get } from "../../api/client";
 import HistorischeAuswertung from "./HistorischeAuswertung";
-import { mountDashboard } from "../../../../backend/services/activity_dashboard.js";
+import {
+  mountDashboard,
+  reportDataset,
+} from "../../../../backend/services/activity_dashboard.js";
 import dashboardSource from "../../../../backend/services/activity_dashboard.js?raw";
 import dashboardCss from "../../../../backend/services/activity_dashboard.css?raw";
 import "../../../../backend/services/activity_dashboard.css";
 
 function exportHtml(data, state) {
+  data = reportDataset(data, state);
   const safeJson = (value) =>
     JSON.stringify(value)
       .replace(/</g, "\\u003c")
@@ -29,10 +33,17 @@ function exportHtml(data, state) {
 }
 function Dashboard({ data }) {
   const root = useRef(null);
+  const latestState = useRef({});
   useEffect(
     () =>
-      mountDashboard(root.current, data, {}, (state) =>
-        exportHtml(data, state),
+      mountDashboard(
+        root.current,
+        data,
+        latestState.current,
+        (state) => exportHtml(data, state),
+        (state) => {
+          latestState.current = state;
+        },
       ),
     [data],
   );
@@ -46,6 +57,7 @@ export default function AuswertungPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [historical, setHistorical] = useState(false);
+  const [refresh, setRefresh] = useState(0);
   useEffect(() => {
     let active = true;
     getGruppen(true).then((r) => {
@@ -60,7 +72,6 @@ export default function AuswertungPage() {
   }, []);
   useEffect(() => {
     let active = true;
-    setData(null);
     setError("");
     setLoading(Boolean(id));
     if (id)
@@ -69,14 +80,14 @@ export default function AuswertungPage() {
       ).then((r) => {
         if (active) {
           setLoading(false);
-          setData(r.data);
+          if (r.data) setData({ surveyId: id, payload: r.data });
           setError(r.error || "");
         }
       });
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, refresh]);
   return (
     <div className="ad-page">
       <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
@@ -100,32 +111,43 @@ export default function AuswertungPage() {
         </>
       ) : (
         <>
-          <label className="label" htmlFor="survey">
-            Erhebung / Standort
-          </label>
-          <select
-            id="survey"
-            className="input mb-6"
-            value={id}
-            onChange={(e) => {
-              const next = new URLSearchParams(params);
-              if (e.target.value) next.set("gruppe_id", e.target.value);
-              else next.delete("gruppe_id");
-              setParams(next);
-            }}
-          >
-            <option value="">Erhebung auswählen</option>
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-                {!g.aktiv
-                  ? " (archiviert)"
-                  : g.abgeschlossen
-                    ? " (abgeschlossen)"
-                    : ""}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-end gap-3 mb-6">
+            <div className="flex-1 min-w-0">
+              <label className="label" htmlFor="survey">
+                Erhebung / Standort
+              </label>
+              <select
+                id="survey"
+                className="input"
+                value={id}
+                onChange={(e) => {
+                  const next = new URLSearchParams(params);
+                  if (e.target.value) next.set("gruppe_id", e.target.value);
+                  else next.delete("gruppe_id");
+                  setParams(next);
+                }}
+              >
+                <option value="">Erhebung auswählen</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                    {!g.aktiv
+                      ? " (archiviert)"
+                      : g.abgeschlossen
+                        ? " (abgeschlossen)"
+                        : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              className="btn-secondary"
+              disabled={!id || loading}
+              onClick={() => setRefresh((n) => n + 1)}
+            >
+              Daten aktualisieren
+            </button>
+          </div>
           {!id && (
             <p className="card">
               Wähle die Erhebung des untersuchten Standorts. Das Dashboard zeigt
@@ -139,7 +161,7 @@ export default function AuswertungPage() {
             </p>
           )}
           {loading && <p role="status">Auswertung wird geladen …</p>}
-          {data && <Dashboard data={data} />}
+          {data?.surveyId === id && <Dashboard key={id} data={data.payload} />}
         </>
       )}
     </div>

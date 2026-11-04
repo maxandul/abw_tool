@@ -2,7 +2,8 @@
 
 import math
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import Any
 
 from app.utils import ValidationError, time_to_minutes
@@ -675,13 +676,15 @@ def export_rohdaten(
     gruppe_ids: list[int],
     datum_von: date,
     datum_bis: date,
+    include_drafts: bool = False,
 ) -> dict:
-    """Anonymous raw dataset for the self-contained interactive HTML export.
+    """Pseudonymised raw dataset for analysis and self-contained HTML reports.
 
     Contains everything needed to recompute Lastprofil, Bedarf, Anteile and
     Stichprobe client-side, for the selected groups only. No names or e-mails
-    are included; participants are referenced by an opaque index. Only entries
-    of submitted ("eingereicht") participants are included.
+    are included; participants are referenced by an opaque index. Historical
+    exports include submitted entries only. The admin dashboard explicitly opts
+    into drafts. The frozen Zurich snapshot clock is included for offline use.
     """
     gruppen = _get_gruppen(gruppe_ids)
 
@@ -720,7 +723,7 @@ def export_rohdaten(
     eintraege = []
     for e in eintraege_raw:
         key = (e.gruppe_id, e.user_id)
-        if key not in eingereicht_paare:
+        if not include_drafts and key not in eingereicht_paare:
             continue
         idx = index_map.get(key)
         if idx is None:
@@ -775,7 +778,13 @@ def export_rohdaten(
         .all()
     ]
 
+    snapshot = datetime.now(ZoneInfo("Europe/Zurich"))
     return {
+        "snapshot_at": snapshot.isoformat(timespec="seconds"),
+        "snapshot_date": snapshot.date().isoformat(),
+        "snapshot_minute": snapshot.hour * 60 + snapshot.minute,
+        "includes_drafts": include_drafts,
+        "default_mode": "all" if include_drafts and not all(g.abgeschlossen for g in gruppen) else "submitted",
         "gruppen_namen": [g.name for g in gruppen],
         "anzahl_gruppen": len(gruppen),
         "zeitraum_von": datum_von.isoformat(),
