@@ -16,9 +16,13 @@ auswertung_bp = Blueprint("auswertung", __name__, url_prefix="/api/auswertung")
 def get_dashboard():
     try:
         ids, von, bis, _, _, _, _ = _parse_filter(request.args)
+        if len(ids) != 1:
+            raise ValidationError("Bitte genau eine Erhebung / einen Standort auswählen.")
         if von > bis:
             raise ValidationError("Zeitraum von muss vor Zeitraum bis liegen.")
-        return ok(auswertung_service.export_rohdaten(ids, von, bis))
+        response = make_response(ok(auswertung_service.export_rohdaten(ids, von, bis, include_drafts=True)))
+        response.headers["Cache-Control"] = "no-store"
+        return response
     except ValidationError as exc:
         return err(str(exc), 400)
 

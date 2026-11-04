@@ -5,3 +5,5 @@ SQLAlchemy==2.0.31
 bcrypt==4.2.0
 python-dotenv==1.0.1
 waitress==3.0.2
+
+tzdata>=2024.1

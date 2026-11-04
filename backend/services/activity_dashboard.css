@@ -266,7 +266,9 @@
   min-width: 170px;
 }
 @media (max-width: 760px) {
-  .ad-page { padding: 16px; }
+  .ad-page {
+    padding: 16px;
+  }
   .ad-stats {
     grid-template-columns: 1fr;
   }
@@ -322,4 +324,43 @@
   .ad-shell th:first-child {
     min-width: 100px;
   }
+}
+.ad-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: center;
+  padding: 10px 14px;
+  background: #eaf0f7;
+  border-radius: 8px;
+}
+.ad-status strong {
+  color: var(--ad-ink);
+}
+.ad-shell .ad-check {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+}
+.ad-check input {
+  width: auto;
+}
+.ad-quality-note {
+  font-size: 12px;
+  padding: 0 0 12px;
+}
+.ad-coverage-row {
+  background: #f1f5f9;
+}
+.ad-coverage-row button {
+  border: 0;
+  background: transparent;
+  padding: 6px;
+  min-width: 42px;
+}
+.ad-coverage-row button.ad-coverage-low {
+  background: #fff1cc;
+  text-decoration: underline dotted;
 }
