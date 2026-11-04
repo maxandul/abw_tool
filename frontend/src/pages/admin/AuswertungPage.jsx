@@ -1,807 +1,146 @@
-import { useEffect, useState, useCallback } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import {
-  getGruppen, getKategorien, getTeilnehmerFilter, getSample,
-  getLastprofil, getRaumbedarf, getAnteile, getExportUrl
-} from "../../api/admin";
-import {
-  groupKategorien, ARBEITSFORM_ORDER, ARBEITSFORM_LABELS, ARBEITSORT_OPTS,
-  GRUPPENGROESSE_OPTS, TEILNEHMERKREIS_OPTS, RAEUMLICHKEIT_OPTS, RUECKZUGSBEDARF_OPTS,
-} from "../../utils/taetigkeiten";
-import Spinner from "../../components/Spinner";
-import Alert from "../../components/Alert";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { getGruppen } from "../../api/admin";
+import { get } from "../../api/client";
+import HistorischeAuswertung from "./HistorischeAuswertung";
+import { mountDashboard } from "../../../../backend/services/activity_dashboard.js";
+import dashboardSource from "../../../../backend/services/activity_dashboard.js?raw";
+import dashboardCss from "../../../../backend/services/activity_dashboard.css?raw";
+import "../../../../backend/services/activity_dashboard.css";
 
-const WT_NAMEN = ["Mo", "Di", "Mi", "Do", "Fr"];
-const SLOT_START_H = 7;
-const TOTAL_SLOTS = 12 * 4; // 07:00–19:00
-
-function slotLabel(slotMin) {
-  const total = SLOT_START_H * 60 + slotMin;
-  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-}
-
-// ── Heatmap ──────────────────────────────────────────────────────────────────
-// "Maximum" zeigt die volle Arbeitswoche (Mo–Fr): pro Zeit-Slot und Wochentag
-// die grösste je an einem Tag gleichzeitig beobachtete Personenzahl, über den
-// gesamten Erhebungszeitraum gepoolt.
-// "Mittelwert" bricht den gesamten Erhebungszeitraum auf einen einzigen,
-// generischen Arbeitstag herunter: eine Spalte, Wert = Anteil der erfassten
-// Arbeitstage, an denen der Slot gebraucht wurde.
-function Heatmap({ data, anzeige }) {
-  if (anzeige === "maximum") {
-    const slots = data.maximum_slots ?? [];
-    const map = {};
-    slots.forEach(s => { map[`${s.wochentag}_${s.slot_start_minuten}`] = s; });
-    const globalMax = Math.max(0.001, ...slots.map(s => s.maximum));
-
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400 shrink-0">0</span>
-          <div className="flex-1 h-2 rounded-full" style={{
-            background: "linear-gradient(to right, #f1f5f9, rgba(30,58,95,0.15), rgba(30,58,95,0.55), rgba(30,58,95,1))"
-          }} />
-          <span className="text-xs text-slate-400 shrink-0">{Math.round(globalMax)} Pers.</span>
-        </div>
-        <table className="w-full table-fixed text-xs border-collapse">
-          <thead>
-            <tr>
-              <th className="text-slate-400 font-normal pr-2 text-right pb-1" style={{ width: "3rem" }}>Zeit</th>
-              {WT_NAMEN.map(d => <th key={d} className="text-center text-slate-600 pb-1 font-semibold">{d}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: TOTAL_SLOTS }, (_, si) => {
-              const slotMin = si * 15;
-              return (
-                <tr key={si}>
-                  <td className="pr-2 text-slate-400 text-right leading-none"
-                    style={{ fontSize: "0.6rem", width: "3rem", height: "1.1rem" }}>
-                    {slotMin % 60 === 0 ? slotLabel(slotMin) : ""}
-                  </td>
-                  {[0, 1, 2, 3, 4].map(wt => {
-                    const s = map[`${wt}_${slotMin}`];
-                    const val = s ? s.maximum : 0;
-                    const intensity = val / globalMax;
-                    const bg = val > 0 ? `rgba(30,58,95,${Math.max(0.07, intensity).toFixed(2)})` : "#f8fafc";
-                    const fg = intensity > 0.45 ? "#fff" : "#475569";
-                    const tip = s ? `${WT_NAMEN[wt]} ${slotLabel(slotMin)} · Max ${s.maximum}` : "";
-                    return (
-                      <td key={wt} className="text-center cursor-default"
-                        style={{ background: bg, color: fg, fontSize: "0.58rem", height: "1.1rem" }}
-                        title={tip}>
-                        {val > 0 ? String(Math.round(val)) : ""}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-
-  const slots = data.mittelwert_slots ?? [];
-  const map = {};
-  slots.forEach(s => { map[s.slot_start_minuten] = s; });
-  const globalMax = Math.max(0.001, ...slots.map(s => s.mittelwert));
-
-  return (
-    <div className="space-y-2 max-w-xs">
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-slate-400 shrink-0">0</span>
-        <div className="flex-1 h-2 rounded-full" style={{
-          background: "linear-gradient(to right, #f1f5f9, rgba(30,58,95,0.15), rgba(30,58,95,0.55), rgba(30,58,95,1))"
-        }} />
-        <span className="text-xs text-slate-400 shrink-0">{globalMax.toFixed(2)}</span>
-      </div>
-      <table className="w-full table-fixed text-xs border-collapse">
-        <thead>
-          <tr>
-            <th className="text-slate-400 font-normal pr-2 text-right pb-1" style={{ width: "3rem" }}>Zeit</th>
-            <th className="text-center text-slate-600 pb-1 font-semibold">Ø Tag</th>
-          </tr>
-        </thead>
-        <tbody>
-          {Array.from({ length: TOTAL_SLOTS }, (_, si) => {
-            const slotMin = si * 15;
-            const s = map[slotMin];
-            const val = s ? s.mittelwert : 0;
-            const intensity = val / globalMax;
-            const bg = val > 0 ? `rgba(30,58,95,${Math.max(0.07, intensity).toFixed(2)})` : "#f8fafc";
-            const fg = intensity > 0.45 ? "#fff" : "#475569";
-            const tip = s ? `${slotLabel(slotMin)} · Ø ${s.mittelwert.toFixed(2)}` : "";
-            return (
-              <tr key={si}>
-                <td className="pr-2 text-slate-400 text-right leading-none"
-                  style={{ fontSize: "0.6rem", width: "3rem", height: "1.1rem" }}>
-                  {slotMin % 60 === 0 ? slotLabel(slotMin) : ""}
-                </td>
-                <td className="text-center cursor-default"
-                  style={{ background: bg, color: fg, fontSize: "0.58rem", height: "1.1rem" }}
-                  title={tip}>
-                  {val > 0 ? val.toFixed(2) : ""}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+function exportHtml(data, state) {
+  const safeJson = (value) =>
+    JSON.stringify(value)
+      .replace(/</g, "\\u003c")
+      .replace(/>/g, "\\u003e")
+      .replace(/&/g, "\\u0026")
+      .replace(/\u2028/g, "\\u2028")
+      .replace(/\u2029/g, "\\u2029");
+  const source = dashboardSource.replace(/^export /gm, "");
+  const html = `<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tätigkeitsauswertung</title><style>body{margin:0;padding:24px;background:#f8fafc}${dashboardCss}</style><main id="dashboard"></main><script>${source}\nmountDashboard(document.getElementById('dashboard'),${safeJson(data)},${safeJson(state)});</script></html>`;
+  const url = URL.createObjectURL(
+    new Blob([html], { type: "text/html;charset=utf-8" }),
   );
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "taetigkeiten-auswertung.html";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-
-// ── Bedarf nach Tätigkeit ────────────────────────────────────────────────────
-function TaetigkeitenBedarf({ data }) {
-  const [key,setKey] = useState('desks');
-  const [view,setView] = useState('maximum');
-  const p = data.planning;
-  if (!p) return null;
-  const profile = p.profiles.find(x=>x.key===key);
-  return <div className="space-y-4">
-    <p className="text-sm text-slate-600">Die Arbeitsplatzbelegung zählt Personen am Büroarbeitsplatz am untersuchten Standort. Personen in Besprechungs- oder Rückzugsräumen zählen dort nicht mit.</p>
-    <label className="label" htmlFor="planning-profile">Was möchtest du planen?</label>
-    <select id="planning-profile" className="input" value={key} onChange={e=>setKey(e.target.value)}>{p.profiles.map(x=><option key={x.key} value={x.key}>{x.label}</option>)}</select>
-    <div className="flex gap-2"><button className={view==='maximum'?'btn-primary':'btn-secondary'} onClick={()=>setView('maximum')}>Maximum je Wochentag</button><button className={view==='mittelwert'?'btn-primary':'btn-secondary'} onClick={()=>setView('mittelwert')}>Durchschnittlicher Tag</button></div>
-    <p className="text-sm">{view==='maximum' ? 'Grösste gleichzeitig beobachtete Belegung an einem konkreten Tag, je Wochentag und Uhrzeit.' : `Durchschnitt je Uhrzeit über ${p.mean_days} Tage. Tage ohne Belegung zählen mit; Tage mit vollständig fehlenden Personenerfassungen sind ausgeschlossen.`}</p>
-    {view==='mittelwert' && !p.mean_days ? <Alert>Für den Durchschnitt ist noch kein Tag für alle eingereichten Teilnehmenden dokumentiert.</Alert> : <Heatmap data={profile} anzeige={view}/>}
-    <p className="text-xs text-slate-500">{p.observed_days} beobachtete Tage · {p.excluded_days} Tage wegen fehlender Personentage nicht im Durchschnitt. Teilweise erfasste Tage können die Werte weiterhin beeinflussen; beachte die Vollständigkeit oben. Es wird nicht auf fehlende Teilnehmende hochgerechnet.</p>
-    {p.historical_entries>0 && <Alert>{p.historical_entries} ältere Einträge enthalten keine Angaben zur tatsächlichen Raumnutzung. Sie werden nur bei bekannter Standortanwesenheit berücksichtigt, nicht als Arbeitsplatz- oder Raumnutzung interpretiert.</Alert>}
-    <details className="text-sm"><summary className="cursor-pointer font-semibold">So wird der Raumbedarf geschätzt</summary><p className="mt-2">Gleichzeitig erfasste interne Besprechungen derselben Erhebung und Grössenklasse werden zusammengefasst: Anzahl erfasster Personen geteilt durch 3, 6,5, 10,5 bzw. 13, aufgerundet. Bei 13+ ist 13 eine Annahme. Gemischte Gruppen mit Gästen werden vorsichtig als ein Raum je erfassender Person gezählt und können dadurch überschätzt werden. Unterschiedliche Erhebungen werden nicht als gemeinsames Meeting zusammengelegt. Gefilterte Teilgruppen und nicht teilnehmende Personen können die Schätzung beeinflussen.</p><p className="mt-2">Tatsächliche Raumnutzung und benötigter geschlossener Raum sind getrennte Ansichten und dürfen nicht addiert werden. Auch Rückzugsgründe können sich überschneiden.</p></details>
-  </div>;
-}
-
-// ── Anteile ──────────────────────────────────────────────────────────────────
-// Fixed palette for Tätigkeitsgruppe/Arbeitsform segments, which (unlike
-// einzelne Tätigkeiten) have no admin-assigned colour of their own.
-const GRUPPE_PALETTE = ["#1e3a5f", "#3b82f6", "#94a3b8", "#f59e0b", "#8b5cf6", "#0ea5e9"];
-
-/** One 100%-stacked horizontal bar: each item is a coloured segment sized by
- * its own anteil_prozent, so shares are directly comparable at a glance. */
-function StackedBar({ items, colorFor, emptyLabel }) {
-  if (!items.length) {
-    return <p className="text-xs text-slate-400">{emptyLabel ?? "Keine Daten."}</p>;
-  }
-  return (
-    <div>
-      <div className="flex w-full h-6 rounded-md overflow-hidden bg-slate-100">
-        {items.map((it, i) => (
-          <div
-            key={it.id ?? i}
-            title={`${it.name}: ${it.stunden}h (${it.anteil_prozent}%)`}
-            style={{ width: `${it.anteil_prozent}%`, backgroundColor: colorFor(it, i) }}
-            className="h-full first:rounded-l-md last:rounded-r-md"
-          />
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
-        {items.map((it, i) => (
-          <span key={it.id ?? i} className="inline-flex items-center gap-1.5 text-xs text-slate-600">
-            <span
-              className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
-              style={{ backgroundColor: colorFor(it, i) }}
-            />
-            {it.name} · {it.stunden}h ({it.anteil_prozent}%)
-          </span>
-        ))}
-      </div>
-    </div>
+function Dashboard({ data }) {
+  const root = useRef(null);
+  useEffect(
+    () =>
+      mountDashboard(root.current, data, {}, (state) =>
+        exportHtml(data, state),
+      ),
+    [data],
   );
+  return <div ref={root} />;
 }
-
-function AnteileBlock({ title, all, arbeit, colorFor, gesamtLabel, arbeitLabel }) {
-  return (
-    <div>
-      <h3 className="text-sm font-semibold text-slate-700 mb-3">{title}</h3>
-      <div className="space-y-4">
-        <div>
-          <p className="text-xs text-slate-500 mb-1.5">{gesamtLabel}</p>
-          <StackedBar items={all} colorFor={colorFor} />
-        </div>
-        <div>
-          <p className="text-xs text-slate-500 mb-1.5">{arbeitLabel}</p>
-          <StackedBar items={arbeit} colorFor={colorFor} emptyLabel="Keine Arbeitszeit erfasst." />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Anteile({ data }) {
-  const tgAll = (data.taetigkeitsgruppe_anteile ?? []).filter(r => r.stunden > 0);
-  const tgArbeit = (data.taetigkeitsgruppe_anteile_arbeitszeit ?? []).filter(r => r.stunden > 0);
-  const katAll = (data.kategorie_anteile ?? []).filter(r => r.stunden > 0);
-  const katArbeit = (data.kategorie_anteile_arbeitszeit ?? []).filter(r => r.stunden > 0);
-
-  const gruppeColor = (_item, i) => GRUPPE_PALETTE[i % GRUPPE_PALETTE.length];
-  const katColor = (item) => item.farbe || "#64748b";
-
-  return (
-    <div className="space-y-8">
-      <AnteileBlock
-        title="Nach Tätigkeitsgruppe"
-        all={tgAll}
-        arbeit={tgArbeit}
-        colorFor={gruppeColor}
-        gesamtLabel={`Anteil an der gesamten Zeit (${data.gesamt_stunden}h)`}
-        arbeitLabel={`Anteil an der Arbeitszeit, ohne Abwesenheit (${data.arbeitszeit_stunden}h)`}
-      />
-      {katAll.length > 0 && (
-        <AnteileBlock
-          title="Nach Tätigkeit"
-          all={katAll}
-          arbeit={katArbeit}
-          colorFor={katColor}
-          gesamtLabel={`Anteil an der gesamten Zeit (${data.gesamt_stunden}h)`}
-          arbeitLabel={`Anteil an der Arbeitszeit, ohne Abwesenheit (${data.arbeitszeit_stunden}h)`}
-        />
-      )}
-    </div>
-  );
-}
-
-// ── Teilnehmer-Filter ────────────────────────────────────────────────────────
-const EMPTY_TN_FILTER = { funktionen: [], organisationseinheiten: [], beschaeftigungsgrade: [] };
-const EMPTY_MERKMAL_FILTER = {
-  arbeitsformen: [], arbeitsorte: [], gruppengroessen: [], teilnehmerkreise: [],
-  raeumlichkeiten: [], rueckzugsbedarfe: [],
-};
-
-function FilterChipGroup({ label, items, selected, onToggle, formatLabel }) {
-  if (!items?.length) return null;
-  const fmt = formatLabel ?? (v => v);
-  return (
-    <div>
-      <p className="text-xs text-slate-500 mb-1.5">{label}</p>
-      <div className="flex flex-wrap gap-1.5">
-        {items.map(item => {
-          const key = String(item);
-          const active = selected.includes(item);
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => onToggle(item)}
-              className={`px-2.5 py-0.5 rounded-full text-xs border transition-colors ${
-                active
-                  ? "bg-brand-600 text-white border-brand-600"
-                  : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"
-              }`}
-            >
-              {fmt(item)}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function TeilnehmerFilterCard({ options, filters, onChange, onClear }) {
-  const activeCount =
-    filters.funktionen.length +
-    filters.organisationseinheiten.length +
-    filters.beschaeftigungsgrade.length;
-
-  const toggle = (key, value) => {
-    onChange({
-      ...filters,
-      [key]: filters[key].includes(value)
-        ? filters[key].filter(v => v !== value)
-        : [...filters[key], value],
-    });
-  };
-
-  const hasOptions =
-    options?.funktionen?.length ||
-    options?.organisationseinheiten?.length ||
-    options?.beschaeftigungsgrade?.length;
-
-  if (!hasOptions) {
-    return (
-      <div className="card text-sm text-slate-500">
-        Keine Teilnehmerattribute für die gewählte Erhebung vorhanden.
-      </div>
-    );
-  }
-
-  return (
-    <div className="card space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold text-slate-800">Teilnehmer-Filter</h2>
-        {activeCount > 0 && (
-          <button type="button" onClick={onClear}
-            className="text-xs text-slate-400 hover:text-slate-600 underline">
-            Alle Filter zurücksetzen
-          </button>
-        )}
-      </div>
-      <p className="text-xs text-slate-500">
-        Optional einschränken nach Funktion, Organisationseinheit oder Beschäftigungsgrad.
-        Wirkt auf Lastprofil, Bedarf nach Tätigkeit und Anteilsübersicht.
-        {activeCount > 0 && (
-          <span className="text-brand-600"> ({activeCount} Filter aktiv)</span>
-        )}
-      </p>
-      <FilterChipGroup
-        label="Funktion"
-        items={options.funktionen}
-        selected={filters.funktionen}
-        onToggle={v => toggle("funktionen", v)}
-      />
-      <FilterChipGroup
-        label="Organisationseinheit"
-        items={options.organisationseinheiten}
-        selected={filters.organisationseinheiten}
-        onToggle={v => toggle("organisationseinheiten", v)}
-      />
-      <FilterChipGroup
-        label="Beschäftigungsgrad"
-        items={options.beschaeftigungsgrade}
-        selected={filters.beschaeftigungsgrade}
-        onToggle={v => toggle("beschaeftigungsgrade", v)}
-        formatLabel={v => `${v % 1 === 0 ? v : v.toFixed(1)}%`}
-      />
-    </div>
-  );
-}
-
-// ── Merkmal-Filter (Arbeitsform, Arbeitsort, Gruppengrösse, Personenkreis,
-// Räumlichkeit, Rückzugsbedarf) ─────────────────────────────────────────────
-const MERKMAL_FILTER_META = [
-  { key: "arbeitsformen", label: "Arbeitsform", opts: ARBEITSFORM_ORDER.map(v => ({ value: v, label: ARBEITSFORM_LABELS[v] })) },
-  { key: "arbeitsorte", label: "Arbeitsort", opts: ARBEITSORT_OPTS },
-  { key: "gruppengroessen", label: "Gruppengrösse", opts: GRUPPENGROESSE_OPTS },
-  { key: "teilnehmerkreise", label: "Personenkreis", opts: TEILNEHMERKREIS_OPTS },
-  { key: "raeumlichkeiten", label: "Standort (bisherige Meeting-Erfassung)", opts: RAEUMLICHKEIT_OPTS },
-  { key: "rueckzugsbedarfe", label: "Rückzugsbedarf", opts: RUECKZUGSBEDARF_OPTS },
-];
-
-function MerkmalFilterCard({ filters, onChange, onClear }) {
-  const activeCount = MERKMAL_FILTER_META.reduce((n, m) => n + filters[m.key].length, 0);
-
-  const toggle = (key, value) => {
-    onChange({
-      ...filters,
-      [key]: filters[key].includes(value)
-        ? filters[key].filter(v => v !== value)
-        : [...filters[key], value],
-    });
-  };
-
-  return (
-    <div className="card space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold text-slate-800">Merkmal-Filter</h2>
-        {activeCount > 0 && (
-          <button type="button" onClick={onClear}
-            className="text-xs text-slate-400 hover:text-slate-600 underline">
-            Alle Filter zurücksetzen
-          </button>
-        )}
-      </div>
-      <p className="text-xs text-slate-500">
-        Optional einschränken nach Arbeitsform und Merkmalen (Arbeitsort, Gruppengrösse,
-        Personenkreis, Räumlichkeit, Rückzugsbedarf) der erfassten Tätigkeiten.
-        Wirkt auf Lastprofil, Bedarf nach Tätigkeit und Anteilsübersicht.
-        {activeCount > 0 && (
-          <span className="text-brand-600"> ({activeCount} Filter aktiv)</span>
-        )}
-      </p>
-      {MERKMAL_FILTER_META.map(m => (
-        <FilterChipGroup
-          key={m.key}
-          label={m.label}
-          items={m.opts.map(o => o.value)}
-          selected={filters[m.key]}
-          onToggle={v => toggle(m.key, v)}
-          formatLabel={v => m.opts.find(o => o.value === v)?.label ?? v}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ── Tätigkeiten-Filter ───────────────────────────────────────────────────────
-function TaetigkeitFilter({ kategorien, aktiveIds, onToggle }) {
-  const groups = groupKategorien(kategorien);
-
-  const chip = k => (
-    <button key={k.id} type="button" onClick={() => onToggle(k.id)}
-      className={`px-2 py-0.5 rounded-full text-xs border transition-colors ${
-        aktiveIds.includes(k.id)
-          ? "bg-brand-600 text-white border-brand-600"
-          : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"
-      }`}>
-      {k.name}
-    </button>
-  );
-
-  return (
-    <div className="mb-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-500">
-          Tätigkeiten auswählen{aktiveIds.length > 0 ? ` (${aktiveIds.length} aktiv)` : " – mind. 1 wählen"}:
-        </p>
-        {aktiveIds.length > 0 && (
-          <button type="button" onClick={() => onToggle(null)}
-            className="text-xs text-slate-400 hover:text-slate-600 underline">
-            Alle abwählen
-          </button>
-        )}
-      </div>
-      {groups.map(g => (
-        <div key={g.key}>
-          <p className="text-xs text-slate-400 mb-1">{g.label}</p>
-          <div className="flex flex-wrap gap-1.5">{g.items.map(chip)}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-const LP_HINTS = {
-  mittelwert: "Mittelwert (Ø Personen pro Tag): Der gesamte Erhebungszeitraum (alle Wochentage, alle Wochen) wird auf einen einzigen, generischen Arbeitstag heruntergebrochen. Pro Teilnehmer wird berechnet, an welchem Anteil seiner erfassten Arbeitstage dieser Slot mit einer der gewählten Tätigkeiten belegt war; diese Anteile werden über alle Teilnehmenden summiert. 1 bedeutet: der Slot wird an jedem Arbeitstag gebraucht (fixer Bedarf); 0.2 (= 1/5) bedeutet: im Schnitt nur an einem von fünf Tagen.",
-  maximum:    "Maximum (Personen): Zeigt die volle Arbeitswoche (Mo–Fr). Pro Wochentag und Zeit-Slot die grösste Anzahl unterschiedlicher Teilnehmender, die diesen Slot an ein und demselben Tag mit einer der gewählten Tätigkeiten belegt haben – über den gesamten Erhebungszeitraum gepoolt (alle Wochen).",
-};
-
-// ── Sample-Info ──────────────────────────────────────────────────────────────
-function SampleStat({ label, value, hint }) {
-  return (
-    <div className="bg-slate-50 rounded-lg p-3">
-      <p className="text-lg font-semibold text-slate-800 leading-tight">{value}</p>
-      <p className="text-xs text-slate-500 mt-0.5">{label}</p>
-      {hint && <p className="text-[0.7rem] text-slate-400 mt-0.5">{hint}</p>}
-    </div>
-  );
-}
-
-function SampleCard({ data, loading }) {
-  if (loading && !data) {
-    return <div className="card flex justify-center py-6"><Spinner size="sm" /></div>;
-  }
-  if (!data) return null;
-
-  const v = data.vollstaendigkeit_prozent ?? 0;
-  const vColor = v >= 85 ? "#16a34a" : v >= 60 ? "#d97706" : "#dc2626";
-  const unter = data.teilnehmer_unter_schwelle ?? [];
-  const schwelle = data.schwelle_prozent ?? 85;
-  const fmtGrad = g => `${g % 1 === 0 ? g : g.toFixed(1)}%`;
-
-  return (
-    <div className="card space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold text-slate-800">Stichprobe</h2>
-        {data.filter_aktiv && (
-          <span className="text-xs text-brand-600 bg-brand-50 rounded-full px-2.5 py-0.5">
-            Sample eingeschränkt durch Filter
-          </span>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <SampleStat
-          label="Eingereicht"
-          value={`${data.eingereicht} / ${data.teilnehmer_im_sample}`}
-          hint={data.nicht_eingereicht > 0
-            ? `${data.nicht_eingereicht} noch nicht eingereicht`
-            : "alle eingereicht"}
-        />
-        <SampleStat
-          label="FTE (eingereicht)"
-          value={data.fte_summe}
-          hint="Summe der Beschäftigungsgrade"
-        />
-        <SampleStat
-          label="Erfasste Zeit"
-          value={`${data.erfasste_stunden}h`}
-          hint={`von ${data.erwartete_stunden}h erwartet`}
-        />
-        <SampleStat
-          label="Zeitraum"
-          value={`${data.arbeitstage} Arbeitstage`}
-          hint={`${data.anzahl_gruppen} Erhebung${data.anzahl_gruppen === 1 ? "" : "en"}`}
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-slate-600">Vollständigkeit der Eingereichten</span>
-          <span className="font-semibold" style={{ color: vColor }}>{v}%</span>
-        </div>
-        <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-          <div className="h-full rounded-full transition-all"
-            style={{ width: `${Math.min(100, v)}%`, backgroundColor: vColor }} />
-        </div>
-        <p className="text-xs text-slate-400">
-          Nur eingereichte Teilnehmer fliessen in die Auswertung ein
-          {" "}(Soll: Arbeitstage × 8,4h pro Person).
-          {" "}Übererfassung wird je Teilnehmer auf 100% begrenzt, damit Lücken sichtbar bleiben.
-        </p>
-      </div>
-
-      {unter.length > 0 && (
-        <details className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
-          <summary className="text-sm text-amber-800 cursor-pointer select-none">
-            {unter.length} Teilnehmer unter {schwelle}% Vollständigkeit
-          </summary>
-          <ul className="mt-2 space-y-1">
-            {unter.map((t, i) => (
-              <li key={i} className="flex items-center justify-between gap-3 text-xs text-slate-600">
-                <span className="truncate">
-                  {t.user_id && t.gruppe_id ? (
-                    <Link
-                      to={`/admin/gruppen/${t.gruppe_id}/teilnehmer/${t.user_id}/eintraege`}
-                      className="text-brand-600 hover:underline">
-                      {t.name}
-                    </Link>
-                  ) : t.name}
-                  {t.beschaeftigungsgrad != null && (
-                    <span className="text-slate-400"> · {fmtGrad(t.beschaeftigungsgrad)}</span>
-                  )}
-                </span>
-                <span className="font-medium text-amber-700 shrink-0">
-                  {t.vollstaendigkeit_prozent}%
-                </span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </div>
-  );
-}
-
-// ── Main ─────────────────────────────────────────────────────────────────────
 export default function AuswertungPage() {
-  const [searchParams] = useSearchParams();
-  const [gruppen, setGruppen]       = useState([]);
-  const [kategorien, setKategorien] = useState([]);
-  const [gruppeIds, setGruppeIds]   = useState(
-    searchParams.get("gruppe_id") ? [parseInt(searchParams.get("gruppe_id"))] : []
-  );
-  const [kategorieIds, setKategorieIds] = useState([]);
-  const [tnFilterOptions, setTnFilterOptions] = useState(null);
-  const [tnFilter, setTnFilter] = useState(EMPTY_TN_FILTER);
-  const [merkmalFilter, setMerkmalFilter] = useState(EMPTY_MERKMAL_FILTER);
-  const [anzeige, setAnzeige] = useState("maximum");
-  const [sample, setSample]   = useState(null);
-  const [sampleLoading, setSampleLoading] = useState(false);
-  const [lp, setLp]           = useState(null);
-  const [lpLoading, setLpLoading] = useState(false);
-  const [rb, setRb]           = useState(null);
-  const [ant, setAnt]         = useState(null);
+  const [params, setParams] = useSearchParams();
+  const id = params.get("gruppe_id") || "";
+  const [groups, setGroups] = useState([]);
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState("");
-
+  const [historical, setHistorical] = useState(false);
   useEffect(() => {
-    getGruppen(true).then(({ data }) => {
-      if (!data) return;
-      setGruppen(data);
-      const urlId = searchParams.get("gruppe_id") ? parseInt(searchParams.get("gruppe_id")) : null;
-      if (urlId && data.find(x => x.id === urlId)) setGruppeIds([urlId]);
-      // No auto-select: user must choose explicitly
+    let active = true;
+    getGruppen(true).then((r) => {
+      if (active) {
+        setGroups(r.data || []);
+        if (r.error) setError(r.error);
+      }
     });
-    getKategorien().then(({ data }) => {
-      if (data) setKategorien(data.filter(k => k.aktiv));
-    });
+    return () => {
+      active = false;
+    };
   }, []);
-
-  const appendTnFilterParams = useCallback((p) => {
-    let q = p;
-    if (tnFilter.funktionen.length) {
-      q += `&funktionen=${encodeURIComponent(tnFilter.funktionen.join(","))}`;
-    }
-    if (tnFilter.organisationseinheiten.length) {
-      q += `&organisationseinheiten=${encodeURIComponent(tnFilter.organisationseinheiten.join(","))}`;
-    }
-    if (tnFilter.beschaeftigungsgrade.length) {
-      q += `&beschaeftigungsgrade=${tnFilter.beschaeftigungsgrade.join(",")}`;
-    }
-    return q;
-  }, [tnFilter]);
-
-  const appendMerkmalFilterParams = useCallback((p) => {
-    let q = p;
-    for (const key of Object.keys(EMPTY_MERKMAL_FILTER)) {
-      if (merkmalFilter[key].length) q += `&${key}=${merkmalFilter[key].join(",")}`;
-    }
-    return q;
-  }, [merkmalFilter]);
-
-  const buildParams = useCallback(() =>
-    appendMerkmalFilterParams(appendTnFilterParams(`gruppe_ids=${gruppeIds.join(",")}`)),
-    [gruppeIds, appendTnFilterParams, appendMerkmalFilterParams]);
-
-  const buildLpParams = useCallback(() => {
-    let p = buildParams();
-    if (kategorieIds.length) p += `&kategorie_ids=${kategorieIds.join(",")}`;
-    return p;
-  }, [buildParams, kategorieIds]);
-
   useEffect(() => {
-    if (!gruppeIds.length) {
-      setTnFilterOptions(null);
-      setTnFilter(EMPTY_TN_FILTER);
-      return;
-    }
-    setTnFilter(EMPTY_TN_FILTER);
-    getTeilnehmerFilter(`gruppe_ids=${gruppeIds.join(",")}`).then(({ data }) => {
-      if (data) setTnFilterOptions(data);
-    });
-  }, [gruppeIds.join(",")]);
-
-  // Load Raumbedarf + Anteile when gruppeIds changes
-  const load = useCallback(async () => {
-    if (!gruppeIds.length) return;
-    setError(""); setLoading(true); setSampleLoading(true);
-    const p = buildParams();
-    const [r, a, s] = await Promise.all([getRaumbedarf(p), getAnteile(p), getSample(p)]);
-    setLoading(false); setSampleLoading(false);
-    if (s.data) setSample(s.data);
-    if (r.error) { setError(r.error); return; }
-    setRb(r.data); setAnt(a.data);
-  }, [buildParams]);
-
-  useEffect(() => {
-    if (gruppeIds.length) load();
-    else { setRb(null); setAnt(null); setLp(null); setSample(null); }
-  }, [gruppeIds.join(","), tnFilter, merkmalFilter]);
-
-  // Load Lastprofil when gruppeIds, kategorieIds, tnFilter or merkmalFilter change
-  const reloadLp = useCallback(async () => {
-    if (!gruppeIds.length || !kategorieIds.length) { setLp(null); return; }
-    setLpLoading(true);
-    const { data, error: e } = await getLastprofil(buildLpParams());
-    setLpLoading(false);
-    if (e) setError(e); else setLp(data);
-  }, [gruppeIds.join(","), kategorieIds.join(","), tnFilter, merkmalFilter, buildLpParams]);
-
-  useEffect(() => { reloadLp(); }, [gruppeIds.join(","), kategorieIds.join(","), tnFilter, merkmalFilter]);
-
-  const toggleGruppe    = id => setGruppeIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
-  const toggleKategorie = id => {
-    if (id === null) { setKategorieIds([]); return; }
-    setKategorieIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
-  };
-
-  const offene     = gruppen.filter(g => g.aktiv && !g.abgeschlossen);
-  const geschl     = gruppen.filter(g => g.aktiv && g.abgeschlossen);
-  const archiviert = gruppen.filter(g => !g.aktiv);
-
+    let active = true;
+    setData(null);
+    setError("");
+    setLoading(Boolean(id));
+    if (id)
+      get(
+        `/api/auswertung/dashboard?gruppe_ids=${encodeURIComponent(id)}`,
+      ).then((r) => {
+        if (active) {
+          setLoading(false);
+          setData(r.data);
+          setError(r.error || "");
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [id]);
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold text-slate-800">Auswertung</h1>
-
-      {/* Erhebungsauswahl */}
-      <div className="card space-y-4">
-        <div className="flex flex-wrap gap-4 items-end">
-          <div className="flex-1 min-w-[220px]">
-            <label className="label">Erhebung</label>
-            <select className="input"
-              value={gruppeIds[0] ?? ""}
-              onChange={e => setGruppeIds([parseInt(e.target.value)])}>
-              <option value="" disabled>Bitte wählen…</option>
-              {offene.length > 0 && (
-                <optgroup label="Offen">
-                  {offene.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                </optgroup>
-              )}
-              {geschl.length > 0 && (
-                <optgroup label="Abgeschlossen">
-                  {geschl.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                </optgroup>
-              )}
-              {archiviert.length > 0 && (
-                <optgroup label="Archiviert">
-                  {archiviert.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                </optgroup>
-              )}
-            </select>
-          </div>
-          {(rb || ant) && (
-            <a href={getExportUrl(buildLpParams())} download className="btn-secondary">
-              Exportieren (HTML)
-            </a>
-          )}
-          {loading && <Spinner size="sm" />}
-        </div>
-
-        {gruppeIds.length > 0 && gruppen.length > 1 && (
-          <div>
-            <p className="text-xs text-slate-500 mb-2">Mehrere Erhebungen zusammenfassen:</p>
-            <div className="flex flex-wrap gap-2">
-              {gruppen.map(g => (
-                <button key={g.id} type="button" onClick={() => toggleGruppe(g.id)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                    gruppeIds.includes(g.id)
-                      ? "bg-brand-600 text-white border-brand-600"
-                      : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"
-                  }`}>
-                  {g.name}
-                  {!g.aktiv && <span className="ml-1 opacity-60">(archiviert)</span>}
-                  {g.aktiv && g.abgeschlossen && <span className="ml-1 opacity-60">(abgeschl.)</span>}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+    <div>
+      <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+        <h1 className="text-2xl font-bold text-slate-800">Auswertung</h1>
+        <button
+          className="btn-secondary"
+          onClick={() => setHistorical((v) => !v)}
+        >
+          {historical
+            ? "Neues Dashboard öffnen"
+            : "Historische Auswertung öffnen"}
+        </button>
       </div>
-
-      {error && <Alert>{error}</Alert>}
-      {!gruppeIds.length && !loading && (
-        <div className="card text-center text-slate-500 py-12">Wähle eine Erhebung aus.</div>
-      )}
-
-      {gruppeIds.length > 0 && (
-        <TeilnehmerFilterCard
-          options={tnFilterOptions}
-          filters={tnFilter}
-          onChange={setTnFilter}
-          onClear={() => setTnFilter(EMPTY_TN_FILTER)}
-        />
-      )}
-
-      {gruppeIds.length > 0 && (
-        <MerkmalFilterCard
-          filters={merkmalFilter}
-          onChange={setMerkmalFilter}
-          onClear={() => setMerkmalFilter(EMPTY_MERKMAL_FILTER)}
-        />
-      )}
-
-      {gruppeIds.length > 0 && (
-        <SampleCard data={sample} loading={sampleLoading} />
-      )}
-
-      {/* Lastprofil */}
-      {gruppeIds.length > 0 && (
-        <div className="card">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <h2 className="font-semibold text-slate-800">Tätigkeiten im Tagesverlauf</h2>
-            <div className="flex gap-2">
-              {["mittelwert", "maximum"].map(a => (
-                <button key={a} onClick={() => setAnzeige(a)}
-                  className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${anzeige === a ? "bg-brand-600 text-white border-brand-600" : "bg-white text-slate-600 border-slate-300"}`}>
-                  {a === "mittelwert" ? "Mittelwert" : "Maximum"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-3 mb-4">
-            Zeitanteile beruhen auf Schätzungen. Zusammengefasste Tätigkeiten erlauben keine minutengenaue Interpretation des Tagesverlaufs. Dieses Profil zählt gewählte Tätigkeiten an allen erfassten Orten. Die Arbeitsplatz- und Raumbelegung findest du in der separaten Ansicht unten. {LP_HINTS[anzeige]}
+      {historical ? (
+        <>
+          <p className="mb-4 text-sm text-slate-600">
+            Bisherige Auswertung für historische Erfassungsstrukturen. Neue
+            Erhebungen im Dashboard auswerten.
           </p>
-
-          <TaetigkeitFilter
-            kategorien={kategorien}
-            aktiveIds={kategorieIds}
-            onToggle={toggleKategorie}
-          />
-
-          {kategorieIds.length === 0
-            ? <div className="text-center text-slate-400 py-12 text-sm">Wähle mindestens eine Tätigkeit, um das Lastprofil anzuzeigen.</div>
-            : lpLoading
-              ? <div className="flex justify-center py-12"><Spinner /></div>
-              : lp ? <Heatmap data={lp} anzeige={anzeige} /> : null
-          }
-        </div>
-      )}
-
-      {rb && (
-        <div className="card">
-          <h2 className="font-semibold text-slate-800 mb-4">Arbeitsplätze und Räume</h2>
-          <TaetigkeitenBedarf data={rb} />
-        </div>
-      )}
-
-      {ant && (
-        <div className="card">
-          <h2 className="font-semibold text-slate-800 mb-4">Anteilsübersicht</h2>
-          <Anteile data={ant} />
-        </div>
+          <HistorischeAuswertung />
+        </>
+      ) : (
+        <>
+          <label className="label" htmlFor="survey">
+            Erhebung / Standort
+          </label>
+          <select
+            id="survey"
+            className="input mb-6"
+            value={id}
+            onChange={(e) => {
+              const next = new URLSearchParams(params);
+              if (e.target.value) next.set("gruppe_id", e.target.value);
+              else next.delete("gruppe_id");
+              setParams(next);
+            }}
+          >
+            <option value="">Erhebung auswählen</option>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+                {!g.aktiv
+                  ? " (archiviert)"
+                  : g.abgeschlossen
+                    ? " (abgeschlossen)"
+                    : ""}
+              </option>
+            ))}
+          </select>
+          {!id && (
+            <p className="card">
+              Wähle die Erhebung des untersuchten Standorts. Das Dashboard zeigt
+              Tätigkeitsanteile, durchschnittliche Personen und die Verteilung
+              über die Wochenhalbtage.
+            </p>
+          )}
+          {error && (
+            <p role="alert" className="card text-red-700">
+              {error}
+            </p>
+          )}
+          {loading && <p role="status">Auswertung wird geladen …</p>}
+          {data && <Dashboard data={data} />}
+        </>
       )}
     </div>
   );

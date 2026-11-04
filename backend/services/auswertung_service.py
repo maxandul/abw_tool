@@ -738,6 +738,9 @@ def export_rohdaten(
             "room": e.raumnutzung,
             "reasons": e.rueckzug_gruende or [],
             "v2": e.kategorie.schema_version == 2,
+            "form": e.kategorie.arbeitsform.value if e.kategorie.arbeitsform else None,
+            "absence": e.kategorie.abwesenheit_grund.value if e.kategorie.abwesenheit_grund else None,
+            "hybrid": e.online_dabei if e.kategorie.arbeitsform == Arbeitsform.MEETING else None,
             "k": e.kategorie_id,
             "wd": e.datum.weekday(),
             "kw": _iso_kw(e.datum),
@@ -765,7 +768,9 @@ def export_rohdaten(
             "sort_order": k.sort_order,
             "anwesend": _is_anwesend(k),
         }
-        for k in Kategorie.query.filter_by(aktiv=True)
+        for k in Kategorie.query.filter(
+            (Kategorie.aktiv.is_(True)) | (Kategorie.id.in_({e.kategorie_id for e in eintraege_raw}))
+        )
         .order_by(Kategorie.sort_order)
         .all()
     ]
