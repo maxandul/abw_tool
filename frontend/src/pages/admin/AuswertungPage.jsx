@@ -78,7 +78,7 @@ export default function AuswertungPage() {
     };
   }, [id]);
   return (
-    <div>
+    <div className="ad-page">
       <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
         <h1 className="text-2xl font-bold text-slate-800">Auswertung</h1>
         <button

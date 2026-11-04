@@ -87,15 +87,28 @@
   padding: 8px 0;
   font-weight: 600;
 }
-.ad-toolbar > details {
-  flex: 1;
-  min-width: 190px;
+.ad-page {
+  box-sizing: border-box;
+  max-width: 1448px;
+  margin: 0 auto;
+  padding: 24px;
 }
-.ad-toolbar > details[open] {
-  flex-basis: 100%;
-  padding: 12px 18px;
+.ad-controls {
+  justify-content: flex-start;
+  margin-bottom: 12px;
+}
+.ad-controls button[aria-expanded="true"] {
+  background: #eaf0f7;
+  border-color: #7b9abb;
+}
+.ad-disclosure-body {
+  padding: 16px 20px;
+  margin: 12px 0;
   background: #f1f5f9;
   border-radius: 10px;
+}
+.ad-disclosure-body[hidden] {
+  display: none;
 }
 .ad-filter-grid,
 .ad-window-grid {
@@ -253,6 +266,7 @@
   min-width: 170px;
 }
 @media (max-width: 760px) {
+  .ad-page { padding: 16px; }
   .ad-stats {
     grid-template-columns: 1fr;
   }
