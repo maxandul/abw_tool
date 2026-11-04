@@ -358,6 +358,7 @@ export function mountDashboard(root, data, initial = {}, onExport = null) {
     ...initial,
     filters: { ...(initial.filters || {}) },
   };
+  const expandedPanels = new Set();
   let detail = "",
     currentView = "";
   const storageKey = "abw-dashboard-views-v2:" + data.gruppen_namen.join("|");
@@ -444,7 +445,7 @@ export function mountDashboard(root, data, initial = {}, onExport = null) {
       .join("")}</tbody></table></div>`;
     root.innerHTML = `<div class="ad-shell">
       <header class="ad-heading"><div><p class="ad-eyebrow">TÄTIGKEITEN & ARBEITSUMGEBUNG</p><h2>${esc(data.gruppen_namen.join(" · "))}</h2><p>${esc(data.zeitraum_von)} bis ${esc(data.zeitraum_bis)}</p></div><div class="ad-actions">${onExport ? '<button data-action="export">Interaktiven Bericht exportieren</button>' : ""}<button data-action="csv">Tabelle als CSV</button><button data-action="print">Drucken / PDF</button></div></header>
-      <div class="ad-toolbar">${select(
+      <div class="ad-toolbar ad-controls">${select(
         "location",
         "Aufenthaltsort",
         [
@@ -455,7 +456,7 @@ export function mountDashboard(root, data, initial = {}, onExport = null) {
           ["MOBIL_EXTERN", "Anderswo / unterwegs"],
         ],
         state.location,
-      )}<details data-panel="filters"><summary>Filter${active.length ? " (" + active.length + ")" : ""}</summary><p>Mehrere Werte mit Strg / Cmd auswählen. Innerhalb eines Merkmals gilt «oder», zwischen Merkmalen «und».</p><div class="ad-filter-grid">${filters}</div><button data-action="clear">Alle Merkmalsfilter zurücksetzen</button></details><details data-panel="basis"><summary>Zeitfenster & Datenbasis</summary><div class="ad-window-grid">${state.windows.map((w, h) => w.map((v, j) => `<label>${h ? "Nachmittag" : "Vormittag"} ${j ? "bis" : "von"}<input type="time" min="07:00" max="19:00" step="900" data-window="${h},${j}" value="${clock(v)}"></label>`).join("")).join("")}</div><p>Ø Personen = Tätigkeitsminuten geteilt durch die Länge des Halbtagfensters. Nur Halbtage mit mindestens 85 % dokumentierter Fensterzeit bei jeder eingereichten Person mit aktueller Erfassung fliessen ein. Dokumentierte Abwesenheiten zählen als null, fehlende Erfassungen nicht.</p><p>Ausserhalb der Fenster: ${round(r.outside / 60)} erfasste Tätigkeitsstunden. Diese sind in den Charts nicht enthalten. Unterschiedlich lange Fenster ergeben unterschiedlich gewichtete Personenwerte; das Tagesmittel mittelt die auswertbaren Halbtage.</p></details></div>
+      )}<button type="button" data-toggle="filters" aria-expanded="${expandedPanels.has("filters")}" aria-controls="ad-filters">Filter${active.length ? " (" + active.length + ")" : ""}</button><button type="button" data-toggle="basis" aria-expanded="${expandedPanels.has("basis")}" aria-controls="ad-basis">Zeitfenster & Datenbasis</button></div><div class="ad-disclosure-body" id="ad-filters" ${expandedPanels.has("filters") ? "" : "hidden"}><p>Mehrere Werte mit Strg / Cmd auswählen. Innerhalb eines Merkmals gilt «oder», zwischen Merkmalen «und».</p><div class="ad-filter-grid">${filters}</div><button data-action="clear">Alle Merkmalsfilter zurücksetzen</button></div><div class="ad-disclosure-body" id="ad-basis" ${expandedPanels.has("basis") ? "" : "hidden"}><div class="ad-window-grid">${state.windows.map((w, h) => w.map((v, j) => `<label>${h ? "Nachmittag" : "Vormittag"} ${j ? "bis" : "von"}<input type="time" min="07:00" max="19:00" step="900" data-window="${h},${j}" value="${clock(v)}"></label>`).join("")).join("")}</div><p>Ø Personen = Tätigkeitsminuten geteilt durch die Länge des Halbtagfensters. Nur Halbtage mit mindestens 85 % dokumentierter Fensterzeit bei jeder eingereichten Person mit aktueller Erfassung fliessen ein. Dokumentierte Abwesenheiten zählen als null, fehlende Erfassungen nicht.</p><p>Ausserhalb der Fenster: ${round(r.outside / 60)} erfasste Tätigkeitsstunden. Diese sind in den Charts nicht enthalten. Unterschiedlich lange Fenster ergeben unterschiedlich gewichtete Personenwerte; das Tagesmittel mittelt die auswertbaren Halbtage.</p></div>
       <p class="ad-context">${esc(active.join(" · ") || "Alle Tätigkeiten und Personengruppen")} · Zeitanteile beziehen sich auf die gesamte Arbeitszeit im gewählten Aufenthaltsort und Personenkreis, vor Tätigkeitsfiltern.</p>
       <div class="ad-stats"><div><span>Ausgewertete Personen</span><strong>${r.people}</strong><small>${r.submitted} eingereichte Erhebungen</small></div><div><span>Auswertbare Halbtage</span><strong>${r.valid} / ${r.expected}</strong><small>${r.excluded} wegen Erfassungslücken ausgeschlossen</small></div><div><span>Arbeitszeit in der Auswahl</span><strong>${round(r.selectedMinutes / 60)} h</strong><small>innerhalb der gewählten Zeitfenster</small></div></div>
       ${r.legacyEntries ? `<p class="ad-notice">${r.legacyEntries} historische Einträge werden nicht in die neue Struktur umgedeutet. ${r.excludedPeople} Einreichungen ohne aktuelle Einträge sind hier ausgeschlossen. Historische Daten sind in der bisherigen Auswertung verfügbar.</p>` : ""}
@@ -548,6 +549,13 @@ export function mountDashboard(root, data, initial = {}, onExport = null) {
   function click(event) {
     const el = event.target.closest("button");
     if (!el) return;
+    if (el.dataset.toggle) {
+      const panel = el.dataset.toggle;
+      if (expandedPanels.has(panel)) expandedPanels.delete(panel);
+      else expandedPanels.add(panel);
+      render();
+      root.querySelector(`[data-toggle="${panel}"]`)?.focus({ preventScroll: true });
+    }
     if (el.dataset.tab) {
       state.tab = el.dataset.tab;
       if (state.tab !== "custom") state.second = "";
