@@ -1,6 +1,6 @@
 # Auswertung: Tätigkeiten und Arbeitsumgebung
 
-Das Dashboard wertet jeweils eine Erhebung (ein untersuchter Standort) aus. Es verwendet nur eingereichte bzw. abgeschlossene Einreichungen und die aktuelle Erfassungsstruktur (Version 2). Frühere Erfassungsstrukturen bleiben über «Historische Auswertung öffnen» zugänglich. Einträge werden nicht umgedeutet. Eine Erhebung mit gemischten Versionen weist historische Einträge und ausgeschlossene Einreichungen ausdrücklich aus.
+Das Dashboard wertet jeweils eine Erhebung (ein untersuchter Standort) aus. Es verwendet die aktuelle Erfassungsstruktur (Version 2), wahlweise mit allen bisher gespeicherten oder nur mit eingereichten bzw. abgeschlossenen Eingaben. Frühere Erfassungsstrukturen bleiben über «Historische Auswertung öffnen» zugänglich. Einträge werden nicht umgedeutet. Eine Erhebung mit gemischten Versionen weist historische Einträge und ausgeschlossene Einreichungen ausdrücklich aus.
 
 ## Ansichten
 
