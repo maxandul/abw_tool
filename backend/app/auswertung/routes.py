@@ -11,6 +11,18 @@ from services import auswertung_service, export_service
 auswertung_bp = Blueprint("auswertung", __name__, url_prefix="/api/auswertung")
 
 
+@auswertung_bp.route("/dashboard", methods=["GET"])
+@admin_required
+def get_dashboard():
+    try:
+        ids, von, bis, _, _, _, _ = _parse_filter(request.args)
+        if von > bis:
+            raise ValidationError("Zeitraum von muss vor Zeitraum bis liegen.")
+        return ok(auswertung_service.export_rohdaten(ids, von, bis))
+    except ValidationError as exc:
+        return err(str(exc), 400)
+
+
 def _parse_teilnehmer_filter(args) -> dict:
     funktionen = parse_string_list(args.get("funktionen"))
     organisationseinheiten = parse_string_list(args.get("organisationseinheiten"))

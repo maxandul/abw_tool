@@ -1,3 +1,5 @@
+> Neue Auswertung: [Dashboard, Halbtagwerte und Berechnungsregeln](docs/auswertung-dashboard.md). Die unten beschriebenen Viertelstunden- und Raummengenschätzungen gelten für die bisherige historische Auswertung.
+
 > Aktuelle Erfassungs- und Berechnungsregeln sowie Updatehinweise: [Erfassung und Raumplanung ab Oktober 2026](#erfassung-und-raumplanung-ab-oktober-2026). Frühere frei konfigurierbare Tätigkeitskataloge gelten nur noch für historische Daten.
 
 # Tätigkeitserhebung Tool
