@@ -99,7 +99,56 @@ const check = (s, v = true) => {
   el.checked = v;
   el.dispatchEvent(new w.Event("change", { bubbles: true }));
 };
-const text = () => doc.body.textContent;
+const text = () => get("#dashboard").textContent;
+// Walk from the overview peak to all observations for that weekday.
+assert.ok(!get("[data-preset]").closest("details"));
+click('[data-action="peak-days"]');
+assert.equal(w.current.tab, "week");
+const dates = () =>
+  [...get(".ad-detail").querySelectorAll("tbody tr")].map((row) =>
+    [...row.cells].map((cell) => cell.textContent),
+  );
+assert.deepEqual(dates(), [
+  ["05.10.2026", "8", "100 %"],
+  ["12.10.2026", "8", "100 %"],
+]);
+click('[data-action="close-detail"]');
+assert.equal(doc.activeElement.id, "ad-total-1");
+click('[data-cell="total,4"]');
+assert.deepEqual(dates(), [["07.10.2026", "Keine Angaben", "0 %"]]);
+click('[data-tab="cross"]');
+assert.equal(doc.querySelector('[data-setting="shareBase"]'), null);
+const crossRow = (name) =>
+  [
+    ...get('[data-setting="crossBy"]')
+      .closest("section")
+      .querySelectorAll("tbody tr"),
+  ].find((row) => row.cells[0].textContent === name);
+assert.match(
+  crossRow("Online-Meeting / Telefonat").cells[1].textContent,
+  /36 h100 %/,
+);
+select('[data-setting="crossBy"]', "room");
+assert.match(crossRow("Büroarbeitsplatz").textContent, /36 h43 %/);
+click('[data-tab="custom"]');
+select('[data-setting="split"]', "form");
+select('[data-setting="second"]', "oe");
+const teamwork = [...doc.querySelectorAll(".ad-stack-row")].find((row) =>
+  row.textContent.startsWith("Zusammenarbeit vor Ort"),
+);
+assert.match(
+  teamwork.querySelector("small").textContent,
+  /96 h.*50 %.*8 berücksichtigte Personen/,
+);
+select('[data-setting="second"]', "");
+click('[data-tab="overview"]');
+select('[data-setting="location"]', "HOMEOFFICE");
+assert.doesNotMatch(
+  text(),
+  /An diesen Plätzen wird gearbeitet|Geschätzte Zahl gleichzeitig laufender Besprechungen am Standort/,
+);
+select('[data-setting="location"]', "UEBLICHER_ARBEITSPLATZ");
+
 click('[data-toggle="filters"]');
 check('[data-filter="oe"][value="HR"]');
 select('[data-setting="location"]', "HOMEOFFICE");
@@ -111,6 +160,12 @@ check('[data-filter="oe"][value="HR"]', false);
 check('[data-filter="oe"][value="IT"]');
 assert.equal(w.current.comparison.filters.oe.join(","), "HR");
 assert.match(text(), /Festgehaltene Auswahl/);
+click('[data-action="show-comparison"]');
+assert.equal(doc.activeElement.id, "ad-comparison");
+const comparisonHead = get("#ad-comparison thead").textContent;
+assert.match(comparisonHead, /Organisationseinheit: IT/);
+assert.match(comparisonHead, /Organisationseinheit: HR/);
+assert.match(comparisonHead, /Differenz in Prozentpunkten/);
 select('[data-setting="shareBase"]', "selection");
 click('[data-tab="custom"]');
 select('[data-setting="split"]', "oe");
@@ -125,7 +180,7 @@ get("[data-view-name]").value = "IT im Vergleich";
 click('[data-action="save"]');
 select("[data-preset]", "0");
 assert.equal(w.current.tab, "cross");
-assert.match(text(), /Welche Tätigkeiten finden an welchen Plätzen statt/);
+assert.equal(get('[data-setting="crossBy"]').value, "room");
 select("[data-view]", "0");
 assert.equal(w.current.split, "oe");
 assert.equal(w.current.filters.oe.join(","), "IT");
@@ -159,7 +214,10 @@ assert.equal(
   offline.window.document.querySelector('[data-setting="mode"]'),
   null,
 );
-assert.match(offline.window.document.body.textContent, /Festgehaltene Auswahl/);
+assert.match(
+  offline.window.document.getElementById("dashboard").textContent,
+  /Festgehaltene Auswahl/,
+);
 const offlineLocation = offline.window.document.querySelector(
   '[data-setting="location"]',
 );
@@ -185,22 +243,46 @@ assert.equal(w.current.filters.oe.length, 0);
 get('[data-setting="location"]').focus();
 select('[data-setting="location"]', "UEBLICHER_ARBEITSPLATZ");
 assert.equal(doc.activeElement.id, "ad-setting-location");
-const reader = new w.FileReader();
-reader.onload = () => {
-  assert.match(reader.result, /Personen im Mittel/);
-  assert.match(reader.result, /Mindestvollständigkeit/);
-  assert.match(reader.result, /Vergleichsauswahl/);
-  assert.deepEqual(errors, []);
-  console.log(
-    "DOM-Prüfungen bestanden: Checkboxfilter, Erhalt der Auswahl, Vergleich, Prozentbasis, Aufteilungen, Details, gespeicherte Ansichten, Verlauf, CSV, Tastaturfokus und Offlinebericht.",
-  );
-  dom.window.close();
-  offline.window.close();
-};
-reader.onerror = () => {
-  throw reader.error;
-};
-reader.readAsText(downloaded);
+const trendCsv = downloaded;
+select('[data-setting="mode"]', "all");
+click('[data-tab="cross"]');
+select('[data-setting="crossBy"]', "room");
+click('[data-action="csv"]');
+const placeCsv = downloaded;
+
+function readCsv(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new w.FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
+}
+Promise.all([readCsv(trendCsv), readCsv(placeCsv)])
+  .then(([trend, places]) => {
+    assert.match(trend, /Personen im Mittel/);
+    assert.match(trend, /Mindestvollständigkeit/);
+    assert.match(trend, /Vergleichsauswahl/);
+    assert.match(trend, /Differenz in Prozentpunkten/);
+    assert.match(trend, /Gemeinsam ausgewertete Halbtage/);
+    assert.match(places, /Anteil innerhalb Platz %/);
+    assert.match(
+      places,
+      /"Büroarbeitsplatz";"Online-Meeting \/ Telefonat";"36";"43"/,
+    );
+    assert.deepEqual(errors, []);
+    console.log(
+      "DOM-Prüfungen bestanden: Fragestellungen, Wochenprofil, Einzelhalbtage, Filter, Vergleiche, Gruppenangaben, beide Leserichtungen, gespeicherte Ansichten, CSV, Tastaturfokus und Offlinebericht.",
+    );
+  })
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    dom.window.close();
+    offline.window.close();
+  });
 
 // Long option lists: search, selection of all visible values, and safe rendering.
 const manyData = structuredClone(data);
@@ -232,3 +314,29 @@ assert.ok(
   ),
 );
 many.window.close();
+
+// The same number of observations on different calendar dates is not a common basis.
+const differentDates = structuredClone(data);
+differentDates.eintraege = differentDates.eintraege.filter(
+  (e) =>
+    (e.t < 4 && e.d === "2026-10-05") || (e.t >= 4 && e.d === "2026-10-12"),
+);
+const paired = new JSDOM("<main></main>", {
+  runScripts: "outside-only",
+  url: "http://paired.test",
+});
+paired.window.eval(source + ";window.mount = mountDashboard;");
+paired.window.mount(
+  paired.window.document.querySelector("main"),
+  differentDates,
+  {
+    tab: "week",
+    filters: { oe: ["IT"] },
+    comparison: { location: "UEBLICHER_ARBEITSPLATZ", filters: { oe: ["HR"] } },
+  },
+);
+const result = paired.window.document.querySelector("#ad-comparison");
+assert.match(result.textContent, /unterschiedlichen Halbtagen/);
+assert.match(result.textContent, /Gemeinsam ausgewertete Halbtage: 0/);
+assert.equal(result.querySelectorAll("tbody tr").length, 3);
+paired.window.close();

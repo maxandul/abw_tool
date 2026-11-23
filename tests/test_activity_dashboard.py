@@ -297,3 +297,31 @@ def test_total_peak_is_computed_from_actual_halfdays_not_sum_of_row_peaks():
     assert sum(row['peak']['n'] for row in r['activities'])==2
     assert r['totals']['peak']['n']==1
     assert r['totals']['average']==1
+
+
+def test_drilldown_respects_subgroup_dates_unknowns_and_minimum_coverage():
+    people = [
+        dict(i=0, u=0, g=1, start="2026-10-05", end="2026-10-12", eingereicht=True, oe="HR"),
+        dict(i=1, u=1, g=1, start="2026-10-12", end="2026-10-12", eingereicht=True, oe="IT"),
+    ]
+    entries = [entry(0), {**entry(1), "d": "2026-10-12", "bis": 720}]
+    result = calc(entries, people, {"split": "oe", "minCoverage": "85"})
+    rows = {row["name"]: row for row in result["rows"]}
+    hr = [o for o in rows["HR"]["timeline"] if o["wd"] == 0 and o["h"] == 0]
+    assert [(o["n"], o["coverage"]) for o in hr] == [(1, 100), (None, 0)]
+    it = rows["IT"]
+    assert it["cells"][0]["expectedDays"] == 1
+    assert [(o["n"], o["coverage"]) for o in it["timeline"]] == [(None, 100), (None, 0)]
+
+
+def test_stack_basis_for_two_profile_dimensions_includes_nonreporters():
+    people = [
+        dict(i=i, u=i, g=1, start="2026-10-05", end="2026-10-05",
+             eingereicht=True, oe="IT" if i < 3 else "HR", funktion=str(i))
+        for i in range(4)
+    ]
+    result = calc([entry(0), entry(3)], people, {"split": "oe", "second": "funktion"})
+    groups = {row["name"]: row for row in result["groupBases"]}
+    assert groups["IT"]["people"] == 3
+    assert groups["IT"]["coverage"] == pytest.approx(100 / 3)
+    assert groups["HR"]["coverage"] == 100
