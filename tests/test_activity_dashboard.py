@@ -85,7 +85,7 @@ def test_legacy_and_non_applicable_fields_are_not_invented():
     r=calc(es,state={'split':'hybrid','location':''})
     assert r['legacyEntries']==1 and r['excludedPeople']==1
     assert r['rows'][0]['name']=='Nicht anwendbar'
-    assert r['options']['hybrid']==[]
+    assert r['options']['hybrid']==['na']  # explicitly distinguish non-applicable values
 
 
 def test_invalid_windows_are_rejected():
@@ -204,3 +204,96 @@ def test_submitted_offline_dataset_strips_drafts_without_mutating_live_data():
     r=json.loads(subprocess.check_output(['node','--input-type=module','-e',script,str(JS)],text=True))
     assert r['original']==payload and len(r['report']['teilnehmer'])==1
     assert len(r['report']['eintraege'])==1 and r['report']['includes_drafts'] is False
+
+
+def test_profile_breakdowns_and_pensum_ranges_preserve_person_minutes():
+    ps=people(3)
+    for p,oe,grad in zip(ps,['HR','HR','IT'],[60,80,100]):
+        p.update(oe=oe,grad=grad)
+    es=[entry(i) for i in range(3)]
+    r=calc(es,ps,{'split':'oe','second':'gradBand'})
+    assert {row['name']: row['average'] for row in r['rows']} == {
+        'HR · Bis 60 %':1, 'HR · Über 60 bis 80 %':1, 'IT · Über 80 %':1}
+    assert sum(row['share'] for row in r['rows'])==pytest.approx(100)
+    r=calc(es,ps,{'filters':{'gradBand':['Über 60 bis 80 %']},'split':'grad'})
+    assert r['people']==1 and r['rows'][0]['name']=='80 %'
+    assert r['rows'][0]['average']==1  # no additional FTE weighting
+
+
+def test_share_base_selection_changes_only_percentages():
+    es=[entry(0),{**entry(1),'form':'ONLINE'}]
+    base={'filters':{'form':['ONLINE']}}
+    a=calc(es,state=base)
+    b=calc(es,state={**base,'shareBase':'selection'})
+    assert a['activities'][0]['share']==50
+    assert b['activities'][0]['share']==100
+    assert a['activities'][0]['average']==b['activities'][0]['average']==1
+    assert a['coverage']==b['coverage']==100
+    assert a['selectedMinutes']==b['selectedMinutes']==480
+
+
+def test_minimum_completeness_excludes_observations_but_preserves_quality():
+    es=[entry(0),{**entry(1),'bis':720}]
+    a=calc(es)
+    b=calc(es,state={'minCoverage':'85'})
+    assert a['valid']==2 and b['valid']==1
+    assert b['qualityExcluded']==1 and b['expected']==2
+    assert a['coverage']==b['coverage']==75
+    assert b['activities'][0]['morning']==2
+    assert b['activities'][0]['afternoon'] is None
+    assert b['timeline'][1]['n'] is None
+    assert b['weeks'][0]['days']==1
+    assert b['weeks'][0]['n']==2
+
+
+def test_incompatible_filter_keeps_selected_value_and_shows_zero_matches():
+    es=[entry(0),{**entry(1),'ao':'HOMEOFFICE','onsite':False,'room':None}]
+    r=calc(es,state={'location':'HOMEOFFICE','filters':{'room':['ARBEITSPLATZ']}})
+    assert r['selectedMinutes']==0 and r['people']==2
+    assert 'ARBEITSPLATZ' in r['options']['room']
+    assert r['optionCounts']['room']['ARBEITSPLATZ']==0
+    assert r['optionCounts']['room']['na']==1
+
+
+def test_cross_table_and_timeline_preserve_documented_zeros():
+    es=[{**entry(0),'bis':720}, {**entry(0),'von':780,'form':'ABWESENHEIT','absence':'TEILZEIT','ao':None}]
+    r=calc(es)
+    assert len(r['cross'])==1 and r['cross'][0]['minutes']==240
+    assert [o['n'] for o in r['timeline']]==[1,0]
+    assert r['weeks'][0]['n']==.5
+    assert r['matchedPeople']==1
+
+
+def test_all_profile_options_count_other_profile_filters():
+    ps=people(2)
+    ps[0].update(oe='HR',funktion='Leitung')
+    ps[1].update(oe='IT',funktion='Fach')
+    r=calc([entry(0),entry(1)],ps,{'filters':{'oe':['HR']}})
+    assert r['optionCounts']['funktion']=={'Fach':0,'Leitung':1}
+    assert r['optionCounts']['oe']=={'HR':1,'IT':1}
+
+
+def test_missing_time_in_one_oe_is_not_zero_because_another_oe_documented_it():
+    ps=people(2)
+    ps[0]['oe']='HR'
+    ps[1]['oe']='IT'
+    r=calc([{**entry(0),'bis':720},entry(1)],ps,{'split':'oe'})
+    rows={row['name']:row for row in r['rows']}
+    assert rows['HR']['average']==1
+    assert rows['HR']['afternoon'] is None
+    assert rows['HR']['coverage']==50
+    assert rows['HR']['cells'][1]['mean'] is None
+    assert rows['IT']['coverage']==100
+    # A fully missing OE remains visible with unknown occupancy, not zero.
+    r=calc([entry(1)],ps,{'split':'oe'})
+    rows={row['name']:row for row in r['rows']}
+    assert rows['HR']['average'] is None and rows['HR']['coverage']==0
+
+
+def test_total_peak_is_computed_from_actual_halfdays_not_sum_of_row_peaks():
+    ps=[{**people(1)[0],'end':'2026-10-06'}]
+    es=[entry(0),{**entry(0),'d':'2026-10-06','form':'ONLINE'}]
+    r=calc(es,ps)
+    assert sum(row['peak']['n'] for row in r['activities'])==2
+    assert r['totals']['peak']['n']==1
+    assert r['totals']['average']==1
