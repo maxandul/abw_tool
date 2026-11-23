@@ -572,3 +572,47 @@
 .ad-scroll .ad-coverage-row th:first-child {
   background: #f1f5f9;
 }
+
+.ad-question-tools,
+.ad-peak {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+.ad-question-tools {
+  margin: 14px 0;
+}
+.ad-question-tools label,
+.ad-question-tools details {
+  max-width: 100%;
+}
+.ad-question-tools details[open] {
+  flex-basis: 100%;
+}
+.ad-shell .ad-peak {
+  justify-content: space-between;
+  align-items: center;
+  border-left: 4px solid var(--ad-blue);
+}
+.ad-peak h3 {
+  margin-bottom: 4px;
+}
+.ad-peak small {
+  color: var(--ad-muted);
+}
+.ad-detail:focus,
+#ad-comparison:focus {
+  outline: 2px solid var(--ad-blue);
+  outline-offset: 2px;
+}
+.ad-detail,
+#ad-comparison {
+  scroll-margin-top: 72px;
+}
+@media print {
+  .ad-question-tools,
+  .ad-peak button {
+    display: none;
+  }
+}
