@@ -151,7 +151,7 @@ export default function AuswertungPage() {
           {!id && (
             <p className="card">
               Wähle die Erhebung des untersuchten Standorts. Das Dashboard zeigt
-              die Verteilung der Arbeitszeit und Personen im Mittel je Halbtag.
+              die Verteilung der Arbeitszeit und wie viele Personen je Halbtag eine Tätigkeit eingetragen haben.
               Du kannst Personengruppen, Tätigkeiten und Arbeitsorte
               vergleichen.
             </p>

@@ -128,6 +128,10 @@ select("[data-view]", "0");
 click('[data-action="delete-view"]');
 click("#ad-reset");
 
+assert.deepEqual(
+  [...doc.querySelectorAll("[data-tab]")].map((el) => el.textContent),
+  ["Überblick", "Wochenprofil", "Tätigkeiten und Plätze"],
+);
 // Walk from the overview peak to all observations for that weekday.
 assert.ok(!get("[data-preset]").closest("details"));
 click('[data-action="peak-days"]');
@@ -137,13 +141,17 @@ const dates = () =>
     [...row.cells].map((cell) => cell.textContent),
   );
 assert.deepEqual(dates(), [
-  ["05.10.2026", "8", "100 %"],
-  ["12.10.2026", "8", "100 %"],
+  ["05.10.2026", "8", "32 h", "100 %", "100 %"],
+  ["12.10.2026", "8", "32 h", "100 %", "100 %"],
 ]);
+select('[data-setting="shareBase"]', "selection");
+assert.equal(dates()[0][2], "32 h");
+assert.equal(get(".ad-detail select").value, "selection");
+select('[data-setting="shareBase"]', "scope");
 click('[data-action="close-detail"]');
 assert.equal(doc.activeElement.id, "ad-total-1");
 click('[data-cell="total,4"]');
-assert.deepEqual(dates(), [["07.10.2026", "Keine Angaben", "0 %"]]);
+assert.deepEqual(dates(), [["07.10.2026", "Keine Angaben", "–", "–", "0 %"]]);
 click('[data-tab="cross"]');
 assert.equal(doc.querySelector('[data-setting="shareBase"]'), null);
 const crossRow = (name) =>
@@ -158,7 +166,7 @@ assert.match(
 );
 select('[data-setting="crossBy"]', "room");
 assert.match(crossRow("Büroarbeitsplatz").textContent, /36 h43 %/);
-click('[data-tab="custom"]');
+click('[data-tab="week"]');
 select('[data-setting="split"]', "form");
 select('[data-setting="second"]', "oe");
 const teamwork = [...doc.querySelectorAll(".ad-stack-row")].find((row) =>
@@ -195,14 +203,14 @@ assert.match(comparisonHead, /Organisationseinheit: IT/);
 assert.match(comparisonHead, /Organisationseinheit: HR/);
 assert.match(comparisonHead, /Differenz in Prozentpunkten/);
 select('[data-setting="shareBase"]', "selection");
-click('[data-tab="custom"]');
+click('[data-tab="week"]');
 select('[data-setting="split"]', "oe");
 select('[data-setting="second"]', "form");
 assert.match(text(), /Verteilung innerhalb der Gruppen/);
 click("[data-cell]");
 assert.match(
   get(".ad-detail").textContent,
-  /unterschiedliche beteiligte Personen/,
+  /Arbeitszeit.*Zeitanteil.*Vollständigkeit/,
 );
 get("[data-view-name]").value = "IT im Vergleich";
 click('[data-action="save"]');
@@ -212,7 +220,10 @@ assert.equal(get('[data-setting="crossBy"]').value, "room");
 select("[data-view]", "0");
 assert.equal(w.current.split, "oe");
 assert.equal(w.current.filters.oe.join(","), "IT");
-click('[data-tab="trend"]');
+assert.equal(get("#ad-trend").hidden, true);
+click("#ad-toggle-trend");
+assert.equal(get("#ad-toggle-trend").getAttribute("aria-expanded"), "true");
+assert.equal(doc.activeElement.id, "ad-toggle-trend");
 assert.equal(doc.querySelectorAll(".ad-observation").length, 12);
 // Capture the real CSV Blob; no network or browser download is needed.
 let downloaded;
@@ -224,6 +235,11 @@ w.URL.revokeObjectURL = () => {};
 w.HTMLAnchorElement.prototype.click = () => {};
 click('[data-action="csv"]');
 assert.ok(downloaded);
+const trendCsv = downloaded;
+click("#ad-toggle-trend");
+click('[data-action="csv"]');
+const closedCsv = downloaded;
+click("#ad-toggle-trend");
 select('[data-setting="minCoverage"]', "85");
 assert.equal(w.current.minCoverage, "85");
 click('[data-tab="week"]');
@@ -254,6 +270,7 @@ offlineLocation.dispatchEvent(
   new offline.window.Event("change", { bubbles: true }),
 );
 assert.equal(offline.window.current.filters.oe.join(","), "IT");
+assert.equal(offline.window.document.querySelector("#ad-trend").hidden, false);
 offline.window.document.querySelector("#ad-reset").click();
 assert.equal(offline.window.current.mode, "submitted");
 assert.equal(
@@ -277,7 +294,6 @@ assert.equal(w.current.filters.oe.length, 0);
 get('[data-setting="location"]').focus();
 select('[data-setting="location"]', "UEBLICHER_ARBEITSPLATZ");
 assert.equal(doc.activeElement.id, "ad-setting-location");
-const trendCsv = downloaded;
 select('[data-setting="mode"]', "all");
 click('[data-tab="cross"]');
 select('[data-setting="crossBy"]', "room");
@@ -292,10 +308,15 @@ function readCsv(blob) {
     reader.readAsText(blob);
   });
 }
-Promise.all([readCsv(trendCsv), readCsv(placeCsv)])
-  .then(([trend, places]) => {
+Promise.all([readCsv(trendCsv), readCsv(placeCsv), readCsv(closedCsv)])
+  .then(([trend, places, closed]) => {
     assert.match(trend, /Woche ab/);
-    assert.match(trend, /Personen im Mittel/);
+    assert.match(trend, /Wochenwerte/);
+    assert.match(trend, /Arbeitszeit im Erhebungszeitraum/);
+    assert.match(trend, /Verteilung innerhalb der Gruppen/);
+    assert.match(closed, /Wochenwerte/);
+    assert.doesNotMatch(closed, /Woche ab/);
+    assert.match(trend, /Ø Personen je Halbtag/);
     assert.match(trend, /Mindestvollständigkeit/);
     assert.match(trend, /Vergleichsauswahl/);
     assert.match(trend, /Differenz in Prozentpunkten/);
@@ -375,3 +396,37 @@ assert.match(result.textContent, /unterschiedlichen Halbtagen/);
 assert.match(result.textContent, /Gemeinsam ausgewertete Halbtage: 0/);
 assert.equal(result.querySelectorAll("tbody tr").length, 3);
 paired.window.close();
+
+// A saved pre-migration view and an older initial dashboard state both use the unified profile.
+const legacy = new JSDOM("<main></main>", {
+  runScripts: "outside-only",
+  url: "http://saved.test",
+});
+legacy.window.eval(source + ";window.mount = mountDashboard;");
+legacy.window.localStorage.setItem(
+  "abw-dashboard-views-v2:" + data.gruppen_namen.join("|"),
+  JSON.stringify([
+    { name: "Verlauf", state: { tab: "trend", filters: { oe: ["HR"] } } },
+  ]),
+);
+const legacyRoot = legacy.window.document.querySelector("main");
+legacy.window.mount(legacyRoot, data, {
+  tab: "custom",
+  split: "oe",
+  second: "form",
+});
+assert.equal(
+  legacyRoot.querySelector('[data-tab="week"]').getAttribute("aria-pressed"),
+  "true",
+);
+assert.equal(legacyRoot.querySelector('[data-setting="second"]').value, "form");
+assert.ok(legacyRoot.querySelector("#ad-trend").hidden);
+const saved = legacyRoot.querySelector("[data-view]");
+saved.value = "0";
+saved.dispatchEvent(new legacy.window.Event("change", { bubbles: true }));
+assert.ok(!legacyRoot.querySelector("#ad-trend").hidden);
+assert.ok(legacyRoot.querySelector('[data-filter="oe"][value="HR"]').checked);
+legacyRoot.querySelector("#ad-reset").click();
+legacyRoot.querySelector('[data-tab="week"]').click();
+assert.ok(legacyRoot.querySelector("#ad-trend").hidden);
+legacy.window.close();
