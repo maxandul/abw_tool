@@ -110,8 +110,7 @@
 .ad-disclosure-body[hidden] {
   display: none;
 }
-.ad-filter-grid,
-.ad-window-grid {
+.ad-filter-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 16px;

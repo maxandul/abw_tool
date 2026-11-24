@@ -25,22 +25,22 @@ def entry(i, **changes):
                 ao='UEBLICHER_ARBEITSPLATZ',onsite=True,room='ARBEITSPLATZ',gg='ALLEIN',tk=None,hybrid=None,**changes)
 
 
-def test_time_weighted_people_shares_and_missing_tuesday():
+def test_distinct_people_and_minute_shares_and_missing_tuesday():
     es=[{**entry(0),'bis':600}, {**entry(0),'von':600,'form':'ONLINE'},entry(1)]
     result=calc(es)
     assert result['valid']==2
     rows={r['name']:r for r in result['activities']}
-    assert rows['Allein arbeiten']['morning']==1.5
-    assert rows['Online-Meeting / Telefonat']['morning']==.5
-    assert rows['Online-Meeting / Telefonat']['share']==37.5
+    assert rows['Allein arbeiten']['morning']==2
+    assert rows['Online-Meeting / Telefonat']['morning']==1
+    assert rows['Online-Meeting / Telefonat']['share']==pytest.approx(100*420/1080)
     assert rows['Allein arbeiten']['cells'][2]['mean'] is None
-    assert rows['Allein arbeiten']['cells'][0]['heads']==2
+    assert result['totals']['cells'][0]['mean']==2
 
 
 def test_documented_absence_is_zero_missing_halfday_is_not():
     result=calc([entry(0),{**entry(1),'form':'ABWESENHEIT','ao':None,'onsite':False,'absence':'TEILZEIT'}])
     assert result['valid']==2 and result['activities'][0]['average']==1
-    assert result['absences'][0]['minutes']==480
+    assert result['absences'][0]['minutes']==540
     result=calc([entry(0),{**entry(1),'bis':720}])
     assert result['valid']==2 and result['excluded']==0
     assert result['activities'][0]['afternoon']==1
@@ -88,9 +88,13 @@ def test_legacy_and_non_applicable_fields_are_not_invented():
     assert r['options']['hybrid']==['na']  # explicitly distinguish non-applicable values
 
 
-def test_invalid_windows_are_rejected():
-    with pytest.raises(subprocess.CalledProcessError):
-        calc([entry(0)],state={'windows':[[720,480],[780,1020]]})
+def test_saved_custom_hours_do_not_cut_off_entries_under_the_fixed_split():
+    e = {**entry(0), 'von': 735, 'bis': 765}
+    result = calc([e], state={'windows': [[480, 720], [780, 1020]]})
+    assert result['valid'] == 2 and result['coverage'] == 0
+    assert result['selectedMinutes'] == 30
+    assert [(o['n'], o['minutes']) for o in result['timeline']] == [(1, 15), (1, 15)]
+    assert calc([e], state={'minCoverage': '85'})['valid'] == 0
 
 
 def test_dashboard_endpoint_is_admin_only_and_exports_current_fields(app):
@@ -181,11 +185,14 @@ def test_future_and_ongoing_are_not_missing_and_snapshot_is_frozen():
     assert r['unknownMinutes']==0 and r['future']==3 and r['ongoing']==1
     live=calc(es,ps,{'includeOngoing':True},extra=clock)
     assert live['expected']==1 and live['valid']==1 and live['coverage']==75
-    assert live['selectedMinutes']==180 and live['activities'][0]['average']==.75
+    assert live['selectedMinutes']==180 and live['activities'][0]['average']==1
     # Only the saved snapshot clock, never the later date of opening a report.
     assert calc(es,ps,extra=clock)==r
     noon=calc(es,ps,extra={'snapshot_date':'2026-10-05','snapshot_minute':720})
-    assert noon['coverage']==100 and noon['valid']==1 and noon['ongoing']==0
+    assert noon['valid']==0 and noon['ongoing']==1
+    boundary=calc(es,ps,extra={'snapshot_date':'2026-10-05','snapshot_minute':750})
+    assert boundary['valid']==1 and boundary['ongoing']==1
+    assert boundary['selectedMinutes']==270 and boundary['coverage']==100
 
 
 def test_peak_exposes_coverage_of_its_actual_day_not_the_average():
@@ -193,7 +200,7 @@ def test_peak_exposes_coverage_of_its_actual_day_not_the_average():
     es=[entry(0),{**entry(0),'d':'2026-10-12'}, {**entry(1),'d':'2026-10-12','bis':600}]
     r=calc(es,ps)
     cell=r['activities'][0]['cells'][0]
-    assert cell['max']==1.5 and cell['date']=='2026-10-12'
+    assert cell['max']==2 and cell['date']=='2026-10-12'
     assert cell['peakCoverage']==75 and cell['coverage'] < cell['peakCoverage']
 
 
@@ -229,7 +236,7 @@ def test_share_base_selection_changes_only_percentages():
     assert b['activities'][0]['share']==100
     assert a['activities'][0]['average']==b['activities'][0]['average']==1
     assert a['coverage']==b['coverage']==100
-    assert a['selectedMinutes']==b['selectedMinutes']==480
+    assert a['selectedMinutes']==b['selectedMinutes']==540
 
 
 def test_minimum_completeness_excludes_observations_but_preserves_quality():
@@ -336,3 +343,28 @@ def test_activity_filter_catalog_survives_person_filters_and_empty_intersections
         filtered = calc(entries, people, {"filters": {"oe": [oe]}})
         assert filtered["options"] == baseline["options"]
         assert filtered["optionCounts"]["room"]["RUECKZUG"] == count
+
+
+def test_person_count_repeats_boundaries_zeros_and_time_base():
+    ps = people(2)
+    for p in ps:
+        p['end'] = '2026-10-19'
+    phone = {**entry(0), 'form': 'ONLINE'}
+    entries = [
+        {**phone, 'von': 420, 'bis': 435},
+        {**phone, 'von': 735, 'bis': 750},
+        {**phone, 't': 1, 'u': 1, 'von': 750, 'bis': 765},
+        {**phone, 'von': 1125, 'bis': 1140},
+        {**entry(1), 'von': 600, 'bis': 630},
+        {**entry(0), 'd': '2026-10-12', 'von': 480, 'bis': 720},
+    ]
+    filters = {'form': ['ONLINE']}
+    result = calc(entries, ps, {'filters': filters})
+    mondays = [o for o in result['rows'][0]['timeline'] if o['wd'] == 0 and o['h'] == 0]
+    assert [(o['n'], o['minutes'], o['baseMinutes']) for o in mondays] == [
+        (1, 30, 60), (0, 0, 240), (None, None, None)]
+    assert result['rows'][0]['cells'][0]['mean'] == .5
+    assert result['rows'][0]['cells'][1]['max'] == 2
+    selection = calc(entries, ps, {'filters': filters, 'shareBase': 'selection'})
+    assert selection['rows'][0]['timeline'][0]['baseMinutes'] == 30
+    assert selection['totals'] == result['totals']

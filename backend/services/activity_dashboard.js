@@ -53,15 +53,12 @@ const gradBand = (n) =>
 const allFields = { ...FIELDS, ...PROFILES };
 export const DEFAULTS = {
   tab: "overview",
+  showTrend: false,
   location: "UEBLICHER_ARBEITSPLATZ",
   filters: {},
   split: "form",
   second: "",
   metric: "mean",
-  windows: [
-    [480, 720],
-    [780, 1020],
-  ],
   threshold: 85,
   mode: "submitted",
   includeOngoing: false,
@@ -73,9 +70,12 @@ export const DEFAULTS = {
 const TABS = [
   ["overview", "Überblick"],
   ["week", "Wochenprofil"],
-  ["custom", "Details erkunden"],
   ["cross", "Tätigkeiten und Plätze"],
-  ["trend", "Wochen und einzelne Halbtage"],
+];
+const HALF_DAY_BOUNDARY = 12 * 60 + 30;
+const REFERENCE_HOURS = [
+  [480, 720],
+  [780, 1020],
 ];
 const DAYS = ["Mo", "Di", "Mi", "Do", "Fr"];
 const SIZE = {
@@ -94,8 +94,6 @@ const esc = (s) =>
   );
 const round = (n) => Math.round(n).toLocaleString("de-CH");
 const percent = (n) => (n == null ? "–" : round(n) + " %");
-const clock = (n) =>
-  `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
 const overlap = (e, a, b) =>
   Math.max(0, Math.min(e.bis, b) - Math.max(e.von, a));
 const work = (e) => e.form !== "ABWESENHEIT";
@@ -135,6 +133,14 @@ const keyLabel = (key, split, second) => {
     displayValue(split, a) + (second ? " · " + displayValue(second, b) : "")
   );
 };
+function entriesByDate(entries) {
+  const days = new Map();
+  for (const e of entries) {
+    if (!days.has(e.d)) days.set(e.d, []);
+    days.get(e.d).push(e);
+  }
+  return days;
+}
 function unionMinutes(entries, a, b) {
   const spans = entries
     .map((e) => [Math.max(a, e.von), Math.min(b, e.bis)])
@@ -148,22 +154,6 @@ function unionMinutes(entries, a, b) {
   }
   return total;
 }
-export function validateWindows(windows) {
-  return (
-    Array.isArray(windows) &&
-    windows.length === 2 &&
-    windows.every(
-      (w) =>
-        Array.isArray(w) &&
-        w.length === 2 &&
-        w.every(Number.isFinite) &&
-        w[0] >= 420 &&
-        w[1] <= 1140 &&
-        w[1] - w[0] >= 60,
-    ) &&
-    windows[0][1] <= windows[1][0]
-  );
-}
 export function calculateDashboard(data, settings = {}) {
   const state = {
     ...DEFAULTS,
@@ -171,10 +161,6 @@ export function calculateDashboard(data, settings = {}) {
     ...settings,
     filters: settings.filters || {},
   };
-  if (!validateWindows(state.windows))
-    throw Error(
-      "Bitte zwei gültige, nicht überlappende Halbtagfenster zwischen 07:00 und 19:00 wählen (mindestens eine Stunde).",
-    );
   const mode =
     state.mode === "all" && data.includes_drafts !== false
       ? "all"
@@ -220,11 +206,7 @@ export function calculateDashboard(data, settings = {}) {
       };
     });
   const byPersonDay = new Map(),
-    currentByDay = new Map();
-  for (const e of current) {
-    if (!currentByDay.has(e.d)) currentByDay.set(e.d, []);
-    currentByDay.get(e.d).push(e);
-  }
+    currentByDay = entriesByDate(current);
   for (const e of all) {
     const key = `${e.t}|${e.d}`;
     if (!byPersonDay.has(key)) byPersonDay.set(key, []);
@@ -256,11 +238,36 @@ export function calculateDashboard(data, settings = {}) {
     fallback[1]
       .split(":")
       .reduce((s, v, i) => s + Number(v) * (i === 0 ? 60 : 1), 0);
+  const dayBounds = [
+    data.tag_start_minuten ?? 420,
+    HALF_DAY_BOUNDARY,
+    data.tag_end_minuten ?? 1140,
+  ];
+  // Completeness and meeting intensity retain their four-hour reference periods.
+  // Any entry in the full half-day can establish an observation, including an absence.
+  const evidenceFor = (ps, date, start, end, refStart, refEnd) => {
+    let documented = 0;
+    let observed = false;
+    for (const p of ps) {
+      const entries = byPersonDay.get(`${p.i}|${date}`) || [];
+      if (!observed) observed = entries.some((e) => overlap(e, start, end) > 0);
+      documented += unionMinutes(entries, refStart, Math.min(end, refEnd));
+    }
+    const expectedMinutes = ps.length * (refEnd - refStart);
+    return {
+      observed,
+      documented,
+      expectedMinutes,
+      coverage: expectedMinutes ? (100 * documented) / expectedMinutes : null,
+    };
+  };
   const observations = [];
   for (const d of [...dates].sort()) {
     const expected = people.filter((p) => p.start <= d && p.end >= d);
     for (let h = 0; h < 2; h++) {
-      const [a, b] = state.windows[h];
+      const a = dayBounds[h],
+        b = dayBounds[h + 1];
+      const [refStart, refEnd] = REFERENCE_HOURS[h];
       const phase =
         d > snapshotDate || (d === snapshotDate && snapshotMinute < a)
           ? "future"
@@ -268,11 +275,13 @@ export function calculateDashboard(data, settings = {}) {
             ? "ongoing"
             : "completed";
       const captureEnd = phase === "ongoing" ? Math.min(b, snapshotMinute) : b;
-      const expectedMinutes = expected.length * (b - a);
-      const documented = expected.reduce(
-        (s, p) =>
-          s + unionMinutes(byPersonDay.get(`${p.i}|${d}`) || [], a, captureEnd),
-        0,
+      const evidence = evidenceFor(
+        expected,
+        d,
+        a,
+        captureEnd,
+        refStart,
+        refEnd,
       );
       const included =
         phase === "completed" || (phase === "ongoing" && state.includeOngoing);
@@ -285,11 +294,11 @@ export function calculateDashboard(data, settings = {}) {
         phase,
         captureEnd,
         included,
-        expectedMinutes,
-        documented,
-        unknown: Math.max(0, expectedMinutes - documented),
-        coverage: expectedMinutes ? (100 * documented) / expectedMinutes : null,
-        valid: included && documented > 0,
+        refStart,
+        refEnd,
+        ...evidence,
+        unknown: Math.max(0, evidence.expectedMinutes - evidence.documented),
+        valid: included && evidence.observed,
       });
     }
   }
@@ -331,6 +340,27 @@ export function calculateDashboard(data, settings = {}) {
   );
   const denominator = minuteTotal(
     state.shareBase === "selection" ? selected : scope,
+  );
+  const slotValues = (entries, o) => {
+    const people = new Set();
+    let minutes = 0;
+    for (const e of entries) {
+      const duration = overlap(e, o.a, o.captureEnd);
+      if (duration > 0) {
+        people.add(e.u);
+        minutes += duration;
+      }
+    }
+    return { n: people.size, minutes };
+  };
+  const selectedByDate = entriesByDate(selected);
+  const baseByDate =
+    state.shareBase === "selection" ? selectedByDate : entriesByDate(scope);
+  const dateBases = new Map(
+    valid.map((o) => [
+      o.d + "|" + o.h,
+      slotValues(baseByDate.get(o.d) || [], o).minutes,
+    ]),
   );
   const coverageCells = Array.from({ length: 10 }, (_, i) => {
     const column = observations.filter(
@@ -381,51 +411,30 @@ export function calculateDashboard(data, settings = {}) {
               const ps = rowPeople.filter(
                 (p) => p.start <= o.d && p.end >= o.d,
               );
-              const documented = ps.reduce(
-                (s, p) =>
-                  s +
-                  unionMinutes(
-                    byPersonDay.get(`${p.i}|${o.d}`) || [],
-                    o.a,
-                    o.captureEnd,
-                  ),
-                0,
-              );
-              const expectedMinutes = ps.length * (o.b - o.a);
               return {
                 ...o,
-                documented,
-                expectedMinutes,
-                coverage: expectedMinutes
-                  ? (100 * documented) / expectedMinutes
-                  : null,
+                ...evidenceFor(
+                  ps,
+                  o.d,
+                  o.a,
+                  o.captureEnd,
+                  o.refStart,
+                  o.refEnd,
+                ),
               };
             })
             .filter((o) => o.expectedMinutes > 0)
         : considered;
       const rowValid = profileFields.length
         ? rowObservations.filter(
-            (o) => o.documented > 0 && validSlots.has(o.d + "|" + o.h),
+            (o) => o.observed && validSlots.has(o.d + "|" + o.h),
           )
         : valid;
       const es = selected.filter((e) => keyOf(e, split, second) === key),
-        byDay = new Map();
-      for (const e of es) {
-        if (!byDay.has(e.d)) byDay.set(e.d, []);
-        byDay.get(e.d).push(e);
-      }
+        byDay = entriesByDate(es);
       const valuesBySlot = new Map();
       const values = rowValid.map((o) => {
-        const here = (byDay.get(o.d) || []).filter(
-          (e) => overlap(e, o.a, o.captureEnd) > 0,
-        );
-        const observation = {
-          ...o,
-          n:
-            here.reduce((s, e) => s + overlap(e, o.a, o.captureEnd), 0) /
-            (o.b - o.a),
-          heads: new Set(here.map((e) => e.u)).size,
-        };
+        const observation = { ...o, ...slotValues(byDay.get(o.d) || [], o) };
         if (includeDates) valuesBySlot.set(o, observation);
         return observation;
       });
@@ -450,6 +459,9 @@ export function calculateDashboard(data, settings = {}) {
               wd: o.wd,
               coverage: o.coverage,
               n: valuesBySlot.get(o)?.n ?? null,
+              minutes: valuesBySlot.get(o)?.minutes ?? null,
+              baseMinutes: dateBases.get(o.d + "|" + o.h) ?? null,
+              observed: o.observed,
             }))
           : undefined,
         morning: mean(values.filter((o) => o.h === 0).map((o) => o.n)),
@@ -482,40 +494,42 @@ export function calculateDashboard(data, settings = {}) {
             max: top?.n ?? null,
             date: top?.d,
             peakCoverage: top?.coverage ?? null,
-            heads: mean(vs.map((o) => o.heads)),
           };
         }),
       };
     });
   };
   // Cluster the selected submission cohort before profile/activity filters.
-  const meetingValues = valid.map((o) => {
-    let integral = 0;
-    for (let t = o.a; t < o.captureEnd; t += 15) {
-      const end = Math.min(t + 15, o.captureEnd),
-        buckets = new Map();
-      for (const e of currentByDay.get(o.d) || []) {
-        if (e.form !== "MEETING" || !e.onsite || e.von >= end || e.bis <= t)
-          continue;
-        const key = JSON.stringify([e.g, e.gg, e.tk, e.room, e.hybrid]);
-        if (!buckets.has(key)) buckets.set(key, new Map());
-        buckets.get(key).set(e.u, e);
+  const meetingValues = valid
+    .filter((o) => o.documented > 0)
+    .map((o) => {
+      let integral = 0;
+      const until = Math.min(o.refEnd, o.captureEnd);
+      for (let t = o.refStart; t < until; t += 15) {
+        const end = Math.min(t + 15, until),
+          buckets = new Map();
+        for (const e of currentByDay.get(o.d) || []) {
+          if (e.form !== "MEETING" || !e.onsite || e.von >= end || e.bis <= t)
+            continue;
+          const key = JSON.stringify([e.g, e.gg, e.tk, e.room, e.hybrid]);
+          if (!buckets.has(key)) buckets.set(key, new Map());
+          buckets.get(key).set(e.u, e);
+        }
+        for (const bucket of buckets.values()) {
+          const reporters = [...bucket.values()],
+            e = reporters[0];
+          const chosen = reporters.filter(
+            (x) => ids.has(x.t) && matches(x, state),
+          );
+          const n =
+            e.tk === "STANDORTINTERN"
+              ? Math.max(1, Math.round(reporters.length / (SIZE[e.gg] || 1)))
+              : reporters.length;
+          integral += ((n * chosen.length) / reporters.length) * (end - t);
+        }
       }
-      for (const bucket of buckets.values()) {
-        const reporters = [...bucket.values()],
-          e = reporters[0];
-        const chosen = reporters.filter(
-          (x) => ids.has(x.t) && matches(x, state),
-        );
-        const n =
-          e.tk === "STANDORTINTERN"
-            ? Math.max(1, Math.round(reporters.length / (SIZE[e.gg] || 1)))
-            : reporters.length;
-        integral += ((n * chosen.length) / reporters.length) * (end - t);
-      }
-    }
-    return { ...o, n: integral / (o.b - o.a) };
-  });
+      return { ...o, n: integral / (o.refEnd - o.refStart) };
+    });
   const recordedWork = current.filter(work);
   const options = {},
     optionCounts = {};
@@ -552,22 +566,17 @@ export function calculateDashboard(data, settings = {}) {
       ]),
     );
   }
-  const totalFor = (os) =>
-    os.length
-      ? mean(
-          os.map(
-            (o) =>
-              selected
-                .filter((e) => e.d === o.d)
-                .reduce((s, e) => s + overlap(e, o.a, o.captureEnd), 0) /
-              (o.b - o.a),
-          ),
-        )
-      : null;
-  const timeline = considered.map((o) => ({
-    ...o,
-    n: valid.includes(o) ? totalFor([o]) : null,
-  }));
+  const timeline = considered.map((o) => {
+    const baseMinutes = dateBases.get(o.d + "|" + o.h);
+    return {
+      ...o,
+      ...(baseMinutes == null
+        ? { n: null, minutes: null }
+        : slotValues(selectedByDate.get(o.d) || [], o)),
+      baseMinutes: baseMinutes ?? null,
+    };
+  });
+  const measured = timeline.filter((o) => o.n != null);
   const weeks = [
     ...new Set(
       timeline.map((o) => {
@@ -579,12 +588,12 @@ export function calculateDashboard(data, settings = {}) {
   ].map((start) => {
     const end = new Date(start + "T00:00:00Z");
     end.setUTCDate(end.getUTCDate() + 6);
-    const os = valid.filter(
+    const os = measured.filter(
       (o) => o.d >= start && o.d <= end.toISOString().slice(0, 10),
     );
     return {
       start,
-      n: totalFor(os),
+      n: mean(os.map((o) => o.n)),
       days: os.length,
       coverage: coverageOf(
         considered.filter(
@@ -593,9 +602,8 @@ export function calculateDashboard(data, settings = {}) {
       ),
     };
   });
-  const datedEntries = all.filter((e) => considered.some((o) => o.d === e.d));
   const totals = {
-    average: totalFor(valid),
+    average: mean(measured.map((o) => o.n)),
     peak: timeline
       .filter((o) => o.n != null)
       .reduce((best, o) => (!best || o.n > best.n ? o : best), null),
@@ -646,15 +654,6 @@ export function calculateDashboard(data, settings = {}) {
     totals,
     timeline,
     weeks,
-    outside: datedEntries
-      .filter((e) => work(e) && matches(e, state))
-      .reduce(
-        (s, e) =>
-          s +
-          (e.bis - e.von) -
-          state.windows.reduce((v, [a, b]) => v + overlap(e, a, b), 0),
-        0,
-      ),
     absences: Object.keys(LABELS.absence).map((reason) => ({
       name: LABELS.absence[reason],
       minutes: minuteTotal(all.filter((e) => e.absence === reason)),
@@ -715,6 +714,26 @@ const dateLabel = (d) =>
     : "–";
 const numberLabel = (n) =>
   n == null ? "Keine Angaben" : n > 0 && n < 0.5 ? "<1" : round(n);
+const personAverage = (n) =>
+  n == null
+    ? "–"
+    : n > 0 && n < 0.05
+      ? "<0.1"
+      : n.toLocaleString("de-CH", { maximumFractionDigits: 1 });
+const durationLabel = (minutes) => {
+  if (minutes == null) return "–";
+  const hours = Math.floor(minutes / 60),
+    rest = minutes % 60;
+  return rest
+    ? hours
+      ? `${hours} h ${rest} min`
+      : `${rest} min`
+    : `${hours} h`;
+};
+const timeShare = (o) =>
+  o.minutes != null && o.baseMinutes > 0
+    ? (100 * o.minutes) / o.baseMinutes
+    : null;
 const PRESETS = [
   {
     name: "Wofür werden die Plätze am Standort genutzt?",
@@ -725,7 +744,7 @@ const PRESETS = [
     tab: "cross",
   },
   {
-    name: "Wann wird am Büroarbeitsplatz telefoniert oder online getagt?",
+    name: "Wie viele Personen telefonieren oder tagen online am Büroarbeitsplatz?",
     split: "oe",
     second: "",
     location: "UEBLICHER_ARBEITSPLATZ",
@@ -737,14 +756,14 @@ const PRESETS = [
     split: "oe",
     second: "form",
     location: "",
-    tab: "custom",
+    tab: "week",
   },
   {
     name: "Wo arbeiten Personen je nach Funktion?",
     split: "funktion",
     second: "ao",
     location: "",
-    tab: "custom",
+    tab: "week",
   },
   {
     name: "Wie gross sind die Gruppen bei der Zusammenarbeit vor Ort?",
@@ -752,7 +771,7 @@ const PRESETS = [
     second: "tk",
     location: "UEBLICHER_ARBEITSPLATZ",
     filters: { form: ["MEETING"] },
-    tab: "custom",
+    tab: "week",
   },
   {
     name: "Bei welchen Gruppengrössen kommen Online-Zuschaltungen vor?",
@@ -760,7 +779,7 @@ const PRESETS = [
     second: "hybrid",
     location: "UEBLICHER_ARBEITSPLATZ",
     filters: { form: ["MEETING"] },
-    tab: "custom",
+    tab: "week",
   },
 ];
 
@@ -855,18 +874,26 @@ export function mountDashboard(
         ? "submitted"
         : data.default_mode || DEFAULTS.mode,
   });
-  let state = {
-    ...startView(),
-    ...copy(initial),
-    filters: copy(initial.filters || {}),
-  };
-  // Earlier saved views used a second, redundant location filter.
-  if (state.filters.ao?.length) {
-    state.location = state.filters.ao.length === 1 ? state.filters.ao[0] : "";
-    if (state.filters.ao.length === 1) delete state.filters.ao;
+  function restoreView(saved) {
+    const restored = {
+      ...startView(),
+      ...copy(saved),
+      filters: copy(saved.filters || {}),
+    };
+    if (restored.tab === "trend") restored.showTrend = true;
+    if (["custom", "trend"].includes(restored.tab)) restored.tab = "week";
+    delete restored.windows;
+    delete restored.detailTrigger;
+    delete restored.openReading;
+    if (restored.filters.ao?.length) {
+      restored.location =
+        restored.filters.ao.length === 1 ? restored.filters.ao[0] : "";
+      if (restored.filters.ao.length === 1) delete restored.filters.ao;
+    }
+    return restored;
   }
-  const initialDetail = state.detailTrigger;
-  delete state.detailTrigger;
+  let state = restoreView(initial);
+  const initialDetail = initial.detailTrigger;
   const storageKey = "abw-dashboard-views-v2:" + data.gruppen_namen.join("|");
   let views = [],
     currentView = "",
@@ -900,14 +927,17 @@ export function mountDashboard(
     return `<details data-panel="reading" class="ad-reading"><summary>So liest du die Auswertung</summary>
       <h3>Wessen Arbeitszeit sehe ich?</h3>
       <p>Deine Auswahl umfasst ${r.people} Personen. ${r.matchedPeople} davon haben im betrachteten Zeitraum passende Tätigkeiten eingetragen. Zusammen sind das rund ${hours} Arbeitsstunden. Unter «Arbeitsort» kannst du zum Beispiel zwischen Standort und Homeoffice wechseln.</p>
-      <h3>Was bedeutet «Personen im Mittel»?</h3>
-      <p>Ein Beispiel für einen vierstündigen Vormittag: Zwei Personen arbeiten je zwei Stunden am Büroarbeitsplatz. Zusammen haben sie den Platztyp vier Stunden genutzt. In der Tabelle ergibt das im Mittel eine Person. Ob die beiden gleichzeitig dort waren, lässt sich daraus nicht ablesen.</p>
+      <h3>Wer zählt an einem Halbtag?</h3>
+      <p>Der Nachmittag beginnt um 12:30 Uhr. Wer am Vormittag drei Telefonate am Büroarbeitsplatz einträgt, zählt dort einmal. Wer auch allein arbeitet, zählt in beiden Tätigkeiten und in «Gesamte Auswahl» einmal. Beginnt ein Eintrag vor 12:30 Uhr und endet er danach, zählt die Person in beiden Halbtagen. Die Minuten teilen wir um 12:30 Uhr auf.</p>
       <h3>Wie lese ich das Wochenprofil?</h3>
-      <p>Unter «Dienstagvormittag» fassen wir die Dienstagvormittage der Erhebung zusammen. «Durchschnitt» zeigt den Mittelwert dieser Vormittage. «Höchster erfasster Halbtag» zeigt den Vormittag mit dem höchsten Wert. Klicke auf die Zahl, um die einzelnen Daten zu sehen. Die höchsten Werte zweier Zeilen können von verschiedenen Tagen stammen.</p>
+      <p>Unter «Dienstagvormittag» fassen wir die Dienstagvormittage der Erhebung zusammen. «Durchschnitt» zeigt den Mittelwert dieser Vormittage. «Höchster erfasster Halbtag» zeigt den Vormittag mit dem höchsten Wert. Klicke auf eine Zahl, um zu sehen, an welchem Datum wie viele Personen wie lange mit dieser Tätigkeit beschäftigt waren. Ob sie zur selben Zeit telefonierten, lässt sich aus den erfassten Blöcken nicht ablesen. Die höchsten Werte zweier Zeilen können von verschiedenen Tagen stammen.</p>
+      <p>Unter der Tabelle siehst du, wie viel Arbeitszeit über die ganze Erhebung auf jede Zeile entfällt. Mit «Weiter aufteilen nach» kannst du zum Beispiel jede Organisationseinheit nach Tätigkeit aufteilen. «Verlauf anzeigen» zeigt die Wochen und die einzelnen Halbtage in zeitlicher Reihenfolge. Dort siehst du, ob sich eine Spitze wiederholt.</p>
+      <h3>Wie lese ich «Tätigkeiten und Plätze»?</h3>
+      <p>Bei «Wo findet die Tätigkeit statt?» liest du zum Beispiel, wie viel der Telefonzeit auf den Büroarbeitsplatz entfällt. Bei «Wofür wird der Platz genutzt?» liest du, wie viel der Zeit am Büroarbeitsplatz für Telefonate verwendet wurde. Die gesamte Zeit der jeweiligen Zeile entspricht 100 %.</p>
       <h3>Wie viel wurde überhaupt erfasst?</h3>
-      <p>Für die Vollständigkeit zählt jeder Eintrag, auch Homeoffice und Abwesenheiten. ${r.coverage == null ? "Für diese Auswahl liegt noch kein auswertbarer Zeitraum vor." : `Für die gewählten Personen gibt es für rund ${round(r.coverage)} von 100 betrachteten Stunden einen Eintrag.`} Bei einer Lücke bleibt offen, wo oder ob jemand gearbeitet hat. Ein Wechsel der Tätigkeit oder des Arbeitsorts ändert diese Kennzahl nicht.</p>
-      <h3>Was bedeuten 0, &lt;1 und der Strich?</h3>
-      <p>Bei den Personenzahlen bedeutet 0: Es gibt Einträge, aber keine passende Arbeitszeit. &lt;1 steht für einen kleinen positiven Wert, der auf ganze Personen gerundet null ergäbe. Ein Strich (–) bedeutet, dass für diesen Wert kein Halbtag ausgewertet werden konnte. Halbtage ganz ohne Einträge lassen wir beim Durchschnitt aus. Teilweise erfasste Halbtage zählen mit den eingetragenen Stunden.</p>
+      <p>Für die Vollständigkeit zählt jeder Eintrag, auch Homeoffice und Abwesenheiten. ${r.coverage == null ? "Für diese Auswahl liegt noch kein auswertbarer Zeitraum vor." : `Für die gewählten Personen gibt es für rund ${round(r.coverage)} von 100 Stunden zwischen 08:00 und 12:00 sowie zwischen 13:00 und 17:00 Uhr einen Eintrag.`} Bei einer Lücke bleibt offen, wo oder ob jemand gearbeitet hat. Ein Wechsel der Tätigkeit oder des Arbeitsorts ändert diese Kennzahl nicht.</p>
+      <h3>Was bedeuten eine Null und ein Strich?</h3>
+      <p>Eine Null bedeutet, dass für den Halbtag Einträge vorliegen und niemand die ausgewählte Tätigkeit eingetragen hat. Ein Strich bedeutet, dass Angaben für die Berechnung fehlen. Ganz leere Halbtage lassen wir beim Durchschnitt aus.</p>
       <p>Die Zahlen sind gerundet. Sie zeigen, wie die Teilnehmenden gearbeitet haben. Für eine Raumplanung ist zusätzlich wichtig, ob die vorhandenen Plätze für diese Tätigkeiten geeignet waren.</p></details>`;
   }
   function bars(rows, kind = "share", maximum = 100) {
@@ -916,7 +946,7 @@ export function mountDashboard(
     return rows
       .map((row) => {
         const n = row[kind];
-        return `<div class="ad-bar-row"><span>${esc(row.name)}</span><div class="ad-track"><div style="width:${n == null ? 0 : Math.min(100, (100 * n) / Math.max(maximum, 1))}%"></div></div><strong>${n == null ? "–" : esc(numberLabel(n))}${kind === "share" ? " %" : ""}</strong></div>`;
+        return `<div class="ad-bar-row"><span>${esc(row.name)}</span><div class="ad-track"><div style="width:${n == null ? 0 : Math.min(100, (100 * n) / Math.max(maximum, 1))}%"></div></div><strong>${n == null ? "–" : esc(kind === "share" ? round(n) : personAverage(n))}${kind === "share" ? " %" : ""}</strong></div>`;
       })
       .join("");
   }
@@ -924,7 +954,7 @@ export function mountDashboard(
     // The cohort size is a stable scale for the current and pinned selection.
     const max = Math.max(1, r.people, reference?.people || 0);
     const chosen = state.metric === "peak" ? "max" : "mean";
-    return `<div class="ad-scroll"><table class="ad-week-table"><caption>${state.metric === "peak" ? "Höchster erfasster Halbtag je Wochentag" : "Durchschnitt nach Wochentag"} · Personen im Mittel über das jeweilige Zeitfenster · ${esc(allFields[state.split])}${state.second ? " / " + esc(allFields[state.second]) : ""}</caption><colgroup><col class="ad-week-label"><col span="10"><col span="2"></colgroup><thead><tr><th scope="col">${esc(allFields[state.split])}</th>${DAYS.map((d) => `<th colspan="2" scope="colgroup">${d}</th>`).join("")}<th scope="col" rowspan="2">Ø je Halbtag</th><th scope="col" rowspan="2">Höchster Halbtag</th></tr><tr><th></th>${DAYS.map(() => '<th scope="col"><span class="ad-screen-only">Vormittag</span><span class="ad-print-label">Vorm.</span></th><th scope="col"><span class="ad-screen-only">Nachmittag</span><span class="ad-print-label">Nachm.</span></th>').join("")}</tr></thead><tbody>${r.rows.length ? r.rows.map((row, ri) => `<tr><th scope="row">${esc(row.name)}</th>${row.cells.map((c, i) => `<td><button type="button" class="ad-cell ${c.coverage != null && c.coverage < state.threshold ? "ad-incomplete" : ""}" id="ad-cell-${ri}-${i}" data-cell="${ri},${i}" style="--heat:${c[chosen] == null ? 0 : 0.06 + (0.34 * c[chosen]) / max}" aria-label="${esc(row.name)}, ${DAYS[Math.floor(i / 2)]} ${i % 2 ? "Nachmittag" : "Vormittag"}: ${esc(numberLabel(c[chosen]))}${c.coverage != null && c.coverage < state.threshold ? ", Angaben lückenhaft" : ""}">${c[chosen] == null ? "–" : esc(numberLabel(c[chosen]))}${state.metric === "peak" ? (c.peakCoverage != null && c.peakCoverage < state.threshold ? " *" : "") : c.coverage != null && c.coverage < state.threshold ? " *" : ""}</button></td>`).join("")}<td>${esc(numberLabel(row.average))}</td><td>${esc(numberLabel(row.peak?.n))}${row.peak?.coverage < state.threshold ? " *" : ""}</td></tr>`).join("") : '<tr><td colspan="13">Keine passenden Tätigkeiten. Prüfe die Auswahl und die Vollständigkeit der Angaben.</td></tr>'}</tbody><tfoot><tr class="ad-total-row"><th scope="row">Gesamte Auswahl</th>${r.totals.cells.map((c, i) => `<td><button type="button" class="ad-cell" id="ad-total-${i}" data-cell="total,${i}" aria-label="Gesamte Auswahl, ${DAYS[Math.floor(i / 2)]} ${i % 2 ? "Nachmittag" : "Vormittag"}, einzelne Halbtage anzeigen">${c[chosen] == null ? "–" : esc(numberLabel(c[chosen]))}</button></td>`).join("")}<td>${esc(numberLabel(r.totals.average))}</td><td>${esc(numberLabel(r.totals.peak?.n))}</td></tr><tr class="ad-coverage-row"><th scope="row">Vollständigkeit der Angaben</th>${r.coverageCells.map((c, i) => `<td><button type="button" data-coverage="${i}" id="ad-coverage-${i}" class="${c.coverage != null && c.coverage < state.threshold ? "ad-coverage-low" : ""}">${c.coverage == null ? (c.ongoing ? "Läuft" : c.future ? "Später" : "–") : percent(c.coverage)}</button></td>`).join("")}<td colspan="2">${percent(r.coverage)}</td></tr><tr><th scope="row">Ausgewertete / bisherige Halbtage</th>${r.coverageCells.map((c) => `<td>${c.expectedDays ? `${c.days} / ${c.expectedDays}` : "–"}</td>`).join("")}<td colspan="2">${r.valid} / ${r.expected}</td></tr></tfoot></table></div><p class="ad-context">Klicke auf einen Vor- oder Nachmittag, um die einzelnen Daten zu sehen. 0 bedeutet: Es gibt Einträge, aber keine passende Tätigkeit. Ein Strich (–) bedeutet: Es fehlt ein auswertbarer Halbtag. Ein Stern (*) markiert Werte mit weniger als 85 % erfasster Zeit. Beim höchsten Wert zählt die Vollständigkeit dieses einen Halbtags.</p><p class="ad-context">Je dunkler das Feld, desto mehr Personen waren im Mittel mit der Tätigkeit beschäftigt (Skala bis ${round(max)}). Für die Gesamtzahl lies die Zeile «Gesamte Auswahl». Einzelne Gruppen können an unterschiedlichen Tagen Angaben gemacht haben.</p>`;
+    return `<div class="ad-scroll"><table class="ad-week-table"><caption>${state.metric === "peak" ? "Höchster erfasster Halbtag je Wochentag" : "Durchschnitt nach Wochentag"} · Personen mit mindestens einem passenden Eintrag je Halbtag · ${esc(allFields[state.split])}${state.second ? " / " + esc(allFields[state.second]) : ""}</caption><colgroup><col class="ad-week-label"><col span="10"><col span="2"></colgroup><thead><tr><th scope="col">${esc(allFields[state.split])}</th>${DAYS.map((d) => `<th colspan="2" scope="colgroup">${d}</th>`).join("")}<th scope="col" rowspan="2">Ø je Halbtag</th><th scope="col" rowspan="2">Höchster Halbtag</th></tr><tr><th></th>${DAYS.map(() => '<th scope="col"><span class="ad-screen-only">Vormittag</span><span class="ad-print-label">Vorm.</span></th><th scope="col"><span class="ad-screen-only">Nachmittag</span><span class="ad-print-label">Nachm.</span></th>').join("")}</tr></thead><tbody>${r.rows.length ? r.rows.map((row, ri) => `<tr><th scope="row">${esc(row.name)}</th>${row.cells.map((c, i) => `<td><button type="button" class="ad-cell ${c.coverage != null && c.coverage < state.threshold ? "ad-incomplete" : ""}" id="ad-cell-${ri}-${i}" data-cell="${ri},${i}" style="--heat:${c[chosen] == null ? 0 : 0.06 + (0.34 * c[chosen]) / max}" aria-label="${esc(row.name)}, ${DAYS[Math.floor(i / 2)]} ${i % 2 ? "Nachmittag" : "Vormittag"}: ${esc(personAverage(c[chosen]))}${c.coverage != null && c.coverage < state.threshold ? ", Angaben lückenhaft" : ""}">${c[chosen] == null ? "–" : esc(personAverage(c[chosen]))}${state.metric === "peak" ? (c.peakCoverage != null && c.peakCoverage < state.threshold ? " *" : "") : c.coverage != null && c.coverage < state.threshold ? " *" : ""}</button></td>`).join("")}<td>${esc(personAverage(row.average))}</td><td>${esc(numberLabel(row.peak?.n))}${row.peak?.coverage < state.threshold ? " *" : ""}</td></tr>`).join("") : '<tr><td colspan="13">Keine passenden Tätigkeiten. Prüfe die Auswahl und die Vollständigkeit der Angaben.</td></tr>'}</tbody><tfoot><tr class="ad-total-row"><th scope="row">Gesamte Auswahl</th>${r.totals.cells.map((c, i) => `<td><button type="button" class="ad-cell" id="ad-total-${i}" data-cell="total,${i}" aria-label="Gesamte Auswahl, ${DAYS[Math.floor(i / 2)]} ${i % 2 ? "Nachmittag" : "Vormittag"}, einzelne Halbtage anzeigen">${c[chosen] == null ? "–" : esc(personAverage(c[chosen]))}</button></td>`).join("")}<td>${esc(personAverage(r.totals.average))}</td><td>${esc(numberLabel(r.totals.peak?.n))}</td></tr><tr class="ad-coverage-row"><th scope="row">Vollständigkeit der Angaben</th>${r.coverageCells.map((c, i) => `<td><button type="button" data-coverage="${i}" id="ad-coverage-${i}" class="${c.coverage != null && c.coverage < state.threshold ? "ad-coverage-low" : ""}">${c.coverage == null ? (c.ongoing ? "Läuft" : c.future ? "Später" : "–") : percent(c.coverage)}</button></td>`).join("")}<td colspan="2">${percent(r.coverage)}</td></tr><tr><th scope="row">Ausgewertete / bisherige Halbtage</th>${r.coverageCells.map((c) => `<td>${c.expectedDays ? `${c.days} / ${c.expectedDays}` : "–"}</td>`).join("")}<td colspan="2">${r.valid} / ${r.expected}</td></tr></tfoot></table></div><p class="ad-context">Klicke auf einen Vor- oder Nachmittag, um die einzelnen Daten zu sehen. 0 bedeutet: Es gibt Einträge, aber keine passende Tätigkeit. Ein Strich (–) bedeutet: Es fehlt ein auswertbarer Halbtag. Ein Stern (*) markiert Werte mit weniger als 85 % dokumentierter Zeit in den Referenzstunden. Beim höchsten Wert zählt die Vollständigkeit dieses einen Halbtags.</p><p class="ad-context">Je dunkler das Feld, desto mehr Personen haben diese Tätigkeit am jeweiligen Halbtag eingetragen (Skala bis ${round(max)}). Für die Gesamtzahl lies die Zeile «Gesamte Auswahl». Wer am selben Halbtag mehrere Tätigkeiten einträgt, zählt in jeder passenden Zeile und in der Gesamtzahl einmal.</p>`;
   }
   function stacked(r) {
     if (!state.second || !r.rows.length) return "";
@@ -970,12 +1000,12 @@ export function mountDashboard(
         "crossBy",
         "Fragestellung",
         [
-          ["form", "Wo findet diese Tätigkeit statt?"],
-          ["room", "Wofür wird dieser Platz genutzt?"],
+          ["form", "Wo findet die Tätigkeit statt? (100 % je Tätigkeit)"],
+          ["room", "Wofür wird der Platz genutzt? (100 % je Platz)"],
         ],
         state.crossBy,
       )}
-      <p>${byPlace ? "Jede Zeile zeigt, wie sich die dokumentierte Zeit an einem Platz auf Tätigkeiten verteilt." : "Jede Zeile zeigt, wie sich die dokumentierte Zeit einer Tätigkeit auf Plätze verteilt."} 100 % entsprechen der Summe am Zeilenende.</p>
+      <p>${byPlace ? "Lies die Tabelle von links nach rechts. Die gesamte Arbeitszeit am Platz links in der Zeile entspricht 100 %. Die Spalten zeigen, wofür dieser Platz genutzt wurde." : "Lies die Tabelle von links nach rechts. Die gesamte Zeit für die Tätigkeit links in der Zeile entspricht 100 %. Die Spalten zeigen, wo die Personen diese Tätigkeit ausgeübt haben."}</p>
       <div class="ad-scroll"><table><caption>${byPlace ? "Tätigkeiten je Platz" : "Plätze je Tätigkeit"} · dokumentierte Stunden und Anteil je Zeile</caption>
       <thead><tr><th scope="col">${esc(FIELDS[table.rowField])}</th>${table.columns.map((c) => `<th scope="col">${esc(displayValue(table.colField, c))}</th>`).join("")}<th scope="col">Gesamt</th></tr></thead>
       <tbody>${
@@ -1002,7 +1032,7 @@ export function mountDashboard(
     const currentName = filterSummary(state);
     const referenceName = filterSummary(state.comparison);
     const cell = (value, max) =>
-      `<td><div class="ad-track"><div style="width:${(100 * (value.average || 0)) / max}%"></div></div>${esc(numberLabel(value.average))} / ${percent(value.share)}</td>`;
+      `<td><div class="ad-track"><div style="width:${(100 * (value.average || 0)) / max}%"></div></div>${esc(personAverage(value.average))} / ${percent(value.share)}</td>`;
     const max = Math.max(
       1,
       ...rows.map((row) =>
@@ -1022,15 +1052,22 @@ export function mountDashboard(
       <p class="ad-context">Balken zeigen Personen im Mittel auf derselben Skala (0–${round(max)}).</p><div class="ad-actions">${button("pin", "Festgehaltene Auswahl ersetzen")}${button("unpin", "Vergleich entfernen")}</div></section>`;
   }
 
-  function detailPanel() {
+  function detailDates(r) {
+    if (!detail?.dates) return null;
+    const { rowIndex, weekDay, half } = detail.dates;
+    const timeline = rowIndex == null ? r.timeline : r.rows[rowIndex].timeline;
+    return timeline.filter((o) => o.wd === weekDay && o.h === half);
+  }
+  function detailPanel(r, shareControl) {
     if (!detail) return "";
-    const list = detail.dates;
+    const list = detailDates(r);
     return `<aside class="ad-detail" tabindex="-1" aria-label="Details zum Halbtag"><h4>${esc(detail.title)}</h4><p>${esc(detail.text)}</p>
+      ${list ? `${shareControl}<p>${esc(basisText())} an diesem Halbtag.</p>` : ""}
       ${
         list
           ? list.length
-            ? `<div class="ad-scroll"><table><caption>Einzelne Halbtage</caption><thead><tr><th scope="col">Datum</th><th scope="col">Personen im Mittel</th><th scope="col">Zeit dokumentiert</th></tr></thead><tbody>
-      ${list.map((o) => `<tr><th scope="row">${dateLabel(o.d)}</th><td>${o.n != null ? esc(numberLabel(o.n)) : o.coverage > 0 ? "Wegen Mindestvollständigkeit ausgelassen" : "Keine Angaben"}</td><td>${percent(o.coverage)}</td></tr>`).join("")}</tbody></table></div>`
+            ? `<div class="ad-scroll"><table><caption>Einzelne Halbtage</caption><thead><tr><th scope="col">Datum</th><th scope="col">Personen</th><th scope="col">Arbeitszeit</th><th scope="col">Zeitanteil</th><th scope="col">Vollständigkeit</th></tr></thead><tbody>
+      ${list.map((o) => `<tr><th scope="row">${dateLabel(o.d)}</th><td>${o.n != null ? esc(numberLabel(o.n)) : o.observed ? "Wegen Mindestvollständigkeit ausgelassen" : "Keine Angaben"}</td><td>${durationLabel(o.minutes)}</td><td>${percent(timeShare(o))}</td><td>${percent(o.coverage)}</td></tr>`).join("")}</tbody></table></div>`
             : "<p>Für diesen Wochenhalbtag ist bisher kein Halbtag fällig.</p>"
           : ""
       }
@@ -1041,10 +1078,28 @@ export function mountDashboard(
     const peak = r.totals.peak;
     if (!peak || !peak.n) return "";
     const ties = r.timeline.filter((o) => o.n === peak.n).length;
-    return `<section class="ad-peak"><div><h3>Wann war am meisten los?</h3>
-      <p><strong>${esc(numberLabel(peak.n))} Personen im Mittel</strong> · ${DAYS[peak.wd]}, ${dateLabel(peak.d)} ${peak.h ? "Nachmittag" : "Vormittag"} · ${percent(peak.coverage)} der Zeit dokumentiert</p>
-      <small>${ties > 1 ? `Diesen Wert erreichten ${ties} Halbtage. ` : ""}An diesem Vor- oder Nachmittag arbeiteten im Durchschnitt am meisten Personen an den ausgewählten Tätigkeiten. Ausgewertet wurden ${r.valid} von ${r.expected} bisherigen Halbtagen.</small></div>
+    return `<section class="ad-peak"><div><h3>An welchem Halbtag waren die meisten Personen beteiligt?</h3>
+      <p><strong>${esc(numberLabel(peak.n))} Personen</strong> · ${DAYS[peak.wd]}, ${dateLabel(peak.d)} ${peak.h ? "Nachmittag" : "Vormittag"} · ${percent(peak.coverage)} der Zeit dokumentiert</p>
+      <small>${ties > 1 ? `Diesen Wert erreichten ${ties} Halbtage. ` : ""}Hier haben die meisten Personen mindestens eine der ausgewählten Tätigkeiten eingetragen. Ausgewertet wurden ${r.valid} von ${r.expected} bisherigen Halbtagen.</small></div>
       ${button("peak-days", "Einzelne Halbtage ansehen")}</section>`;
+  }
+  function trend(r) {
+    const max = Math.max(1, ...r.timeline.map((o) => o.n || 0));
+    return `<section><h3>Verlauf der gesamten Auswahl</h3><p>Jeder Balken zeigt, wie viele Personen in dieser Woche durchschnittlich pro ausgewertetem Halbtag mindestens eine passende Tätigkeit eingetragen haben. Lies auch die Anzahl Halbtage und den Anteil erfasster Zeit. Fehlen in einer Woche viele Einträge, kann ihr Balken allein deshalb kürzer sein.</p>${bars(
+      r.weeks.map((w) => ({
+        name:
+          "Woche ab " +
+          dateLabel(w.start) +
+          " · " +
+          w.days +
+          " Halbtage · " +
+          percent(w.coverage) +
+          " dokumentiert",
+        average: w.n,
+      })),
+      "average",
+      max,
+    )}</section><section><h3>Einzelne Vor- und Nachmittage</h3><p>Jeder Punkt zeigt einen konkreten Halbtag auf derselben Skala (0–${round(max)} Personen). So erkennst du, ob hohe Werte wiederholt auftreten. Lücken werden nicht als null dargestellt.</p><div class="ad-observations">${r.timeline.map((o) => `<div class="ad-observation"><span>${dateLabel(o.d)} ${o.h ? "Nachmittag" : "Vormittag"}</span><div class="ad-dot-track">${o.n == null ? "<span>Keine Auswertung</span>" : `<i style="left:${(100 * o.n) / max}%" title="${esc(numberLabel(o.n))} Personen"></i>`}</div><strong>${esc(numberLabel(o.n))}</strong><small>${percent(o.coverage)} dokumentiert</small></div>`).join("")}</div></section>`;
   }
   function render() {
     const focused = document.activeElement;
@@ -1056,13 +1111,7 @@ export function mountDashboard(
     const openDetails = [
       ...root.querySelectorAll("details[open][data-panel]"),
     ].map((d) => d.dataset.panel);
-    let r;
-    try {
-      r = calculateDashboard(data, state);
-    } catch (e) {
-      root.innerHTML = `<p role="alert">${esc(e.message)}</p>${button("reset-windows", "Tageszeiten zurücksetzen")}`;
-      return;
-    }
+    const r = calculateDashboard(data, state);
     state.mode = r.mode;
     const snapshot = data.snapshot_at
       ? new Intl.DateTimeFormat("de-CH", {
@@ -1104,9 +1153,6 @@ export function mountDashboard(
         }</div><small>${Object.hasOwn(PROFILES, f) ? "Wählt aus, wer zur Gruppe gehört." : "Wählt aus, welche Arbeitszeiten zählen."}</small></fieldset>`;
       })
       .join("");
-    const timeText = state.windows
-      .map((w) => w.map(clock).join("–"))
-      .join(" und ");
     const atSite =
       !state.location || state.location === "UEBLICHER_ARBEITSPLATZ";
     const reference = state.comparison
@@ -1133,26 +1179,9 @@ export function mountDashboard(
     }
     let body = "";
     if (state.tab === "overview")
-      body = `${peakSummary(r)}${shareControl}<div class="${atSite ? "ad-two" : ""}"><section><h3>So verteilt sich die Arbeitszeit</h3>${activityExample}<p>${esc(basisText())}.</p>${bars(byTime(r.activities))}</section>${atSite ? `<section><h3>An diesen Plätzen wird gearbeitet</h3><p>${esc(basisText())}. Plätze werden am untersuchten Standort erfasst.</p>${bars(byTime(r.places.filter((row) => JSON.parse(row.key)[0] !== "na")))}</section>` : ""}</div><section><h3>Wie viele Personen arbeiten im Mittel an welchen Tätigkeiten?</h3><p>Lies zum Beispiel die Spalte «Ø Vormittag». Arbeiten zwei Personen an einem vierstündigen Vormittag je zwei Stunden allein, ergibt das zusammen eine Person im Mittel. So kannst du abschätzen, wie viel Arbeitszeit auf diese Tätigkeit entfällt.</p><div class="ad-scroll"><table><thead><tr><th scope="col">Tätigkeit</th><th scope="col">Ø Vormittag</th><th scope="col">Ø Nachmittag</th><th scope="col">Ø je Halbtag</th></tr></thead><tbody>${r.activities.map((row) => `<tr><th scope="row">${esc(row.name)}</th><td>${esc(numberLabel(row.morning))}</td><td>${esc(numberLabel(row.afternoon))}</td><td>${esc(numberLabel(row.average))}</td></tr>`).join("")}</tbody></table></div></section><section><h3>Dokumentierte Abwesenheiten</h3><p>${r.absences.map((x) => `${esc(x.name)}: ${round(x.minutes / 60)} h`).join(" · ")}. Hier zählen alle eingetragenen Abwesenheiten der ausgewählten Personen an den ausgewerteten Halbtagen. Die Balken zur Arbeitszeit enthalten nur geleistete Arbeit.</p></section>`;
+      body = `${peakSummary(r)}${shareControl}<div class="${atSite ? "ad-two" : ""}"><section><h3>So verteilt sich die Arbeitszeit</h3>${activityExample}<p>${esc(basisText())}.</p>${bars(byTime(r.activities))}</section>${atSite ? `<section><h3>An diesen Plätzen wird gearbeitet</h3><p>${esc(basisText())}. Plätze werden am untersuchten Standort erfasst.</p>${bars(byTime(r.places.filter((row) => JSON.parse(row.key)[0] !== "na")))}</section>` : ""}</div><section><h3>Wie viele Personen üben die Tätigkeiten an einem Halbtag aus?</h3><p>Zwei Personen, die am selben Vormittag je ein kurzes Telefonat eintragen, ergeben für «Online-Meeting / Telefonat» zwei Personen. Die Spalte «Ø Vormittag» zeigt den Durchschnitt über die ausgewerteten Vormittage.</p><div class="ad-scroll"><table><thead><tr><th scope="col">Tätigkeit</th><th scope="col">Ø Vormittag</th><th scope="col">Ø Nachmittag</th><th scope="col">Ø je Halbtag</th></tr></thead><tbody>${r.activities.map((row) => `<tr><th scope="row">${esc(row.name)}</th><td>${esc(personAverage(row.morning))}</td><td>${esc(personAverage(row.afternoon))}</td><td>${esc(personAverage(row.average))}</td></tr>`).join("")}</tbody></table></div></section><section><h3>Dokumentierte Abwesenheiten</h3><p>${r.absences.map((x) => `${esc(x.name)}: ${round(x.minutes / 60)} h`).join(" · ")}. Hier zählen alle eingetragenen Abwesenheiten der ausgewählten Personen an den ausgewerteten Halbtagen. Die Balken zur Arbeitszeit enthalten nur geleistete Arbeit.</p></section>`;
     else if (state.tab === "cross") body = cross(r, atSite);
-    else if (state.tab === "trend") {
-      const max = Math.max(1, ...r.timeline.map((o) => o.n || 0));
-      body = `<section><h3>Entwicklung über die Erhebungswochen</h3><p>Jeder Balken zeigt den Durchschnitt einer Woche. Lies auch die Anzahl Halbtage und den Anteil erfasster Zeit. Fehlen in einer Woche viele Einträge, kann ihr Balken allein deshalb kürzer sein.</p>${bars(
-        r.weeks.map((w) => ({
-          name:
-            "Woche ab " +
-            dateLabel(w.start) +
-            " · " +
-            w.days +
-            " Halbtage · " +
-            percent(w.coverage) +
-            " dokumentiert",
-          average: w.n,
-        })),
-        "average",
-        max,
-      )}</section><section><h3>Einzelne Vor- und Nachmittage</h3><p>Jeder Punkt zeigt einen konkreten Halbtag auf derselben Skala (0–${round(max)} Personen). So erkennst du, ob hohe Werte wiederholt auftreten. Lücken werden nicht als null dargestellt.</p><div class="ad-observations">${r.timeline.map((o) => `<div class="ad-observation"><span>${dateLabel(o.d)} ${o.h ? "Nachmittag" : "Vormittag"}</span><div class="ad-dot-track">${o.n == null ? "<span>Keine Auswertung</span>" : `<i style="left:${(100 * o.n) / max}%" title="${esc(numberLabel(o.n))} Personen im Mittel"></i>`}</div><strong>${esc(numberLabel(o.n))}</strong><small>${percent(o.coverage)} dokumentiert</small></div>`).join("")}</div></section>`;
-    } else
+    else
       body = `<section><div class="ad-toolbar">${select("split", "Was möchtest du unterscheiden?", fields, state.split)}${select("second", "Weiter aufteilen nach", [["", "Keine zweite Aufteilung"], ...fields.filter(([f]) => f !== state.split)], state.second)}${select(
         "metric",
         "Werte im Wochenprofil",
@@ -1161,7 +1190,13 @@ export function mountDashboard(
           ["peak", "Höchster erfasster Halbtag"],
         ],
         state.metric,
-      )}</div>${matrix(r, reference)}${detailPanel()}${state.tab === "custom" ? `${stacked(r)}<h3>Zeitanteile der Kombinationen</h3>${shareControl}<p>${esc(basisText())}.</p>${bars(r.rows)}` : ""}</section>`;
+      )}</div>${matrix(r, reference)}${detailPanel(r, shareControl)}</section>
+      <section><h3>Arbeitszeit nach ${esc(allFields[state.split])}${state.second ? " und " + esc(allFields[state.second]) : ""}</h3>
+      ${detail?.dates ? "" : shareControl}<p>${esc(basisText())} im gesamten Erhebungszeitraum.</p>
+      ${bars(byTime(r.rows).map((row) => ({ ...row, name: row.name + " · " + durationLabel(row.minutes) })))}${stacked(r)}</section>
+      <button type="button" id="ad-toggle-trend" data-action="toggle-trend" aria-expanded="${state.showTrend}" aria-controls="ad-trend">${state.showTrend ? "Verlauf ausblenden" : "Verlauf anzeigen"}</button>
+      <div id="ad-trend" ${state.showTrend ? "" : "hidden"}>${state.showTrend ? trend(r) : ""}</div>`;
+
     const noResults =
       r.selectedMinutes === 0
         ? `<div class="ad-notice" role="status"><strong>Keine passenden Tätigkeiten in dieser Auswahl.</strong><p>${state.location !== "UEBLICHER_ARBEITSPLATZ" && state.filters.room?.length ? "Genutzte Plätze werden nur am untersuchten Standort erfasst. Entferne den Platzfilter oder ändere den Arbeitsort." : !r.valid ? "Für die betrachteten Halbtage liegen keine auswertbaren Angaben vor. Prüfe auch die gewählte Mindestvollständigkeit." : "Die gewählten Filter haben keine gemeinsamen Treffer. Entferne einzelne Filter oder setze die Merkmalsfilter zurück."}</p>${state.filters.room?.length ? '<button type="button" data-clear="room">Platzfilter entfernen</button>' : ""}${button("clear", "Alle Merkmalsfilter zurücksetzen")}</div>`
@@ -1194,7 +1229,7 @@ export function mountDashboard(
     )}<button type="button" data-toggle="filters" aria-expanded="${panels.has("filters")}" aria-controls="ad-filters">Filter${active.length ? " (" + active.length + ")" : ""}</button><button type="button" data-toggle="basis" aria-expanded="${panels.has("basis")}" aria-controls="ad-basis">Auswertung anpassen</button>
     ${reference ? button("show-comparison", "Zum Vergleich") : button("pin", "Auswahl zum Vergleich festhalten")}</div>
     <div id="ad-filters" class="ad-disclosure-body" ${panels.has("filters") ? "" : "hidden"}><h3>Personen und Tätigkeiten auswählen</h3><p>Wählst du zwei Organisationseinheiten, siehst du beide zusammen. Wählst du zusätzlich «Allein arbeiten», siehst du diese Tätigkeit für beide Einheiten. Lässt du einen ganzen Filter leer, zählen alle seine Werte. Graue Werte passen nicht zur aktuellen Auswahl.</p><div class="ad-filter-grid">${filters}</div>${button("clear", "Alle Merkmalsfilter zurücksetzen")}</div>
-    <div id="ad-basis" class="ad-disclosure-body" ${panels.has("basis") ? "" : "hidden"}><h3>Betrachtete Tageszeiten</h3><p>Normalerweise vergleichen wir die Zeit von 08:00 bis 12:00 und von 13:00 bis 17:00. Du kannst die Vorgabe übernehmen. Beginnt die Arbeit an deinem Standort früher, kannst du den Vormittag zum Beispiel um 07:00 starten lassen.</p><div class="ad-window-grid">${state.windows.map((w, h) => w.map((v, j) => `<label>${h ? "Nachmittag" : "Vormittag"} ${j ? "bis" : "von"}<input id="ad-window-${h}-${j}" type="time" min="07:00" max="19:00" step="900" data-window="${h},${j}" value="${clock(v)}"></label>`).join("")).join("")}</div>${button("reset-windows", "Standardzeiten verwenden")}<p>Wir teilen die eingetragenen Arbeitsstunden durch die Länge des Vor- oder Nachmittags. Verlängerst du den Vormittag, verteilen sich dieselben Arbeitsstunden auf mehr Zeit. Beim Durchschnitt über mehrere Halbtage zählt jeder Halbtag gleich viel.</p><p><strong>${round(r.outside / 60)} erfasste Tätigkeitsstunden der Auswahl liegen ausserhalb dieser Zeiten.</strong></p><div class="ad-toolbar">${select(
+    <div id="ad-basis" class="ad-disclosure-body" ${panels.has("basis") ? "" : "hidden"}><h3>Welche Halbtage fliessen ein?</h3><p>Der Nachmittag beginnt um 12:30 Uhr. Für die Personenzahl und die Arbeitszeit zählen auch kurze Einträge und Arbeit über Mittag. Die Vollständigkeit prüfen wir von 08:00 bis 12:00 und von 13:00 bis 17:00 Uhr. Ein vollständig dokumentiertes Zeitfenster entspricht vier Stunden pro Person.</p><div class="ad-toolbar">${select(
       "minCoverage",
       "Welche Halbtage sollen mitzählen?",
       [
@@ -1204,8 +1239,8 @@ export function mountDashboard(
         ["100", "Nur vollständig erfasste Halbtage"],
       ],
       state.minCoverage,
-    )}</div><p>${r.qualityExcluded} Halbtage mit Einträgen fallen durch diese Auswahl weg. Die Prozentangabe zur Vollständigkeit bezieht sich weiterhin auf den ganzen bisherigen Zeitraum.</p><label class="ad-check"><input id="ad-ongoing" type="checkbox" data-ongoing ${state.includeOngoing ? "checked" : ""}>Laufenden Halbtag vorläufig einbeziehen</label><p>Bei laufenden Halbtagen zählen nur Einträge bis zum Berichtszeitpunkt. Der Durchschnitt bezieht sich trotzdem auf das ganze Zeitfenster; noch nicht verstrichene Zeit bleibt offen.</p></div>
-    <div class="ad-chips" aria-label="Aktive Merkmalsfilter">${active.join("")}</div><p class="ad-context">Betrachtete Tageszeiten: ${esc(timeText)}${Number(state.minCoverage) ? ` · Nur Halbtage mit mindestens ${round(state.minCoverage)} % dokumentierter Zeit (${r.qualityExcluded} ausgeschlossen)` : ""} <span class="ad-screen-only"> · <button type="button" data-toggle="basis">Ändern</button></span></p><p class="ad-context">${esc(filterSummary(state))} · ${r.people} berücksichtigte Personen · ${percent(r.coverage)} der betrachteten Zeit dokumentiert</p>
+    )}</div><p>${r.qualityExcluded} Halbtage mit Einträgen fallen durch diese Auswahl weg. Die Prozentangabe zur Vollständigkeit bezieht sich weiterhin auf den ganzen bisherigen Zeitraum.</p><label class="ad-check"><input id="ad-ongoing" type="checkbox" data-ongoing ${state.includeOngoing ? "checked" : ""}>Laufenden Halbtag vorläufig einbeziehen</label><p>Bei laufenden Halbtagen zählen nur Einträge bis zum Berichtszeitpunkt. Die Vollständigkeit bezieht sich auf die vollen vier Referenzstunden.</p></div>
+    <div class="ad-chips" aria-label="Aktive Merkmalsfilter">${active.join("")}</div><p class="ad-context">Vormittag bis 12:30 Uhr · Nachmittag ab 12:30 Uhr${Number(state.minCoverage) ? ` · Nur Halbtage mit mindestens ${round(state.minCoverage)} % dokumentierter Zeit (${r.qualityExcluded} ausgeschlossen)` : ""} <span class="ad-screen-only"> · <button type="button" data-toggle="basis">Ändern</button></span></p><p class="ad-context">${esc(filterSummary(state))} · ${r.people} berücksichtigte Personen · ${percent(r.coverage)} der Referenzzeit dokumentiert</p>
     ${r.legacyEntries ? `<p class="ad-notice">${r.legacyEntries} historische Einträge werden separat in der historischen Auswertung ausgewertet. ${r.excludedPeople} Personen mit ausschliesslich historischer Erfassung sind hier ausgeschlossen.</p>` : ""}${noResults}
     <div class="ad-question-tools ad-controls"><label>Mit einer Fragestellung einsteigen<select data-preset id="ad-preset"><option value="">Fragestellung auswählen …</option>${PRESETS.map((p, i) => `<option value="${i}" ${state.preset === i ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
     <button type="button" id="ad-toggle-views" data-toggle="views" aria-expanded="${panels.has("views")}" aria-controls="ad-views">Eigene Ansichten</button>
@@ -1216,10 +1251,10 @@ export function mountDashboard(
         `<button type="button" data-tab="${v}" aria-pressed="${state.tab === v}">${l}</button>`,
     ).join(
       "",
-    )}</nav>${body}${comparison(r, reference, ["overview", "custom"].includes(state.tab) ? "" : shareControl)}
+    )}</nav>${body}${comparison(r, reference, state.tab === "cross" ? shareControl : "")}
 
-    ${atSite ? `<section><h3>Geschätzte Zahl gleichzeitig laufender Besprechungen am Standort</h3><p>Mehrere Personen können dieselbe Sitzung eintragen. Wir fassen passende Einträge zusammen und schätzen so, wie viele Sitzungen im Durchschnitt während eines Halbtags liefen.</p><div class="ad-estimate"><strong>Ø ${esc(numberLabel(r.meetings.mean))}</strong><span>Höchster erfasster Halbtag: ${esc(numberLabel(r.meetings.peak?.n))}${r.meetings.peak ? " · " + dateLabel(r.meetings.peak.d) + (r.meetings.peak.h ? " Nachmittag" : " Vormittag") + " · " + percent(r.meetings.peak.coverage) + " der Zeit dokumentiert" : ""}</span></div><details data-panel="method"><summary>So wird die Besprechungszahl geschätzt</summary><p>Überlappende Meldungen mit gleicher Gruppengrösse, Raumnutzung, Online-Zuschaltung und gleichem Personenkreis werden zusammengefasst. Vier Meldungen einer internen Gruppe mit 2–4 Personen gelten beispielsweise ungefähr als eine gemeinsame Besprechung. Die Zahl wird über das Zeitfenster gemittelt.</p><p>Gleichzeitige Sitzungen mit ähnlichen Angaben können dabei zusammenfallen. Bei Sitzungen mit Gästen zählt jeder Eintrag als mögliche Sitzung, weil die Zahl der teilnehmenden Mitarbeitenden offen ist. Wenn du eine einzelne Gruppe auswählst, erhält sie ihren Anteil an gemeinsamen Sitzungen.</p></details></section>` : ""}
-    <div class="ad-stats"><div><span>Berücksichtigte Personen</span><strong>${r.people}</strong><small>${r.submitted} eingereicht · ${r.drafts} noch nicht eingereicht · ${r.notStarted} ohne aktuelle Eingaben</small></div><div><span>Vollständigkeit der Angaben</span><strong>${percent(r.coverage)}</strong><small>der betrachteten Zeit dokumentiert · ${round(r.unknownMinutes / 60)} h ohne Angaben</small></div><div><span>Erfasste Arbeitszeit in der Auswahl</span><strong>${round(r.selectedMinutes / 60)} h</strong><small>${r.matchedPeople} unterschiedliche Personen mit passenden Tätigkeiten · ${r.valid} von ${r.expected} bisherigen Halbtagen ausgewertet</small></div></div>
+    ${atSite ? `<section><h3>Geschätzte Zahl gleichzeitig laufender Besprechungen am Standort</h3><p>Mehrere Personen können dieselbe Sitzung eintragen. Wir fassen passende Einträge zusammen und schätzen so, wie viele Sitzungen zwischen 08:00 und 12:00 oder zwischen 13:00 und 17:00 Uhr durchschnittlich gleichzeitig liefen.</p><div class="ad-estimate"><strong>Ø ${esc(numberLabel(r.meetings.mean))}</strong><span>Höchster erfasster Halbtag: ${esc(numberLabel(r.meetings.peak?.n))}${r.meetings.peak ? " · " + dateLabel(r.meetings.peak.d) + (r.meetings.peak.h ? " Nachmittag" : " Vormittag") + " · " + percent(r.meetings.peak.coverage) + " der Zeit dokumentiert" : ""}</span></div><details data-panel="method"><summary>So wird die Besprechungszahl geschätzt</summary><p>Überlappende Meldungen mit gleicher Gruppengrösse, Raumnutzung, Online-Zuschaltung und gleichem Personenkreis werden zusammengefasst. Vier Meldungen einer internen Gruppe mit 2–4 Personen gelten beispielsweise ungefähr als eine gemeinsame Besprechung. Die Zahl wird über das Zeitfenster gemittelt.</p><p>Gleichzeitige Sitzungen mit ähnlichen Angaben können dabei zusammenfallen. Bei Sitzungen mit Gästen zählt jeder Eintrag als mögliche Sitzung, weil die Zahl der teilnehmenden Mitarbeitenden offen ist. Wenn du eine einzelne Gruppe auswählst, erhält sie ihren Anteil an gemeinsamen Sitzungen.</p></details></section>` : ""}
+    <div class="ad-stats"><div><span>Berücksichtigte Personen</span><strong>${r.people}</strong><small>${r.submitted} eingereicht · ${r.drafts} noch nicht eingereicht · ${r.notStarted} ohne aktuelle Eingaben</small></div><div><span>Vollständigkeit der Angaben</span><strong>${percent(r.coverage)}</strong><small>der Referenzzeit dokumentiert · ${round(r.unknownMinutes / 60)} h ohne Angaben</small></div><div><span>Erfasste Arbeitszeit in der Auswahl</span><strong>${round(r.selectedMinutes / 60)} h</strong><small>${r.matchedPeople} unterschiedliche Personen mit passenden Tätigkeiten · ${r.valid} von ${r.expected} bisherigen Halbtagen ausgewertet</small></div></div>
     ${readingGuide(r)}
     <footer>Grobe Orientierung für die Raumgestaltung. ${onExport ? "Im HTML-Bericht können Empfänger die Filter selbst ändern. Die Datei enthält die Einträge der gewählten Datenbasis ohne Namen und E-Mail-Adressen." : ""}</footer></div>`;
     for (const p of openDetails)
@@ -1280,28 +1315,13 @@ export function mountDashboard(
       else vs.delete(el.value);
       state.filters[f] = [...vs];
     }
-    if (el.dataset.window) {
-      const [h, j] = el.dataset.window.split(",").map(Number),
-        [hh, mm] = el.value.split(":").map(Number),
-        windows = copy(state.windows);
-      windows[h][j] = hh * 60 + mm;
-      if (!validateWindows(windows)) {
-        el.value = clock(state.windows[h][j]);
-        el.setCustomValidity(
-          "Wähle zwei nicht überlappende Zeitfenster zwischen 07:00 und 19:00, die jeweils mindestens eine Stunde dauern.",
-        );
-        el.reportValidity();
-        return;
-      }
-      el.setCustomValidity("");
-      state.windows = windows;
-    }
     if (el.hasAttribute("data-preset") && el.value !== "") {
       const p = PRESETS[Number(el.value)];
       currentView = "";
       state = {
         ...state,
         ...copy(p),
+        showTrend: false,
         preset: Number(el.value),
         filters: copy(p.filters || {}),
       };
@@ -1309,19 +1329,10 @@ export function mountDashboard(
     }
     if (el.hasAttribute("data-view") && el.value !== "") {
       currentView = el.value;
-      state = {
-        ...copy(DEFAULTS),
-        mode: data.default_mode || DEFAULTS.mode,
-        ...copy(views[Number(el.value)].state),
-      };
-      if (state.filters.ao?.length) {
-        state.location =
-          state.filters.ao.length === 1 ? state.filters.ao[0] : "";
-        if (state.filters.ao.length === 1) delete state.filters.ao;
-      }
+      state = restoreView(views[Number(el.value)].state);
       message = "Gespeicherte Ansicht geöffnet.";
     }
-    detail = null;
+    if (el.dataset.setting !== "shareBase") detail = null;
     render();
   }
   function input(event) {
@@ -1334,6 +1345,12 @@ export function mountDashboard(
     const el = event.target.closest("button");
     if (!el) return;
     const r = () => calculateDashboard(data, state);
+    if (el.dataset.action === "toggle-trend") {
+      state.showTrend = !state.showTrend;
+      render();
+      root.querySelector("#ad-toggle-trend").focus({ preventScroll: true });
+      return;
+    }
     if (el.dataset.toggle) {
       const p = el.dataset.toggle;
       if (panels.has(p)) panels.delete(p);
@@ -1405,15 +1422,10 @@ export function mountDashboard(
         title: `${row?.name || "Gesamte Auswahl"} · ${DAYS[weekDay]} ${half ? "Nachmittag" : "Vormittag"}`,
         text:
           `${c.days} von ${c.expectedDays} bisherigen Halbtagen ausgewertet. ${percent(c.coverage)} der Zeit dokumentiert.` +
-          (row && c.heads != null
-            ? ` Im Mittel ${numberLabel(c.heads)} unterschiedliche beteiligte Personen je ausgewertetem Halbtag.`
-            : "") +
           (c.date
             ? ` Höchster Halbtag: ${dateLabel(c.date)} · ${percent(c.peakCoverage)} der Zeit dokumentiert.`
             : ""),
-        dates: (row ? row.timeline : result.timeline).filter(
-          (o) => o.wd === weekDay && o.h === half,
-        ),
+        dates: { rowIndex: row ? Number(source) : null, weekDay, half },
       };
       render();
       root.querySelector(".ad-detail")?.focus();
@@ -1448,7 +1460,6 @@ export function mountDashboard(
     }
     if (action === "use-site") state.location = "UEBLICHER_ARBEITSPLATZ";
     if (action === "clear") state.filters = {};
-    if (action === "reset-windows") state.windows = copy(DEFAULTS.windows);
     if (action === "pin") {
       state.comparison = {
         location: state.location,
@@ -1469,6 +1480,7 @@ export function mountDashboard(
       onExport({
         ...copy(state),
         ...(detail ? { detailTrigger: detail.trigger } : {}),
+        openReading: root.querySelector('details[data-panel="reading"]').open,
       });
       return;
     }
@@ -1524,21 +1536,36 @@ export function mountDashboard(
           : "Nur eingereichte Eingaben",
       ],
       ["Auswahl", filterSummary(state)],
-      [
-        "Betrachtete Tageszeiten",
-        state.windows.map((w) => w.map(clock).join("–")).join(" / "),
-      ],
+      ["Halbtage", "Vormittag bis 12:30 Uhr / Nachmittag ab 12:30 Uhr"],
+      ...(state.tab === "week"
+        ? [
+            [
+              "Personen je Halbtag",
+              "Wer mindestens eine passende Tätigkeit eingetragen hat, zählt je Zeile einmal. In der gesamten Auswahl zählt jede Person einmal.",
+            ],
+            [
+              "Durchschnitt und Spitze",
+              "Verglichen werden dieselben Wochentage und Tageshälften. Leere Halbtage fallen weg. Dokumentierte Halbtage ohne passende Tätigkeit zählen mit null Personen.",
+            ],
+          ]
+        : []),
       ...(state.tab === "cross"
         ? [
             [
               "Prozentbasis Kreuztabelle",
-              state.crossBy === "room" ? "Zeit je Platz" : "Zeit je Tätigkeit",
+              state.crossBy === "room"
+                ? "100 % = gesamte ausgewählte Arbeitszeit an diesem Platz"
+                : "100 % = gesamte ausgewählte Arbeitszeit für diese Tätigkeit",
             ],
           ]
         : []),
-      ...(["overview", "custom"].includes(state.tab) || state.comparison
+      ...(state.tab !== "cross" || state.comparison
         ? [["Prozentbasis Zeitanteile", basisText()]]
         : []),
+      [
+        "Referenzzeiten für Vollständigkeit und Besprechungsschätzung",
+        "08:00–12:00 / 13:00–17:00",
+      ],
       ["Mindestvollständigkeit %", state.minCoverage],
       [
         "Wegen Mindestvollständigkeit ausgeschlossene Halbtage",
@@ -1551,39 +1578,11 @@ export function mountDashboard(
       ],
       ["Zeit ohne Angaben h", Math.round(r.unknownMinutes / 60)],
       ["Ausgewertete / bisherige Halbtage", r.valid, r.expected],
-      [
-        "Erfasste Tätigkeitsstunden ausserhalb der Tageszeiten",
-        Math.round(r.outside / 60),
-      ],
     ];
     const num = (n) => (n == null ? "" : Math.round(n));
-    const persons = (n) => (n > 0 && n < 0.5 ? "<1" : num(n));
-    if (state.tab === "trend")
-      rows.push(
-        [
-          "Woche ab",
-          "Personen im Mittel",
-          "Ausgewertete Halbtage",
-          "Dokumentierte Zeit %",
-        ],
-        ...r.weeks.map((w) => [w.start, persons(w.n), w.days, num(w.coverage)]),
-        [],
-        [
-          "Datum",
-          "Halbtag",
-          "Personen im Mittel",
-          "Dokumentierte Zeit %",
-          "Ausgewertet",
-        ],
-        ...r.timeline.map((o) => [
-          o.d,
-          o.h ? "Nachmittag" : "Vormittag",
-          persons(o.n),
-          num(o.coverage),
-          o.n == null ? "Nein" : "Ja",
-        ]),
-      );
-    else if (state.tab === "cross") {
+    const persons = (n) =>
+      n == null ? "" : n > 0 && n < 0.05 ? "<0.1" : Math.round(n * 10) / 10;
+    if (state.tab === "cross") {
       const table = crossTable(r.cross, state.crossBy);
       rows.push([
         FIELDS[table.rowField],
@@ -1637,7 +1636,7 @@ export function mountDashboard(
                 "Höchster erfasster Halbtag",
                 "Datum",
                 "Halbtag",
-                "Personen im Mittel",
+                "Personen",
                 "Dokumentierte Zeit %",
               ],
               [
@@ -1659,10 +1658,14 @@ export function mountDashboard(
             : "Durchschnitt",
         ],
         [
-          "Kombination",
+          [allFields[state.split], allFields[state.second]]
+            .filter(Boolean)
+            .join(" / "),
           "Zeitanteil %",
           "Ø Personen je Halbtag",
           ...DAYS.flatMap((d) => [d + " Vormittag", d + " Nachmittag"]),
+          "Höchster Halbtag (Personen)",
+          "Arbeitszeit im Erhebungszeitraum (Minuten)",
         ],
         ...r.rows.map((x) => [
           x.name,
@@ -1671,6 +1674,8 @@ export function mountDashboard(
           ...x.cells.map((c) =>
             persons(c[state.metric === "peak" ? "max" : "mean"]),
           ),
+          persons(x.peak?.n),
+          x.minutes,
         ]),
         [
           "Gesamte Auswahl",
@@ -1679,6 +1684,8 @@ export function mountDashboard(
           ...r.totals.cells.map((c) =>
             persons(c[state.metric === "peak" ? "max" : "mean"]),
           ),
+          persons(r.totals.peak?.n),
+          r.selectedMinutes,
         ],
         [
           "Vollständigkeit der Angaben %",
@@ -1716,7 +1723,7 @@ export function mountDashboard(
         ...r.absences.map((a) => [a.name, num(a.minutes / 60)]),
       );
     }
-    if (state.tab === "custom" && state.second) {
+    if (state.tab === "week" && state.second) {
       const totals = new Map();
       for (const row of r.rows) {
         const [group] = JSON.parse(row.key);
@@ -1751,10 +1758,43 @@ export function mountDashboard(
       );
       if (detail.dates)
         rows.push(
-          ["Datum", "Personen im Mittel", "Dokumentierte Zeit %"],
-          ...detail.dates.map((o) => [o.d, persons(o.n), num(o.coverage)]),
+          [
+            "Datum",
+            "Personen",
+            "Arbeitszeit (Minuten)",
+            "Zeitanteil %",
+            "Dokumentierte Zeit %",
+          ],
+          ...detailDates(r).map((o) => [
+            o.d,
+            persons(o.n),
+            o.minutes ?? "",
+            num(timeShare(o)),
+            num(o.coverage),
+          ]),
         );
     }
+    if (state.tab === "week" && state.showTrend)
+      rows.push(
+        [],
+        ["Verlauf der gesamten Auswahl"],
+        [
+          "Woche ab",
+          "Ø Personen je Halbtag",
+          "Ausgewertete Halbtage",
+          "Dokumentierte Zeit %",
+        ],
+        ...r.weeks.map((w) => [w.start, persons(w.n), w.days, num(w.coverage)]),
+        [],
+        ["Datum", "Halbtag", "Personen", "Dokumentierte Zeit %", "Ausgewertet"],
+        ...r.timeline.map((o) => [
+          o.d,
+          o.h ? "Nachmittag" : "Vormittag",
+          persons(o.n),
+          num(o.coverage),
+          o.n == null ? "Nein" : "Ja",
+        ]),
+      );
     if (!state.location || state.location === "UEBLICHER_ARBEITSPLATZ") {
       const peak = r.meetings.peak;
       rows.push(
@@ -1768,8 +1808,8 @@ export function mountDashboard(
         ],
         [
           "Am Standort",
-          persons(r.meetings.mean),
-          persons(peak?.n),
+          r.meetings.mean == null ? "" : numberLabel(r.meetings.mean),
+          peak ? numberLabel(peak.n) : "",
           peak?.d || "",
           peak ? (peak.h ? "Nachmittag" : "Vormittag") : "",
         ],
@@ -1837,6 +1877,8 @@ export function mountDashboard(
   ) {
     root.querySelector("#" + initialDetail)?.click();
   }
+  if (initial.openReading)
+    root.querySelector('details[data-panel="reading"]').open = true;
   return () => {
     root.removeEventListener("change", change);
     root.removeEventListener("input", input);
