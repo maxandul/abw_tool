@@ -90,7 +90,7 @@ export default function AuswertungPage() {
   }, [id, refresh]);
   return (
     <div className="ad-page">
-      <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+      <div className="ad-screen-only flex flex-wrap justify-between items-center gap-4 mb-6">
         <h1 className="text-2xl font-bold text-slate-800">Auswertung</h1>
         <button
           className="btn-secondary"
@@ -111,7 +111,7 @@ export default function AuswertungPage() {
         </>
       ) : (
         <>
-          <div className="flex flex-wrap items-end gap-3 mb-6">
+          <div className="ad-screen-only flex flex-wrap items-end gap-3 mb-6">
             <div className="flex-1 min-w-0">
               <label className="label" htmlFor="survey">
                 Erhebung / Standort

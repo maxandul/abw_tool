@@ -325,3 +325,14 @@ def test_stack_basis_for_two_profile_dimensions_includes_nonreporters():
     assert groups["IT"]["people"] == 3
     assert groups["IT"]["coverage"] == pytest.approx(100 / 3)
     assert groups["HR"]["coverage"] == 100
+
+
+def test_activity_filter_catalog_survives_person_filters_and_empty_intersections():
+    people = [dict(i=i, u=i, g=1, start="2026-10-05", end="2026-10-05",
+                   eingereicht=True, oe=oe) for i, oe in enumerate(["IT", "HR", "Service"])]
+    entries = [entry(0), {**entry(1), "form": "ONLINE", "room": "RUECKZUG"}]
+    baseline = calc(entries, people)
+    for oe, count in [("IT", 0), ("HR", 1), ("Service", 0)]:
+        filtered = calc(entries, people, {"filters": {"oe": [oe]}})
+        assert filtered["options"] == baseline["options"]
+        assert filtered["optionCounts"]["room"]["RUECKZUG"] == count

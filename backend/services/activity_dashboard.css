@@ -581,14 +581,11 @@
   gap: 12px 24px;
 }
 .ad-question-tools {
+  align-items: end;
   margin: 14px 0;
 }
-.ad-question-tools label,
-.ad-question-tools details {
+.ad-question-tools label {
   max-width: 100%;
-}
-.ad-question-tools details[open] {
-  flex-basis: 100%;
 }
 .ad-shell .ad-peak {
   justify-content: space-between;
@@ -614,5 +611,92 @@
   .ad-question-tools,
   .ad-peak button {
     display: none;
+  }
+}
+
+.ad-print-label,
+.ad-print-title {
+  display: none;
+}
+@media print {
+  @page activity-report {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+  .ad-shell {
+    page: activity-report;
+    max-width: none;
+  }
+  body:has(.ad-shell) {
+    padding: 0 !important;
+    background: white !important;
+  }
+  body:has(.ad-shell) #root > div,
+  body:has(.ad-shell) #root > div > main {
+    display: block;
+    min-height: 0;
+  }
+  body:has(.ad-shell) #root > div > nav,
+  body:has(.ad-shell) #root > div > footer,
+  .ad-page:has(.ad-shell) > .ad-screen-only,
+  .ad-shell .ad-screen-only,
+  .ad-shell .ad-disclosure-body,
+  .ad-shell .ad-detail [data-action],
+  .ad-shell [data-action],
+  .ad-shell [data-clear],
+  .ad-shell label:has(select) {
+    display: none !important;
+  }
+  .ad-print-label {
+    display: inline;
+  }
+  .ad-shell details:not([open]) {
+    display: none;
+  }
+  .ad-week-table {
+    table-layout: fixed;
+  }
+  .ad-week-label {
+    width: 22%;
+  }
+  .ad-shell .ad-week-table button {
+    min-height: 0;
+  }
+  .ad-print-title {
+    display: block;
+  }
+  .ad-page:has(.ad-shell) {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+  .ad-shell section {
+    break-inside: auto;
+    padding: 8px;
+    margin-bottom: 10px;
+  }
+  .ad-shell h3,
+  .ad-shell h4,
+  .ad-shell caption {
+    break-after: avoid;
+  }
+  .ad-shell tr {
+    break-inside: avoid;
+  }
+  .ad-shell .ad-scroll th,
+  .ad-shell .ad-scroll td {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .ad-shell .ad-scroll button {
+    border: 0;
+    padding: 0;
+    min-width: 0;
+  }
+  .ad-shell .ad-scroll th:first-child {
+    position: static;
+  }
+  .ad-shell .ad-scroll tfoot {
+    display: table-row-group;
   }
 }

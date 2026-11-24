@@ -100,6 +100,34 @@ const check = (s, v = true) => {
   el.dispatchEvent(new w.Event("change", { bubbles: true }));
 };
 const text = () => get("#dashboard").textContent;
+// The disclosure control stays in the toolbar while the panel opens below it.
+const toolbar = () => get("#ad-preset").closest(".ad-question-tools");
+click("#ad-toggle-views");
+assert.equal(get("#ad-toggle-views").getAttribute("aria-expanded"), "true");
+assert.equal(get("#ad-toggle-views").parentNode, toolbar());
+assert.equal(toolbar().nextElementSibling, get("#ad-views"));
+assert.equal(get("#ad-views").hidden, false);
+get("[data-view-name]").value = "Vor dem Zurücksetzen";
+click('[data-action="save"]');
+select("[data-preset]", "1");
+click('[data-action="pin"]');
+select('[data-setting="mode"]', "submitted");
+select('[data-setting="minCoverage"]', "95");
+click("#ad-reset");
+assert.equal(w.current.tab, "overview");
+assert.equal(w.current.mode, "all");
+assert.equal(Number(w.current.minCoverage), 0);
+assert.equal(w.current.comparison, null);
+assert.deepEqual(Object.keys(w.current.filters), []);
+assert.equal(get("#ad-preset").value, "");
+assert.equal(get("#ad-views").hidden, true);
+assert.equal(doc.activeElement.id, "ad-reset");
+click("#ad-toggle-views");
+assert.match(get("[data-view]").textContent, /Vor dem Zurücksetzen/);
+select("[data-view]", "0");
+click('[data-action="delete-view"]');
+click("#ad-reset");
+
 // Walk from the overview peak to all observations for that weekday.
 assert.ok(!get("[data-preset]").closest("details"));
 click('[data-action="peak-days"]');
@@ -226,6 +254,12 @@ offlineLocation.dispatchEvent(
   new offline.window.Event("change", { bubbles: true }),
 );
 assert.equal(offline.window.current.filters.oe.join(","), "IT");
+offline.window.document.querySelector("#ad-reset").click();
+assert.equal(offline.window.current.mode, "submitted");
+assert.equal(
+  offline.window.document.querySelector('[data-setting="mode"]'),
+  null,
+);
 // Conflicting filters remain visible and removable instead of silently disappearing.
 select('[data-setting="location"]', "UEBLICHER_ARBEITSPLATZ");
 check('[data-filter="room"][value="ARBEITSPLATZ"]');
@@ -260,6 +294,7 @@ function readCsv(blob) {
 }
 Promise.all([readCsv(trendCsv), readCsv(placeCsv)])
   .then(([trend, places]) => {
+    assert.match(trend, /Woche ab/);
     assert.match(trend, /Personen im Mittel/);
     assert.match(trend, /Mindestvollständigkeit/);
     assert.match(trend, /Vergleichsauswahl/);
